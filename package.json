@@ -1,0 +1,50 @@
+{
+  "name": "koru",
+  "version": "0.1.0",
+  "description": "Koru — a personal manga and manhwa reader",
+  "type": "module",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "node scripts/dev.js",
+    "icon": "electron scripts/make-icon.js",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "app.koru.reader",
+    "productName": "Koru",
+    "asar": true,
+    "compression": "maximum",
+    "electronLanguages": [
+      "en-US"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "web/**/*",
+      "build/icon.ico",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createStartMenuShortcut": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Koru",
+      "artifactName": "Koru-Setup-${version}.${ext}"
+    },
+    "publish": null,
+    "electronDist": "node_modules/electron/dist"
+  }
+}

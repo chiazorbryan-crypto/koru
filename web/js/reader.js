@@ -1,0 +1,462 @@
+// Koru reader: long-strip (manhwa) or page-by-page (manga), with saved progress, offline pages,
+// chapter drawer, auto next chapter and keyboard controls.
+'use strict';
+(function () {
+  const { el, icon } = K;
+  const DEFAULTS = { mode: 'strip', rtl: false, gap: 0, width: 760, autoNext: true, preload: 4, tapZones: true, ambient: true, ambStrength: 55, ambBlur: 90, fps: false, zen: false };
+  K.readerSettings = () => ({ ...DEFAULTS, ...(K.data.settings.reader || {}) });
+  const setReader = patch => { K.data.settings.reader = { ...K.readerSettings(), ...patch }; K.save('settings'); };
+
+  let box = null, state = null;
+
+  // Background worker that decodes pages and draws their slices (see slicer.js).
+  let slicer = null, sliceSeq = 0;
+  const waits = new Map();
+  const ask = (msg, transfer) => {
+    if (!slicer) {
+      slicer = new Worker('js/slicer.js');
+      slicer.onmessage = e => { const w = waits.get(e.data.id); if (!w) return; waits.delete(e.data.id); e.data.type === 'error' ? w.reject(new Error(e.data.error)) : w.resolve(e.data); };
+    }
+    return new Promise((resolve, reject) => { waits.set(msg.id, { resolve, reject }); slicer.postMessage(msg, transfer || []); });
+  };
+  const freeJob = id => { if (id && slicer) slicer.postMessage({ type: 'free', id }); };
+
+  K.closeReader = function (fromRoute) {
+    if (!box) return;
+    saveProgress();
+    state?.cleanup?.();
+    const b = box; box = null; state = null;
+    document.documentElement.classList.remove('reading');
+    if (b.classList.contains('zen')) K.api.post('/k/fullscreen', { on: false }).catch(() => {});
+    b.style.animation = 'fade-out var(--t-fast) both';
+    setTimeout(() => b.remove(), 180);
+    if (!fromRoute) K.back();
+  };
+
+  function saveProgress() {
+    if (!state?.chapter || !state.pages?.length || K.incognito() || K.flag(state.provider, state.slug).trash) return;
+    const { provider, slug, series, chapter } = state;
+    const k = K.key(provider, slug);
+    K.data.history[k] = { provider, slug, title: series?.title || slug, cover: series?.cover || K.data.history[k]?.cover,
+      chapterSlug: chapter.slug, chapterName: chapter.name.replace(/ — .*/, ''), page: state.page, off: state.where?.() || 0,
+      done: !!state.finished, total: state.pages.length, at: Date.now() };
+    K.save('history');
+    if (state.finished || state.page >= state.pages.length - 1) K.markRead(provider, slug, chapter.slug, true);
+  }
+
+  K.openReader = async function (provider, slug, chapterSlug) {
+    const opt = K.readerSettings();
+    const first = !box;
+    if (first) {
+      box = el('div.reader');
+      document.body.append(box);
+      document.documentElement.classList.add('reading');
+    } else { saveProgress(); state?.cleanup?.(); }
+    const my = state = { provider, slug, chapterSlug, page: 0, pages: [] };
+    box.className = 'reader' + (opt.mode === 'paged' ? ' paged' : '');
+    box.replaceChildren(el('div.spinner', { style: { marginTop: '40vh' } }));
+
+    // Series + chapter list (falls back to downloads when offline).
+    let series = null, chapters = [];
+    try { series = await K.getSeries(provider, slug); chapters = await K.getChapters(provider, slug); }
+    catch {
+      const d = K.dl.series?.find(x => x.provider === provider && x.seriesSlug === slug);
+      if (d) { series = { title: d.title, cover: d.cover }; chapters = d.chapters.map(c => ({ slug: c.chapterSlug, name: c.chapterName, number: c.number, locked: false })).sort((a, b) => (b.number ?? 0) - (a.number ?? 0)); }
+    }
+    if (my !== state) return;
+    const idx = chapters.findIndex(c => c.slug === chapterSlug);
+    const chapter = chapters[idx] || { slug: chapterSlug, name: chapterSlug.replace(/-/g, ' ') };
+    const newer = idx > 0 ? chapters.slice(0, idx).reverse().find(c => !c.locked) : null;   // next chapter
+    const older = idx >= 0 ? chapters.slice(idx + 1).find(c => !c.locked) : null;           // previous chapter
+    Object.assign(state, { series, chapters, chapter, next: newer, prev: older });
+
+    // Pages: downloaded copy first, then the site.
+    const id = `${provider}:${slug}:${chapterSlug}`;
+    let pages = K.localPages(id), offline = !!pages;
+    if (!pages) {
+      try { pages = await K.providers[provider].pages(slug, chapterSlug); }
+      catch (e) {
+        if (my !== state) return;
+        box.replaceChildren(topBar(), el('div.empty', { style: { marginTop: '18vh' } }, K.fox(), el('h3', { text: e.locked ? 'This chapter is locked' : 'Couldn\'t open this chapter' }),
+          el('p', { text: e.locked ? 'It\'s paid or early access on the site. Koru only reads free chapters.' : e.message }),
+          el('div.row', { style: { justifyContent: 'center' } }, newer ? el('button.btn.primary', { onclick: () => goChapter(newer) }, 'Next chapter', icon('next')) : null,
+            el('button.btn', { onclick: () => K.closeReader() }, icon('back'), 'Back'))));
+        return;
+      }
+    }
+    if (my !== state) return;
+    state.pages = pages;
+    const hist = K.data.history[K.key(provider, slug)];
+    const askPage = Number(new URLSearchParams(location.hash.split('?')[1] || '').get('page'));
+    const resume = hist?.chapterSlug === chapterSlug && !hist.done && hist.page < pages.length && (hist.off > 0 || hist.page < pages.length - 1);
+    const startPage = askPage > 0 && askPage < pages.length ? askPage : resume ? hist.page : 0;
+    const startOff = !(askPage > 0) && resume ? Math.max(0, Math.min(0.999, hist.off || 0)) : 0;
+    build(offline, startPage, startOff);
+  };
+
+  function goChapter(c) { K.go(`/read/${state.provider}/${encodeURIComponent(state.slug)}/${encodeURIComponent(c.slug)}`, true); }
+
+  const markId = () => `${state.provider}:${state.slug}:${state.chapter?.slug}:${state.page}`;
+  function paintMark() {
+    const b = box?.querySelector('.markb');
+    if (b && state) b.classList.toggle('on', !!K.data.bookmarks[markId()]);
+  }
+  K.paintMark = paintMark;
+  function topBar() {
+    const s = state;
+    const mark = el('button.btn.icon.markb', { title: 'Bookmark this page', onclick: () => {
+      const id = markId();
+      if (K.data.bookmarks[id]) { delete K.data.bookmarks[id]; K.toast('Bookmark removed'); }
+      else {
+        K.data.bookmarks[id] = { id, provider: s.provider, slug: s.slug, title: s.series?.title || s.slug, cover: s.series?.cover || null,
+          chapterSlug: s.chapter.slug, chapterName: s.chapter.name.replace(/ — .*/, ''), page: s.page, at: Date.now() };
+        K.toast(`Page ${s.page + 1} bookmarked`, 'ok');
+      }
+      K.save('bookmarks'); paintMark();
+    } }, icon('bookmark'));
+    return el('div.rbar.top.glass',
+      el('button.btn.icon', { title: 'Back', onclick: () => K.closeReader() }, icon('back')),
+      el('div.tt', el('b', { text: s.series?.title || s.slug }), el('small', { text: s.chapter?.name || '' })),
+      K.incognito() ? el('span.tag', { title: 'Nothing is saved while incognito' }, 'Incognito') : null,
+      s.pages?.length ? mark : null,
+      el('button.btn.icon', { title: 'Zen mode (Z)', onclick: () => K.toggleZen?.() }, icon('zen')),
+      el('button.btn.icon', { title: 'Chapters', onclick: () => box.querySelector('.drawer')?.classList.toggle('open') }, icon('list')));
+  }
+
+  function build(offline, startPage, startOff = 0) {
+    const s = state, opt = K.readerSettings();
+    // Ambient light: a tiny pre-blurred picture of the page, stretched up. No live blur filter, so scrolling never redoes it.
+    const AW = 40, AH = 26;
+    const amb = el('div.ambient', el('canvas', { width: AW, height: AH }), el('canvas', { width: AW, height: AH }));
+    let ambFront = 0, ambIdx = -1, ambBmp = null, ambSoft = opt.ambBlur;
+    const ambCache = new Map();   // page -> tiny picture, made once when the page loads
+    const paintAmb = () => {
+      if (!ambBmp) return;
+      const [a, b] = amb.children, next = ambFront ? a : b, cur = ambFront ? b : a;
+      const ctx = next.getContext('2d');
+      ctx.clearRect(0, 0, AW, AH);
+      ctx.filter = `blur(${(ambSoft / 40).toFixed(1)}px) saturate(1.8)`;
+      ctx.drawImage(ambBmp, -2, -2, AW + 4, AH + 4);
+      next.classList.add('on'); cur.classList.remove('on'); ambFront = ambFront ? 0 : 1;
+    };
+    const applyAmb = o => { amb.style.display = o.ambient ? '' : 'none'; amb.style.setProperty('--amb-o', o.ambStrength / 100); if (o.ambBlur !== ambSoft) { ambSoft = o.ambBlur; paintAmb(); } };
+    applyAmb(opt);
+    const setAmb = K.debounce(i => {
+      if (i === ambIdx || amb.style.display === 'none') return;
+      const bmp = ambCache.get(i);
+      if (!bmp) return;            // painted as soon as that page loads
+      ambIdx = i; ambBmp = bmp; paintAmb();
+    }, 200);
+
+    const pagesBox = el('div.pages', { tabIndex: 0 });
+    const strip = el('div.strip', { style: { maxWidth: opt.mode === 'strip' ? opt.width + 'px' : 'none', gap: opt.gap + 'px' } });
+    pagesBox.append(strip);
+
+    // Long strip: each page is fetched as a file, decoded off the main thread and cut into short slices.
+    // The graphics card then only moves ready-made pieces while you scroll, instead of re-decoding giant
+    // pictures (some pages are 900×16000) over and over, which is what lagged on big screens.
+    const SLICE = 1536, OV = 2;
+    const st = s.pages.map(() => '');   // '', 'loading', 'ready'
+    const files = new Map();            // page -> downloaded file, kept for this chapter so scrolling back is instant
+    const job = s.pages.map(() => '');  // current worker job per page
+    const freeSlices = wrap => {
+      const i = Number(wrap.dataset.i);
+      freeJob(job[i]); job[i] = '';
+      wrap.querySelector('.slices')?.remove(); wrap.classList.remove('sliced');
+    };
+    const fileOf = async i => {
+      if (files.has(i)) return files.get(i);
+      const url = s.pages[i].url;
+      const u = /^(\/|koru:)/.test(url) ? url : '/k/fetch?u=' + encodeURIComponent(url) + '&accept=' + encodeURIComponent('image/avif,image/webp,image/*;q=0.8');
+      const r = await fetch(u);
+      if (!r.ok) throw new Error('Page answered ' + r.status);
+      const b = await r.blob();
+      files.set(i, b);
+      return b;
+    };
+    const failed = i => { const ph = imgs[i].nextSibling; ph.textContent = 'Page didn\'t load · tap to retry'; ph.style.fontSize = '14px'; ph.style.cursor = 'pointer'; };
+    const ambFrom = (i, src, w, h) => {
+      if (ambCache.has(i) || !w) return;
+      ambCache.set(i, null);
+      const sh = Math.min(h, Math.round(w * AH / AW)), sy = Math.round((h - sh) / 2);
+      createImageBitmap(src, 0, sy, w, sh, { resizeWidth: AW, resizeHeight: AH, resizeQuality: 'low' })
+        .then(b => { ambCache.set(i, b); if (s.page === i) setAmb(i); }).catch(() => ambCache.delete(i));
+    };
+    async function loadStrip(i) {
+      const wrap = imgs[i].parentElement;
+      const id = 'p' + (++sliceSeq);
+      job[i] = id;
+      const live = () => st[i] === 'loading' && job[i] === id;
+      try {
+        const file = await fileOf(i);
+        if (!live()) return;
+        const r = await ask({ type: 'decode', id, blob: file, aw: AW, ah: AH });   // decoded on the worker
+        if (!live()) { r.amb?.close(); freeJob(id); return; }
+        wrap.style.minHeight = ''; wrap.style.aspectRatio = `${r.w} / ${r.h}`;
+        if (jump && i <= jump.i) requestAnimationFrame(doJump);
+        if (!ambCache.get(i)) { ambCache.set(i, r.amb); if (s.page === i) setAmb(i); } else r.amb?.close();
+        const box = el('div.slices'), ocs = [];
+        for (let y = 0; y < r.h; y += SLICE) {
+          const c = el('canvas', { width: r.w, height: Math.min(SLICE + OV, r.h - y) });
+          // slices overlap by a couple of pixels so no hairline shows between them
+          if (y + SLICE < r.h) c.style.marginBottom = `-${(OV / r.w) * 100}%`;
+          box.append(c);
+          ocs.push(c.transferControlToOffscreen());
+        }
+        wrap.append(box); wrap.classList.add('sliced');
+        await ask({ type: 'draw', id, canvases: ocs, slice: SLICE }, ocs);              // drawn by the worker, straight to the screen
+        if (live()) st[i] = 'ready';
+      } catch { if (live()) { st[i] = ''; freeSlices(wrap); failed(i); } }
+    }
+    const imgs = s.pages.map((p, i) => {
+      const im = el('img', { alt: `Page ${i + 1}`, decoding: 'async', referrerPolicy: 'no-referrer', draggable: false });
+      im.dataset.src = p.url;
+      // page mode shows the picture directly
+      im.addEventListener('load', () => {
+        if (st[i] !== 'loading') return;
+        wrap.style.minHeight = ''; wrap.style.aspectRatio = '';
+        ambFrom(i, im, im.naturalWidth, im.naturalHeight);
+        im.classList.add('ready'); st[i] = 'ready';
+      });
+      im.addEventListener('error', () => { if (!im.getAttribute('src') || st[i] !== 'loading') return; st[i] = ''; failed(i); });
+      const ph = el('div.ph', { text: String(i + 1) });
+      ph.onclick = () => { if (st[i]) return; ph.textContent = String(i + 1); ph.style.fontSize = ''; ph.style.cursor = ''; files.delete(i); load(i); };
+      const wrap = el('div.pg', { dataset: { i } }, im, ph);
+      if (p.w && p.h) wrap.style.aspectRatio = `${p.w} / ${p.h}`; else wrap.style.minHeight = '70vh';
+      strip.append(wrap);
+      return im;
+    });
+    const load = i => {
+      const im = imgs[i];
+      if (!im || st[i]) return;
+      st[i] = 'loading';
+      if (opt.mode === 'strip') loadStrip(i); else im.src = im.dataset.src;
+    };
+    // far-away pages are let go; their space stays so nothing jumps
+    const unload = i => {
+      const im = imgs[i];
+      if (!im || !st[i] || i === s.page) return;
+      st[i] = '';
+      im.classList.remove('ready'); im.removeAttribute('src');
+      freeSlices(im.parentElement);
+    };
+
+    // end of chapter
+    const end = el('div.endcard.glass',
+      el('h3', { text: s.next ? 'End of ' + s.chapter.name.replace(/ — .*/, '') : 'You\'re all caught up' }),
+      el('p.muted', { text: s.next ? 'Up next: ' + s.next.name : 'No newer free chapter yet.' }),
+      el('div.row', { style: { justifyContent: 'center' } },
+        s.next ? el('button.btn.primary', { onclick: () => goChapter(s.next) }, 'Next chapter', icon('next')) : null,
+        el('button.btn', { onclick: () => K.closeReader() }, 'Back to series')));
+    if (opt.mode === 'strip') strip.append(end);
+
+    // bottom bar
+    const slider = el('input', { type: 'range', min: 1, max: s.pages.length, value: startPage + 1, step: 1 });
+    const pc = el('span.pc');
+    const modeBtn = el('button.btn.icon', { title: opt.mode === 'strip' ? 'Switch to pages' : 'Switch to long strip', onclick: () => { saveProgress(); setReader({ mode: opt.mode === 'strip' ? 'paged' : 'strip' }); K.openReader(s.provider, s.slug, s.chapter.slug); } },
+      icon(opt.mode === 'strip' ? 'pages' : 'scroll'));
+    const bottom = el('div.rbar.bottom.glass',
+      el('button.btn.icon', { title: 'Previous chapter', disabled: !s.prev, onclick: () => s.prev && goChapter(s.prev) }, icon('back')),
+      slider, pc,
+      el('button.btn.icon', { title: 'Next chapter', disabled: !s.next, onclick: () => s.next && goChapter(s.next) }, icon('next')),
+      modeBtn,
+      el('button.btn.icon', { title: 'Reader settings', onclick: () => toggleSettings() }, icon('settings')));
+    if (offline) bottom.prepend(el('span.tag', { text: 'Offline' }));
+
+    // chapter drawer
+    const drawer = el('div.drawer.glass', el('div.row', { style: { marginBottom: '12px' } }, el('h3', { text: 'Chapters', style: { margin: 0, flex: 1 } }),
+      el('button.btn.small.icon', { onclick: () => drawer.classList.remove('open') }, icon('x'))));
+    const dlist = el('div.list');
+    for (const c of s.chapters) {
+      const read = K.isRead(s.provider, s.slug, c.slug);
+      const row = el('div.item' + (c.slug === s.chapter.slug ? '.current' : '') + (read ? '.read' : '') + (c.locked ? '.locked' : ''),
+        el('div.n', el('b', { text: c.name }), el('small', { text: c.locked ? 'Locked' : K.dl.index.has(`${s.provider}:${s.slug}:${c.slug}`) ? 'Downloaded' : K.ago(c.date) })),
+        c.locked ? icon('lock') : null);
+      row.onclick = () => { if (!c.locked) goChapter(c); };
+      dlist.append(row);
+    }
+    drawer.append(dlist);
+
+    box.replaceChildren(amb, pagesBox, topBar(), bottom, drawer);
+    let fpsRaf = 0;
+    if (opt.fps) {
+      const meter = el('div.fps', { text: '… fps' });
+      box.append(meter);
+      let n = 0, t0 = performance.now(), last = t0, worst = 0;
+      const tick = now => {
+        if (state !== s) return;
+        n++; worst = Math.max(worst, now - last); last = now;
+        if (now - t0 >= 1000) { meter.textContent = `${Math.round(n * 1000 / (now - t0))} fps · slowest ${Math.round(worst)} ms`; n = 0; t0 = now; worst = 0; }
+        fpsRaf = requestAnimationFrame(tick);
+      };
+      fpsRaf = requestAnimationFrame(tick);
+    }
+    setTimeout(() => dlist.querySelector('.current')?.scrollIntoView({ block: 'center' }), 50);
+
+    // show/hide bars
+    let hideT;
+    // Zen mode: full screen, just the pages. Bars stay away and the cursor hides when it stops moving.
+    let idleT;
+    const setZen = (on, quiet) => {
+      box.classList.toggle('zen', on);
+      if (on) { box.classList.add('hide-ui'); drawer.classList.remove('open'); box.querySelector('.rset')?.remove(); }
+      else { box.classList.remove('idle'); showUi(); }
+      if (K.info?.platform === 'desktop') K.api.post('/k/fullscreen', { on }).catch(() => {});
+      if (!quiet) K.toast(on ? 'Zen mode · press Z or Esc to leave' : 'Zen mode off');
+    };
+    K.toggleZen = () => { const on = !box.classList.contains('zen'); setReader({ zen: on }); setZen(on); };
+    const showUi = () => { if (box.classList.contains('zen')) return; box.classList.remove('hide-ui'); clearTimeout(hideT); hideT = setTimeout(() => { if (!box?.querySelector('.rset') && !drawer.classList.contains('open')) box?.classList.add('hide-ui'); }, 3500); };
+    showUi();
+
+    function setPage(i, fromScroll) {
+      i = Math.max(0, Math.min(s.pages.length - 1, i));
+      s.page = i;
+      slider.value = i + 1;
+      slider.style.setProperty('--p', (s.pages.length > 1 ? (i / (s.pages.length - 1)) * 100 : 100) + '%');
+      pc.textContent = `${i + 1} / ${s.pages.length}`;
+      paintMark();
+      for (let k = i; k <= i + opt.preload; k++) load(k);
+      setAmb(i);
+      if (i > 0) load(i - 1);
+      if (opt.mode === 'paged') {
+        strip.querySelectorAll('.pg.cur').forEach(p => p.classList.remove('cur'));
+        strip.children[i]?.classList.add('cur');
+      } else if (!fromScroll) {
+        strip.children[i]?.scrollIntoView({ block: 'start' });
+      }
+      saveSoon();
+    }
+    const saveSoon = K.debounce(saveProgress, 800);
+    // Resume spot: page + how far down it. Pages get their real height as they load, so the jump is redone
+    // until that page has its size, unless you start scrolling yourself first.
+    let jump = opt.mode === 'strip' && (startPage > 0 || startOff > 0) ? { i: startPage, off: startOff } : null;
+    const doJump = () => {
+      const p = jump && strip.children[jump.i];
+      if (!p) return;
+      pagesBox.style.scrollBehavior = 'auto';
+      pagesBox.scrollTop = p.offsetTop + jump.off * p.offsetHeight - pagesBox.clientHeight * 0.4;
+    };
+    const stopJump = () => { jump = null; };
+    if (jump) {
+      for (const ev of ['wheel', 'pointerdown', 'touchstart', 'keydown']) pagesBox.addEventListener(ev, stopJump, { passive: true, once: true });
+      setTimeout(stopJump, 20000);
+    }
+    s.where = () => {
+      if (opt.mode !== 'strip') return 0;
+      if (jump && jump.i === s.page) return jump.off;
+      const p = strip.children[s.page];
+      if (!p || !p.offsetHeight) return 0;
+      return Math.max(0, Math.min(0.999, (pagesBox.scrollTop + pagesBox.clientHeight * 0.4 - p.offsetTop) / p.offsetHeight));
+    };
+
+    if (opt.mode === 'strip') {
+      // the page whose top passed the middle of the screen is the current page
+      // Pages start loading well before you reach them.
+      const io = new IntersectionObserver(entries => {
+        for (const e of entries) if (e.isIntersecting) load(Number(e.target.dataset.i));
+      }, { root: pagesBox, rootMargin: '3000px 0px' });
+      // The current page is the one crossing a line 40% down the screen. The browser tracks this off the
+      // main thread, so scrolling never stops to measure the page (that caused the stutter).
+      const line = new IntersectionObserver(entries => {
+        for (const e of entries) if (e.isIntersecting) { const i = Number(e.target.dataset.i); if (i !== s.page) setPage(i, true); }
+      }, { root: pagesBox, rootMargin: '-40% 0px -59.5% 0px' });
+      // far away (above or below): free the picture; its space stays so nothing jumps
+      const far = new IntersectionObserver(entries => {
+        for (const e of entries) if (!e.isIntersecting) unload(Number(e.target.dataset.i));
+      }, { root: pagesBox, rootMargin: '9000px 0px' });
+      const atEnd = new IntersectionObserver(es => { if (es[0].isIntersecting && !jump) { s.page = s.pages.length - 1; s.finished = true; saveProgress(); } }, { root: pagesBox });
+      [...strip.querySelectorAll('.pg')].forEach(p => { io.observe(p); line.observe(p); far.observe(p); });
+      atEnd.observe(end);
+      let lastY = 0, ticking = false;
+      pagesBox.addEventListener('scroll', () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => { ticking = false; const y = pagesBox.scrollTop; if (Math.abs(y - lastY) > 80) { if (y > lastY && !box?.classList.contains('hide-ui')) box?.classList.add('hide-ui'); lastY = y; } });
+      }, { passive: true });
+      s.cleanup = () => { io.disconnect(); line.disconnect(); far.disconnect(); atEnd.disconnect(); for (const b of ambCache.values()) b?.close?.(); files.clear(); st.fill(''); strip.querySelectorAll('.pg').forEach(w => { if (job[Number(w.dataset.i)]) freeSlices(w); }); };
+    }
+
+    slider.oninput = () => setPage(Number(slider.value) - 1);
+    const step = d => {
+      if (opt.mode === 'paged') {
+        const n = s.page + d;
+        if (n >= s.pages.length) { s.page = s.pages.length - 1; s.finished = true; saveProgress(); if (s.next && opt.autoNext) goChapter(s.next); else box.append(end); return; }
+        setPage(n);
+      } else pagesBox.scrollBy({ top: d * pagesBox.clientHeight * 0.85, behavior: 'smooth' });
+    };
+    pagesBox.addEventListener('click', e => {
+      if (e.target.closest('.endcard, .ph')) return;
+      const x = e.clientX / window.innerWidth;
+      if (opt.tapZones && x < 0.3) { step(opt.rtl && opt.mode === 'paged' ? 1 : -1); return; }
+      if (opt.tapZones && x > 0.7) { step(opt.rtl && opt.mode === 'paged' ? -1 : 1); return; }
+      if (box.classList.contains('zen')) return;
+      box.classList.contains('hide-ui') ? showUi() : box.classList.add('hide-ui');
+    });
+    box.addEventListener('pointermove', e => {
+      if (box.classList.contains('zen')) { box.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => box?.classList.add('idle'), 1500); return; }
+      if (e.clientY < 90 || e.clientY > window.innerHeight - 90) showUi();
+    });
+    const onKey = e => {
+      if (!box || e.target.matches?.('input, select, textarea')) return;
+      if (e.key === 'z' || e.key === 'Z') K.toggleZen();
+      else if (e.key === 'Escape' && box.classList.contains('zen')) K.toggleZen();
+      else if (e.key === 'Escape') { if (drawer.classList.contains('open')) drawer.classList.remove('open'); else K.closeReader(); }
+      else if (e.key === 'ArrowRight' || e.key === 'd') step(opt.rtl && opt.mode === 'paged' ? -1 : 1);
+      else if (e.key === 'ArrowLeft' || e.key === 'a') step(opt.rtl && opt.mode === 'paged' ? 1 : -1);
+      else if (e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
+      else if (e.key === 'n' && s.next) goChapter(s.next);
+      else if (e.key === 'p' && s.prev) goChapter(s.prev);
+      else return;
+    };
+    document.addEventListener('keydown', onKey);
+    const oldCleanup = s.cleanup;
+    s.cleanup = () => { oldCleanup?.(); document.removeEventListener('keydown', onKey); clearTimeout(hideT); clearTimeout(idleT); cancelAnimationFrame(fpsRaf); };
+
+    // reader settings popover
+    function toggleSettings() {
+      const open = box.querySelector('.rset');
+      if (open) { open.remove(); return; }
+      const o = K.readerSettings();
+      const re = patch => { saveProgress(); setReader(patch); K.openReader(s.provider, s.slug, s.chapter.slug); };
+      const range = (label, key, min, max, stepv, unit) => {
+        const v = el('span.val', { text: o[key] + unit });
+        const r = el('input', { type: 'range', min, max, step: stepv, value: o[key] });
+        const paint = () => r.style.setProperty('--p', ((r.value - min) / (max - min)) * 100 + '%');
+        paint();
+        r.oninput = () => { v.textContent = r.value + unit; paint(); if (key === 'width') strip.style.maxWidth = r.value + 'px'; if (key === 'gap') strip.style.gap = r.value + 'px'; };
+        r.onchange = () => setReader({ [key]: Number(r.value) });
+        return el('div.ctl', el('div.lab', { text: label }), r, v);
+      };
+      const ambRange = (label, key, min, max, stepv, unit) => {
+        const n = range(label, key, min, max, stepv, unit), r = n.querySelector('input');
+        r.addEventListener('input', () => applyAmb({ ...K.readerSettings(), [key]: Number(r.value) }));
+        return n;
+      };
+      const tog = (label, key, sub, reload) => {
+        const t = el('button.toggle' + (o[key] ? '.on' : ''));
+        t.onclick = () => { const v = !K.readerSettings()[key]; t.classList.toggle('on', v); if (reload) re({ [key]: v }); else setReader({ [key]: v }); };
+        return el('div.ctl', el('div.lab', label, sub ? el('small', { text: sub }) : null), t);
+      };
+      box.append(el('div.rset.glass',
+        el('div.ctl', el('div.lab', { text: 'Layout' }), K.segmented([['strip', 'Strip', 'scroll'], ['paged', 'Pages', 'pages']], o.mode, v => re({ mode: v }))),
+        range('Page width', 'width', 400, 1600, 20, 'px'),
+        range('Gap between pages', 'gap', 0, 40, 1, 'px'),
+        range('Pages to load ahead', 'preload', 1, 10, 1, ''),
+        tog('Ambient light', 'ambient', 'A soft glow from the page around it', true),
+        ambRange('Ambient strength', 'ambStrength', 0, 100, 1, '%'),
+        ambRange('Ambient softness', 'ambBlur', 20, 220, 5, 'px'),
+        tog('Right to left', 'rtl', 'For manga in page mode', true),
+        tog('Auto next chapter', 'autoNext', 'In page mode, go on after the last page'),
+        tog('Tap sides to turn', 'tapZones', ''),
+        el('div.ctl', el('div.lab', 'Zen mode', el('small', { text: 'Full screen, just the pages. Z or Esc to leave' })),
+          el('button.btn.small', { onclick: () => K.toggleZen() }, icon('zen'), 'Enter')),
+        tog('Show frame rate', 'fps', 'A small meter in the corner, to check for lag', true)));
+    }
+
+    pagesBox.focus();
+    // already full screen = moving to the next chapter, so no hint again
+    if (opt.zen) setZen(true, window.innerHeight >= screen.height - 2);
+    setPage(startPage);
+    if (jump) { doJump(); setTimeout(doJump, 60); }
+  }
+})();
