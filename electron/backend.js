@@ -23,7 +23,7 @@ export const USER_AGENT = 'Koru/0.1 (personal reader)';
 // Image servers that only serve pictures to their own site get that site as Referer (what its own pages send).
 export const REFERERS = [   // [hostSuffix, referer]
   ['pstatic.net', 'https://www.webtoons.com/'], ['tnlycdn.com', 'https://toonily.com/'],
-  ['cmzcdn.org', 'https://comizy.io/'], ['2xstorage.com', 'https://www.manganato.gg/'], ['waitst.com', 'https://www.manganato.gg/']
+  ['cmzcdn.org', 'https://comizy.io/']
 ];
 const refererFor = u => { try { const h = new URL(u).hostname; return REFERERS.find(([d]) => h === d || h.endsWith('.' + d))?.[1]; } catch { return undefined; } };
 // "/k/fetch?u=<url>" (images routed through Koru) back to the real url
@@ -32,7 +32,7 @@ const unwrap = u => { if (typeof u === 'string' && u.startsWith('/k/fetch?')) { 
 const ALLOWED = ['omegascans.org', 'vortexscans.org', 'asurascans.com', 'flamecomics.xyz', 'mangadex.org', 'mangadex.network',
   'webtoons.com', 'pstatic.net', 'toonily.com', 'tnlycdn.com',
   'weebcentral.com', 'compsci88.com', 'planeptune.us', 'lastation.us', 'lowee.us', 'leanbox.us',
-  'comizy.io', 'cmzcdn.org', 'manganato.gg', 'kakamanga.com', '2xstorage.com', 'waitst.com', 'hivetoons.org', 'hivetoon.com',
+  'comizy.io', 'cmzcdn.org', 'hivetoons.org', 'hivetoon.com',
   'en-thunderscans.com', 'madarascans.net', 'wp.com', 'kingofshojo.com', 'violetmanga.com', 'drakecomic.net', 'ibb.co'];
 export const allowedUrl = u => {
   try {

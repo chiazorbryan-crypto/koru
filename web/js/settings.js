@@ -1,4 +1,4 @@
-// Koru settings: Appearance (every colour, transparency, glass, glow, motion, shape, text, sidebar),
+﻿// Koru settings: Appearance (every colour, transparency, glass, glow, motion, shape, text, sidebar),
 // Reader, Library and data, About.
 'use strict';
 (function () {
@@ -8,7 +8,7 @@
   function slider(label, value, min, max, step, unit, onInput, sub) {
     const v = el('span.val');
     const r = el('input', { type: 'range', min, max, step, value });
-    const fmt = x => (unit === '×' ? Number(x).toFixed(2) : Number(x)) + unit;
+    const fmt = x => (unit === 'Ã—' ? Number(x).toFixed(2) : Number(x)) + unit;
     const paint = () => { r.style.setProperty('--p', ((r.value - min) / (max - min)) * 100 + '%'); v.textContent = fmt(r.value); };
     paint();
     r.oninput = () => { paint(); onInput(Number(r.value)); };
@@ -128,7 +128,7 @@
         toggle('Show frame rate', ro.fps, v => setR({ fps: v }), 'A small meter while reading, to check for lag')));
 
       if (K.info?.platform === 'desktop') {
-        const stat = el('div.gpustat', el('span', { text: 'Checking your graphics card…' }));
+        const stat = el('div.gpustat', el('span', { text: 'Checking your graphics cardâ€¦' }));
         const body = el('div');
         grid.append(panel('sparkle', 'Graphics', 'If reading lags on a PC, try these. Changes apply when Koru restarts.', stat, body));
         K.api.get('/k/gpu').then(g => {
@@ -143,7 +143,7 @@
             soft ? el('span', { text: 'Turn on "Use the card even if it\'s blocked" below and restart, or update your graphics driver.' }) : null,
             act?.driver ? el('span', { text: 'Driver ' + act.driver }) : null,
             others.length ? el('span', { text: 'Also in this PC: ' + others.map(d => d.name || d.vendor).join(', ') }) : null,
-            el('span', { text: `Screen ${Math.round(screen.width * devicePixelRatio)}×${Math.round(screen.height * devicePixelRatio)}` }, hz)].filter(Boolean));
+            el('span', { text: `Screen ${Math.round(screen.width * devicePixelRatio)}Ã—${Math.round(screen.height * devicePixelRatio)}` }, hz)].filter(Boolean));
           // measure the screen's refresh rate (middle frame gap, once the page has settled)
           const gaps = []; let last = 0;
           const tick = t => { if (last) gaps.push(t - last); last = t; if (gaps.length < 90) requestAnimationFrame(tick); else { gaps.sort((x, y) => x - y); hz.textContent = ` at about ${Math.round(1000 / gaps[45])} Hz`; } };
@@ -174,6 +174,44 @@
         } catch { K.toast('That isn\'t a Koru backup.', 'error'); }
         fileIn.value = '';
       };
+      // Source check: does each source still list, open a series, list chapters and show a page?
+      const rows = el('div.health');
+      const last = (() => { try { return JSON.parse(localStorage.getItem('koru-health') || 'null'); } catch { return null; } })();
+      const row = (p, st, msg) => el('div.hrow.' + st, el('i.dot', { style: { background: p.hue, boxShadow: '0 0 8px ' + p.hue } }), el('b', { text: p.name }),
+        el('span.hst', { text: { ok: 'Working', part: 'Partly working', bad: 'Not working', wait: 'Checkingâ€¦', idle: 'â€”' }[st] }), el('small', { text: msg || '' }));
+      const draw = res => rows.replaceChildren(...K.providerList.map(p => { const r = res?.[p.id]; return row(p, r?.st || 'idle', r?.msg); }));
+      draw(last?.res);
+      const when = el('small.muted', { text: last ? 'Last checked ' + K.ago(last.at) : 'Not checked yet' });
+      const withTimeout = (pr, ms) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error('Took too long to answer')), ms))]);
+      async function checkOne(p) {
+        const t = performance.now();
+        let list;
+        try { list = await withTimeout(p.list({ sort: 'latest', page: 1 }), 45000); if (!list.items.length) throw new Error('The list came back empty'); }
+        catch (e) { return { st: 'bad', msg: e.message }; }
+        try {
+          const s = list.items[0];
+          const ch = (await withTimeout(K.getChapters(p.id, s.slug, true), 45000)).filter(c => !c.locked);
+          if (!ch.length) return { st: 'part', msg: 'Lists work, but the series had no free chapters to test' };
+          const pages = await withTimeout(p.pages(s.slug, ch[ch.length - 1].slug), 45000);
+          if (!pages.length) throw new Error('A chapter came back with no pages');
+          const u = pages[0].url, r = await withTimeout(fetch(/^https:/.test(u) ? K.viaKoru(u) : u), 45000);
+          if (!r.ok || !(r.headers.get('content-type') || '').startsWith('image/')) throw new Error('Page pictures don\'t load (' + r.status + ')');
+          return { st: 'ok', msg: (Math.round((performance.now() - t) / 100) / 10) + 's' };
+        } catch (e) { return { st: 'part', msg: 'Lists work, but reading failed: ' + e.message }; }
+      }
+      const checkBtn = el('button.btn.small.primary', { onclick: async () => {
+        checkBtn.disabled = true; const res = {};
+        K.providerList.forEach(p => res[p.id] = { st: 'wait' }); draw(res);
+        const queue = [...K.providerList];
+        await Promise.all(Array.from({ length: 4 }, async () => { while (queue.length) { const p = queue.shift(); res[p.id] = await checkOne(p); draw(res); } }));
+        localStorage.setItem('koru-health', JSON.stringify({ at: Date.now(), res }));
+        const bad = Object.values(res).filter(r => r.st !== 'ok').length;
+        when.textContent = 'Checked just now Â· ' + (bad ? bad + ' need attention' : 'all working');
+        checkBtn.disabled = false;
+      } }, icon('refresh'), 'Check all sources');
+      grid.append(panel('sparkle', 'Sources', 'Tests every source: its list, a series, its chapters and a page picture. Takes under a minute.',
+        el('div.row', { style: { marginBottom: '10px', alignItems: 'center' } }, checkBtn, when), rows));
+
       grid.append(panel('incognito', 'Privacy', '',
         toggle('Incognito', K.incognito(), v => { K.data.settings.incognito = v; K.save('settings'); K.paintInc?.(); }, 'Reading history, progress and read marks aren\'t saved. Also in the sidebar.')));
       grid.append(panel('folder', 'Library and data', 'Back up your library, likes, bookmarks, reading history and read marks.',

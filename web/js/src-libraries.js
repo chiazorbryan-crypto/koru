@@ -108,68 +108,6 @@
     chapterUrl: (slug, ch) => `${CMZSITE}/${slug}/${ch}`
   };
 
-  // ---- Manganato (Mangakakalot family). natomanga.com now redirects to manganami.com, whose
-  // series/chapter pages sit behind a Cloudflare challenge; the sister mirror manganato.gg
-  // serves them openly. Its search page is challenged too, so search uses the family's
-  // kakamanga.com search endpoint (same catalogue and slugs). Images (2xstorage.com) need the
-  // site Referer -> K.viaKoru for covers and pages.
-  const NATO = 'https://www.manganato.gg', KAKA = 'https://www.kakamanga.com';
-  const natoSlug = href => (String(href || '').match(/\/manga\/([^/?#"]+)/) || [])[1] || null;
-  const via = u => (https(u) ? K.viaKoru(u) : null);
-  const natomanga = {
-    id: 'natomanga', name: 'Manganato', short: 'Nato', site: NATO, hue: '#ffcf4a',
-    async list({ sort = 'latest', page = 1, q = '' } = {}) {
-      if (q) {
-        if (page > 1) return { items: [], hasMore: false };
-        const raw = await K.api.siteText(`${KAKA}/home/search/json?searchword=${enc(q)}`);
-        let items;
-        try {
-          items = JSON.parse(raw).map(r => ({ provider: 'natomanga', slug: natoSlug(r.url), title: K.plainText(r.name), cover: via(r.thumb), status: '', latest: r.chapterLatest || '' }));
-        } catch { // sometimes the endpoint answers with the full search-results page instead
-          items = [...doc(raw).querySelectorAll('.story_item')].map(el => {
-            const a = el.querySelector('.story_name a');
-            return { provider: 'natomanga', slug: natoSlug(a?.getAttribute('href')), title: txt(a), cover: via(el.querySelector('img')?.getAttribute('src')), status: '', latest: txt(el.querySelector('.story_chapter a')) };
-          });
-        }
-        return { items: items.filter(i => i.slug), hasMore: false };
-      }
-      const d = doc(await K.api.siteText(`${NATO}/manga-list/${sort === 'popular' ? 'hot-manga' : 'latest-manga'}?page=${page}`));
-      const items = [...d.querySelectorAll('.list-comic-item-wrap')].map(el => {
-        const a = el.querySelector('a.list-story-item') || el.querySelector('h3 a'), img = el.querySelector('img');
-        return { provider: 'natomanga', slug: natoSlug(a?.getAttribute('href')), title: a?.getAttribute('title') || txt(el.querySelector('h3')),
-          cover: via(img?.getAttribute('data-src') || img?.getAttribute('src')), status: '', latest: txt(el.querySelector('.list-story-item-wrap-chapter')) };
-      }).filter(i => i.slug);
-      const last = num(txt(d.querySelector('.page_last'))) || page;
-      return { items, hasMore: page < last };
-    },
-    async series(slug) {
-      const d = doc(await K.api.siteText(`${NATO}/manga/${enc(slug)}`));
-      const info = [...d.querySelectorAll('.manga-info-text li')];
-      const field = label => { const li = info.find(l => txt(l).toLowerCase().startsWith(label)); return li ? txt(li).replace(/^[^:]*:\s*/, '') : ''; };
-      const box = d.querySelector('#contentBox');
-      if (box) box.querySelectorAll('h2').forEach(h => h.remove());
-      return {
-        provider: 'natomanga', slug, id: slug, title: txt(d.querySelector('.manga-info-text h1')), cover: via(d.querySelector('.manga-info-pic img')?.getAttribute('src')),
-        description: txt(box), status: field('status'), author: field('author').split(/\s*,\s*/).filter(Boolean).join(' · '),
-        tags: [...d.querySelectorAll('.manga-info-text li.genres a')].map(txt).filter(Boolean), url: `${NATO}/manga/${slug}`
-      };
-    },
-    async chapters(series) {
-      const j = await K.api.site(`${NATO}/api/manga/${enc(series.slug)}/chapters?limit=-1`);
-      return (j?.data?.chapters || []).map(c => ({ slug: c.chapter_slug, name: c.chapter_name, number: c.chapter_num != null ? Number(c.chapter_num) : num(c.chapter_name),
-        date: c.updated_at || null, locked: false }));
-    },
-    async pages(slug, ch) {
-      const html = await K.api.siteText(`${NATO}/manga/${enc(slug)}/${enc(ch)}`);
-      const arr = name => { const m = html.match(new RegExp('var\\s+' + name + '\\s*=\\s*(\\[[^\\]]*\\])')); try { return m ? JSON.parse(m[1]) : []; } catch { return []; } };
-      const cdn = String(arr('cdns')[0] || 'https://img-r1.2xstorage.com/').replace(/\/?$/, '/');
-      const imgs = arr('chapterImages');
-      if (!imgs.length) throw new Error('Manganato returned no pages for this chapter.');
-      return imgs.map(p => ({ url: via(/^https:\/\//.test(p) ? p : cdn + String(p).replace(/^\//, '')), w: null, h: null })).filter(p => p.url);
-    },
-    chapterUrl: (slug, ch) => `${NATO}/manga/${slug}/${ch}`
-  };
-
   // ---- Hive Toons (hivetoon.com -> hivetoons.org): same JSON platform as Vortex Scans. ----
   const HIVE = 'https://api.hivetoons.org/api', HIVESITE = 'https://hivetoons.org';
   const hiveNotNovel = p => p && p.isNovel !== true && String(p.seriesType || '').toUpperCase() !== 'NOVEL';
@@ -216,5 +154,5 @@
     chapterUrl: (slug, ch) => `${HIVESITE}/series/${slug}/${ch}`
   };
 
-  for (const p of [weebcentral, mangabuddy, natomanga, hivetoon]) K.addProvider(p);
+  for (const p of [weebcentral, mangabuddy, hivetoon]) K.addProvider(p);
 })();

@@ -2,7 +2,7 @@
 
 A personal manga and manhwa reader for Windows, with a liquid glass look you can fully customize.
 
-- **Sources (16):** Omega, Vortex, Asura, Flame, MangaDex, Thunder, Madara Scans, King of Shojo, Violet, Drake, Weeb Central, MangaBuddy (Comizy), Manganato, Hive Toons, Webtoons and Toonily, read through each site's public pages and APIs. Free chapters only.
+- **Sources (15):** Omega, Vortex, Asura, Flame, MangaDex, Thunder, Madara Scans, King of Shojo, Violet, Drake, Weeb Central, MangaBuddy (Comizy), Hive Toons, Webtoons and Toonily, read through each site's public pages and APIs. Free chapters only.
 - **Library:** favourites, continue reading, new chapter checks, history
 - **Reader:** long strip or page by page, right-to-left, ambient light, auto next chapter, keyboard controls
 - **Downloads:** save chapters and read them offline
