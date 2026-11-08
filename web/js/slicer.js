@@ -22,6 +22,15 @@ onmessage = async ({ data: m }) => {
       b.close();
       canv.set(m.id, m.canvases);
       postMessage({ type: 'drawn', id: m.id });
+    } else if (m.type === 'thumb') {
+      const src = await createImageBitmap(m.blob);
+      const w = Math.min(m.w, src.width), h = Math.max(1, Math.round(src.height * w / src.width));
+      const oc = new OffscreenCanvas(w, h), c = oc.getContext('2d');
+      c.imageSmoothingQuality = 'high';
+      c.drawImage(src, 0, 0, w, h);
+      src.close();
+      const blob = await oc.convertToBlob({ type: 'image/webp', quality: 0.86 });
+      postMessage({ type: 'thumb', id: m.id, blob });
     } else if (m.type === 'free') {
       pics.get(m.id)?.close(); pics.delete(m.id);
       for (const oc of canv.get(m.id) || []) { oc.width = 0; oc.height = 0; }

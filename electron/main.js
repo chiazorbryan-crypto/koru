@@ -93,7 +93,7 @@ app.whenReady().then(() => {
     if (url.pathname.startsWith('/k/')) {
       const body = request.method === 'GET' || request.method === 'HEAD' ? '' : await request.text();
       const r = await handle({ method: request.method, path: url.pathname, query: url.searchParams, body });
-      const headers = { 'Content-Type': r.type, 'Cache-Control': r.file ? 'max-age=86400' : 'no-store' };
+      const headers = { 'Content-Type': r.type, 'Cache-Control': r.file || r.cache ? 'max-age=86400' : 'no-store' };
       if (r.file) return new Response(Readable.toWeb(fs.createReadStream(r.file)), { status: 200, headers });
       return new Response(r.body, { status: r.status, headers });
     }
@@ -114,9 +114,11 @@ app.whenReady().then(() => {
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: '#00000000', symbolColor: '#e8e9ff', height: 34 },
     show: false,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false }
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, backgroundThrottling: !process.env.KORU_BG_TEST },
+    ...(process.env.KORU_BG_TEST ? { skipTaskbar: true, minimizable: false, focusable: false } : {})
   });
-  win.once('ready-to-show', () => win.show());
+  // KORU_BG_TEST: a test window that draws normally but sits off-screen and never takes focus
+  win.once('ready-to-show', () => { if (process.env.KORU_BG_TEST) { win.setPosition(-5000, 0); win.showInactive(); } else win.show(); });
   // Links never open inside Koru: only app pages load here, anything else goes to the browser (allowed sites only).
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (e, u) => { if (!u.startsWith('koru://app/')) e.preventDefault(); });

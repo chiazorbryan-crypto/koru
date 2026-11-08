@@ -320,10 +320,13 @@
     let src = sessionStorage.getItem('koru-src') || 'omega';
     let sort = sessionStorage.getItem('koru-sort') || 'latest';
     root.append(el('div.head', el('div', el('h1', { text: 'Explore' }), el('div.sub', { text: 'Browse your sources' }))));
+    if (!K.providers[src]) src = 'omega';
+    const srcRow = el('div.srcs');
+    const drawSrcs = () => srcRow.replaceChildren(...K.providerList.map(p => el('button.chip' + (src === p.id ? '.on' : ''), { onclick: () => { if (src === p.id) return; src = p.id; sessionStorage.setItem('koru-src', src); drawSrcs(); load(true); } }, el('i.dot', { style: { background: p.hue, boxShadow: '0 0 8px ' + p.hue } }), p.name)));
+    drawSrcs();
     const bar = el('div.row', { style: { marginBottom: '18px', gap: '12px' } },
-      segmented(K.providerList.map(p => [p.id, p.name]), src, v => { src = v; sessionStorage.setItem('koru-src', v); load(true); }),
       segmented([['latest', 'Latest', 'clock'], ['popular', 'Popular', 'sparkle']], sort, v => { sort = v; sessionStorage.setItem('koru-sort', v); load(true); }));
-    root.append(bar);
+    root.append(srcRow, bar);
     const grid = el('div.grid'), more = el('div', { style: { height: '60px' } });
     root.append(grid, more);
     let page = 1, hasMore = true, busy = false, gen = 0, dry = 0;
@@ -351,11 +354,14 @@
         if (my === gen) { if (page === 1) grid.replaceChildren(K.errorBox(e)); else more.replaceChildren(el('button.btn', { onclick: () => { more.replaceChildren(); load(); } }, icon('refresh'), 'Load more')); }
       } finally {
         busy = false;
-        if (ok && my === gen && hasMore && near()) setTimeout(() => load(), 60);
+        requestAnimationFrame(measure);
+        if (ok && my === gen && hasMore) requestAnimationFrame(() => { if (near()) setTimeout(() => load(), 60); });
       }
     }
     const view = root.closest('.view');
-    const near = () => !!view && view.scrollTop + view.clientHeight > view.scrollHeight - 1600;
+    let fullH = 0;
+    const measure = () => { fullH = view ? view.scrollHeight : 0; };
+    const near = () => !!view && view.scrollTop + view.clientHeight > (fullH || view.scrollHeight) - 1600;
     view?.addEventListener('scroll', () => { if (page > 1 && near()) load(); }, { passive: true });
     load(true);
   };
@@ -372,7 +378,7 @@
       const my = ++gen;
       history.replaceState(null, '', '#/search' + (q ? '?q=' + encodeURIComponent(q) : ''));
       const v = root.closest('.view'); if (v) v._q = q;
-      if (!q.trim()) { out.replaceChildren(el('div.empty', K.fox(), el('h3', { text: 'Find something to read' }), el('p', { text: 'Type a title. Koru searches Omega Scans and Vortex Scans together.' }))); return; }
+      if (!q.trim()) { out.replaceChildren(el('div.empty', K.fox(), el('h3', { text: 'Find something to read' }), el('p', { text: 'Type a title. Koru searches all ' + K.providerList.length + ' sources together.' }))); return; }
       out.replaceChildren();
       for (const p of K.providerList) {
         const sec = el('div', el('div.section', el('h2', { text: p.name, style: { color: p.hue } }), el('span.count')), skeletonGrid(6));
@@ -443,7 +449,7 @@
       el('div.bd', { style: s.cover ? { backgroundImage: `url("${s.cover.replace(/["\\]/g, '')}")` } : {} }),
       el('button.btn.backb', { title: 'Back (Alt+Left)', onclick: () => K.back() }, icon('back'), 'Back'),
       el('div.wrap',
-        el('div.poster', img(s.cover, s.title)),
+        el('div.poster', img(s.cover, s.title, '', 320)),
         el('div.info',
           el('div.row', el('span.tag', { text: P(provider)?.name, style: { color: P(provider)?.hue } }), s.status ? el('span.tag', { text: s.status }) : null, offline ? el('span.tag', { text: 'Offline' }) : null),
           el('h1', { text: s.title }),

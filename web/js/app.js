@@ -160,6 +160,17 @@
   });
 
   // ---------- start ----------
+  // The glass re-blurs whatever moves behind it, so the orbs pause while you scroll, while a page changes,
+  // and while Koru isn't the active window. They carry on from the same spot afterwards.
+  const bgfx = document.querySelector('.bgfx');
+  let stillT = 0, away = !document.hasFocus();
+  const still = ms => { bgfx?.classList.add('still'); clearTimeout(stillT); stillT = setTimeout(() => { if (!away) bgfx?.classList.remove('still'); }, ms); };
+  document.addEventListener('scroll', () => still(260), { capture: true, passive: true });
+  window.addEventListener('hashchange', () => still(700));
+  window.addEventListener('blur', () => { away = true; bgfx?.classList.add('still'); });
+  window.addEventListener('focus', () => { away = false; still(150); });
+  if (away) bgfx?.classList.add('still');
+
   async function start() {
     try { const info = await K.api.get('/k/info'); K.info = info; if (info.platform === 'desktop') document.documentElement.classList.add('desktop'); }
     catch { K.info = { platform: 'web' }; }

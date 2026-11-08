@@ -223,6 +223,8 @@
 
   K.providers = { omega, vortex, asura, flame, mangadex };
   K.providerList = [omega, vortex, asura, flame, mangadex];
+  // More sources live in src-*.js and register themselves here.
+  K.addProvider = p => { if (!p?.id || K.providers[p.id]) return; K.providers[p.id] = p; K.providerList.push(p); };
 
   // Short-lived memory cache so moving between pages doesn't refetch everything.
   const cache = new Map();

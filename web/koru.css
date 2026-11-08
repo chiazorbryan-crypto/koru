@@ -191,11 +191,10 @@ html[data-transition=none] .view.enter, html[data-transition=none] .view.leave {
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--cover-w), 1fr)); gap: 18px 16px; }
 .card { position: relative; display: block; text-decoration: none; color: inherit; border-radius: var(--radius); outline: none; perspective: 900px; }
 .card .cv { position: relative; aspect-ratio: 3 / 4.3; border-radius: var(--radius); overflow: hidden; background: var(--glass); border: var(--edge-w) solid var(--edge);
-  transform: translateY(0) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) scale(1);
   transition: transform var(--t) var(--ease), box-shadow var(--t), border-color var(--t); box-shadow: 0 8px 24px -10px var(--shadow); }
 .grid > .card { content-visibility: auto; contain-intrinsic-size: auto var(--cover-w) auto calc(var(--cover-w) * 1.43); }
-.card .cv img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transform: scale(1.06); transition: opacity var(--t-slow), transform var(--t-slow) var(--ease); }
-.card .cv img.ready { opacity: 1; transform: scale(1); }
+.card .cv img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity var(--t-slow); }
+.card .cv img.ready { opacity: 1; }
 .card .cv::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity var(--t);
   background: radial-gradient(circle at var(--gx, 50%) var(--gy, 30%), rgba(255,255,255,.35), transparent 50%); }
 .card:hover .cv, .card:focus-visible .cv { transform: translateY(calc(var(--lift) * -1)) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) scale(var(--hscale));
@@ -390,7 +389,7 @@ select.sel-in option { background: #1b1c2e; color: #fff; }
 
 /* while reading: nothing behind the reader is drawn, and its bars don't re-blur pages as you scroll */
 html.reading .shell, html.reading .bgfx { visibility: hidden; }
-html.reading .orb { animation-play-state: paused; }
+html.reading .orb, .bgfx.still .orb { animation-play-state: paused; }
 .reader .glass { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background: color-mix(in srgb, var(--bg) 86%, #ffffff 9%); }
 .reader .glass::after { display: none; }
 .reader .pages { contain: strict; }
@@ -413,7 +412,8 @@ html.incognito .bgfx { filter: saturate(.55) brightness(.85); transition: filter
 
 /* book options */
 .card .more { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; z-index: 3;
-  background: var(--card); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.18); color: var(--text); opacity: 0; transform: scale(.8); transition: all var(--t) var(--ease); }
+  background: color-mix(in srgb, var(--bg) 82%, transparent); border: 1px solid rgba(255,255,255,.18); color: var(--text); opacity: 0; transform: scale(.8);
+  transition: opacity var(--t) var(--ease), transform var(--t) var(--ease), background var(--t); }
 .card:hover .more, .card:focus-within .more { opacity: 1; transform: none; }
 @media (hover: none) { .card .more { opacity: 1; transform: none; } }
 .card .more:hover { background: var(--accent-solid); color: var(--on-accent); }
@@ -480,6 +480,11 @@ html.plain .nav-btn .dotb, html.plain .card .newb { box-shadow: none; }
 
 /* back button on series pages */
 .hero .backb { position: relative; z-index: 2; margin: -18px 0 18px; }
+
+/* Explore: source chips */
+.srcs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.srcs .chip { display: inline-flex; align-items: center; gap: 7px; }
+.srcs .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hue, var(--accent-solid)); box-shadow: 0 0 8px var(--hue, transparent); }
 
 /* toasts */
 #toasts { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 300; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }

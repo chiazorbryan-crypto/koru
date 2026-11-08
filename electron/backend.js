@@ -20,8 +20,20 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 export const USER_AGENT = 'Koru/0.1 (personal reader)';
+// Image servers that only serve pictures to their own site get that site as Referer (what its own pages send).
+export const REFERERS = [   // [hostSuffix, referer]
+  ['pstatic.net', 'https://www.webtoons.com/'], ['tnlycdn.com', 'https://toonily.com/'],
+  ['cmzcdn.org', 'https://comizy.io/'], ['2xstorage.com', 'https://www.manganato.gg/'], ['waitst.com', 'https://www.manganato.gg/']
+];
+const refererFor = u => { try { const h = new URL(u).hostname; return REFERERS.find(([d]) => h === d || h.endsWith('.' + d))?.[1]; } catch { return undefined; } };
+// "/k/fetch?u=<url>" (images routed through Koru) back to the real url
+const unwrap = u => { if (typeof u === 'string' && u.startsWith('/k/fetch?')) { try { return new URLSearchParams(u.slice(9)).get('u') || ''; } catch { return ''; } } return u; };
 // Only these sites (and their subdomains) can be reached through Koru.
-const ALLOWED = ['omegascans.org', 'vortexscans.org', 'asurascans.com', 'flamecomics.xyz', 'mangadex.org', 'mangadex.network'];
+const ALLOWED = ['omegascans.org', 'vortexscans.org', 'asurascans.com', 'flamecomics.xyz', 'mangadex.org', 'mangadex.network',
+  'webtoons.com', 'pstatic.net', 'toonily.com', 'tnlycdn.com',
+  'weebcentral.com', 'compsci88.com', 'planeptune.us', 'lastation.us', 'lowee.us', 'leanbox.us',
+  'comizy.io', 'cmzcdn.org', 'manganato.gg', 'kakamanga.com', '2xstorage.com', 'waitst.com', 'hivetoons.org', 'hivetoon.com',
+  'en-thunderscans.com', 'madarascans.net', 'wp.com', 'kingofshojo.com', 'violetmanga.com', 'drakecomic.net', 'ibb.co'];
 export const allowedUrl = u => {
   try {
     const url = new URL(u);
@@ -54,7 +66,9 @@ export function createBackend({ dataDir, downloadsDir, version = '0.0.0', platfo
     let lastErr;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const r = await fetchImpl(u, { headers: { 'User-Agent': USER_AGENT, Accept: accept }, signal: AbortSignal.timeout(45000), redirect: 'follow' });
+        const headers = { 'User-Agent': USER_AGENT, Accept: accept };
+        const ref = refererFor(u); if (ref) headers.Referer = ref;
+        const r = await fetchImpl(u, { headers, signal: AbortSignal.timeout(45000), redirect: 'follow' });
         if (r.url && !allowedUrl(r.url)) throw Object.assign(new Error('The site redirected somewhere unexpected.'), { status: 502, final: true });
         if ([502, 503, 504, 522, 524].includes(r.status) && attempt < 2) { lastErr = new Error('The site is busy (' + r.status + ').'); await new Promise(res => setTimeout(res, 1500 * (attempt + 1))); continue; }
         return r;
@@ -190,7 +204,7 @@ export function createBackend({ dataDir, downloadsDir, version = '0.0.0', platfo
       if (p === '/k/fetch' && method === 'GET') {
         const r = await siteFetch(query.get('u') || '', query.get('accept') || 'application/json');
         const type = r.headers.get('content-type') || 'application/octet-stream';
-        return { status: r.status, type, body: Buffer.from(await r.arrayBuffer()) };
+        return { status: r.status, type, body: Buffer.from(await r.arrayBuffer()), cache: r.ok && type.startsWith('image/') };
       }
 
       const store = p.match(/^\/k\/store\/([a-z0-9-]{1,40})$/);
@@ -209,7 +223,8 @@ export function createBackend({ dataDir, downloadsDir, version = '0.0.0', platfo
 
       if (p === '/k/dl/start' && method === 'POST') {
         const b = JSON.parse(req.body || '{}');
-        const pages = Array.isArray(b.pages) ? b.pages.filter(allowedUrl) : [];
+        if (b.cover) b.cover = unwrap(b.cover);
+        const pages = Array.isArray(b.pages) ? b.pages.map(unwrap).filter(allowedUrl) : [];
         if (!b.provider || !b.seriesSlug || !b.chapterSlug || !pages.length) return json(400, { error: 'Nothing to download.' });
         const id = dlId(b.provider, b.seriesSlug, b.chapterSlug);
         if (!queue.some(j => j.id === id && (j.state === 'queued' || j.state === 'downloading'))) {

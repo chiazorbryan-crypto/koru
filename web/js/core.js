@@ -152,11 +152,52 @@ K.ago = function ago(date) {
 K.bytes = n => n < 1048576 ? (n / 1024).toFixed(0) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
 K.gpuSoftware = g => !g.now?.accel ? false : !/^enabled/.test(g.status?.gpu_compositing || '') || !/^enabled/.test(g.status?.rasterization || '');
 K.debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+// An image whose server wants the site's own Referer: Koru's backend fetches it (and adds that Referer).
+K.viaKoru = url => (typeof url === 'string' && /^https:\/\//.test(url) ? '/k/fetch?u=' + encodeURIComponent(url) + '&accept=' + encodeURIComponent('image/avif,image/webp,image/*;q=0.8') : url);
 K.plainText = html => new DOMParser().parseFromString(String(html || ''), 'text/html').body.textContent.trim();
-K.img = function img(src, alt = '', cls = '') {
-  const i = K.el('img' + (cls ? '.' + cls : ''), { alt, loading: 'lazy', decoding: 'async', referrerPolicy: 'no-referrer', draggable: false });
+// Covers: sites send them up to 1500×2100 for a 180px card, and decoding hundreds of those made scrolling
+// stutter. Each one is shrunk to card size once, on a background thread, when it comes near the screen.
+const thumbs = new Map(), twaits = new Map(), tqueue = [];
+let tworker = null, tseq = 0, tactive = 0;
+const thumbAsk = (blob, w) => new Promise((res, rej) => {
+  if (!tworker) {
+    tworker = new Worker('js/slicer.js');
+    tworker.onmessage = e => { const t = twaits.get(e.data.id); if (!t) return; twaits.delete(e.data.id); e.data.type === 'error' ? t.rej(new Error(e.data.error)) : t.res(e.data.blob); };
+  }
+  const id = 't' + (++tseq); twaits.set(id, { res, rej }); tworker.postMessage({ type: 'thumb', id, blob, w });
+});
+function makeThumb(src, w) {
+  const key = w + '|' + src;
+  if (thumbs.has(key)) return thumbs.get(key);
+  const p = (async () => {
+    const r = await fetch(/^https:\/\//.test(src) ? K.viaKoru(src) : src);
+    if (!r.ok) throw new Error('cover ' + r.status);
+    return URL.createObjectURL(await thumbAsk(await r.blob(), w));
+  })();
+  thumbs.set(key, p);
+  p.catch(() => thumbs.delete(key));
+  if (thumbs.size > 900) { const [k, old] = thumbs.entries().next().value; thumbs.delete(k); old.then(u => setTimeout(() => URL.revokeObjectURL(u), 60000), () => {}); }
+  return p;
+}
+const runThumbs = () => {
+  while (tactive < 4 && tqueue.length) {
+    const job = tqueue.shift();
+    if (!job.i.isConnected) { thumbIO.observe(job.i); continue; }   // page put away for now; picked up when it's back
+    tactive++;
+    makeThumb(job.src, job.w).then(u => { job.i.src = u; }, () => { job.i.src = job.src; }).finally(() => { tactive--; runThumbs(); });
+  }
+};
+const thumbIO = new IntersectionObserver(es => {
+  for (const e of es) if (e.isIntersecting) { thumbIO.unobserve(e.target); tqueue.push(e.target._thumb); }
+  runThumbs();
+}, { rootMargin: '700px 0px' });
+K.img = function img(src, alt = '', cls = '', cssW = 220) {
+  const i = K.el('img' + (cls ? '.' + cls : ''), { alt, decoding: 'async', referrerPolicy: 'no-referrer', draggable: false });
   i.addEventListener('load', () => i.classList.add('ready'));
   i.addEventListener('error', () => i.classList.add('broken'));
-  if (src) i.src = src;
+  if (!src) return i;
+  if (/^(data|blob):/.test(src)) { i.src = src; return i; }
+  i._thumb = { i, src, w: Math.min(900, Math.round(cssW * Math.max(1, devicePixelRatio || 1))) };
+  thumbIO.observe(i);
   return i;
 };
