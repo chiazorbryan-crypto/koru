@@ -397,11 +397,43 @@
       const v = list[Math.max(0, Math.min(list.length - 1, i + dir))];
       setReader({ [key]: v }); paintAuto();
     };
-    const pop = el('div.autopop.glass', autoPlay,
+    const grip = el('span.grip', { title: 'Drag to move' }, icon('grip'));
+    const pop = el('div.autopop.glass', grip, autoPlay,
       el('button.btn.small.icon', { title: 'Slower', onclick: () => nudge(-1) }, icon('minus')),
       el('div.avw', autoVal, el('small', { text: isStrip ? 'speed' : 'per page' })),
       el('button.btn.small.icon', { title: 'Faster', onclick: () => nudge(1) }, icon('plus')),
       el('button.btn.small.icon', { title: 'Turn auto-scroll off', onclick: () => { autoKeep = false; showAuto(false); } }, icon('x')));
+    // Drag the grip to put the pop-up anywhere; the spot is remembered (as a share of the screen, so it fits any size).
+    const POS_KEY = 'koru-autopop';
+    const placePop = () => {
+      let p = null; try { p = JSON.parse(localStorage.getItem(POS_KEY) || 'null'); } catch {}
+      if (!p || !box) { pop.style.left = pop.style.top = ''; pop.style.right = pop.style.bottom = ''; return; }
+      const W = box.clientWidth, H = box.clientHeight, w = pop.offsetWidth || 240, h = pop.offsetHeight || 48;
+      pop.style.right = pop.style.bottom = 'auto';
+      pop.style.left = Math.max(6, Math.min(W - w - 6, p.x * W)) + 'px';
+      pop.style.top = Math.max(6, Math.min(H - h - 6, p.y * H)) + 'px';
+    };
+    grip.addEventListener('pointerdown', e => {
+      e.preventDefault(); e.stopPropagation();
+      grip.setPointerCapture(e.pointerId);
+      const r0 = pop.getBoundingClientRect(), b0 = box.getBoundingClientRect(), dx = e.clientX - r0.left, dy = e.clientY - r0.top;
+      pop.classList.add('dragging');
+      const move = ev => {
+        const W = box.clientWidth, H = box.clientHeight;
+        const x = Math.max(6, Math.min(W - r0.width - 6, ev.clientX - b0.left - dx)), y = Math.max(6, Math.min(H - r0.height - 6, ev.clientY - b0.top - dy));
+        pop.style.right = pop.style.bottom = 'auto'; pop.style.left = x + 'px'; pop.style.top = y + 'px';
+      };
+      const up = () => {
+        grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up);
+        pop.classList.remove('dragging');
+        const W = box.clientWidth, H = box.clientHeight;
+        try { localStorage.setItem(POS_KEY, JSON.stringify({ x: pop.offsetLeft / W, y: pop.offsetTop / H })); } catch {}
+      };
+      grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
+    });
+    grip.addEventListener('dblclick', () => { try { localStorage.removeItem(POS_KEY); } catch {} placePop(); });   // double-click: back to the corner
+    window.addEventListener('resize', placePop);
+
     function paintAuto() {
       const o = K.readerSettings();
       autoVal.textContent = isStrip ? `${Math.round(o.autoSpeed / 10) / 10}×` : `${o.autoSecs}s`;
@@ -438,7 +470,7 @@
     }
     function showAuto(on) {
       autoShown = on;
-      if (on) { autoKeep = true; if (!pop.isConnected) box.append(pop); setAuto(true); K.toast('Auto-scroll on · S to pause', 'ok'); }
+      if (on) { autoKeep = true; if (!pop.isConnected) { box.append(pop); placePop(); } setAuto(true); K.toast('Auto-scroll on · S to pause', 'ok'); }
       else { setAuto(false); pop.remove(); }
       paintAuto();
     }
@@ -477,6 +509,7 @@
     });
     box.addEventListener('pointermove', e => {
       if (box.classList.contains('zen')) { box.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => box?.classList.add('idle'), 1500); return; }
+      if (e.target.closest?.('.autopop')) return;   // using the auto-scroll pop-up doesn't bring the bars up
       if (e.clientY < 90 || e.clientY > window.innerHeight - 90) showUi();
     });
     const onKey = e => {
@@ -494,7 +527,7 @@
     };
     document.addEventListener('keydown', onKey);
     const oldCleanup = s.cleanup;
-    s.cleanup = () => { oldCleanup?.(); document.removeEventListener('keydown', onKey); clearTimeout(hideT); clearTimeout(idleT); cancelAnimationFrame(fpsRaf); cancelAnimationFrame(autoRaf); clearInterval(statT); document.removeEventListener('keydown', act); };
+    s.cleanup = () => { oldCleanup?.(); document.removeEventListener('keydown', onKey); clearTimeout(hideT); clearTimeout(idleT); cancelAnimationFrame(fpsRaf); cancelAnimationFrame(autoRaf); clearInterval(statT); window.removeEventListener('resize', placePop); document.removeEventListener('keydown', act); };
 
     // reader settings popover
     function toggleSettings() {

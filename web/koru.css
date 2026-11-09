@@ -521,9 +521,15 @@ html.plain .nav-btn .dotb, html.plain .card .newb { box-shadow: none; }
 
 /* auto-scroll pop-up */
 .reader .autopop { position: absolute; right: max(14px, calc(50% - 520px)); bottom: 86px; z-index: 5; display: flex; align-items: center; gap: 4px; padding: 6px; border-radius: 99px;
-  animation: rise-in var(--t) var(--ease); transition: bottom var(--t) var(--ease), opacity var(--t); opacity: .82; }
+  animation: rise-in var(--t) var(--ease); transition: opacity var(--t); opacity: .82; }
 .reader .autopop:hover { opacity: 1; }
-.reader.hide-ui .autopop { bottom: 18px; opacity: .5; }
+.reader .autopop .grip { display: grid; place-items: center; width: 22px; height: 32px; cursor: grab; color: var(--muted); touch-action: none; border-radius: 8px; }
+.reader .autopop .grip:hover { color: var(--text); background: rgba(255,255,255,.06); }
+.reader .autopop .grip .ic { width: 16px; height: 16px; fill: currentColor; stroke: none; }
+.reader .autopop.dragging { opacity: 1; animation: none; cursor: grabbing; }
+.reader .autopop.dragging .grip { cursor: grabbing; }
+/* it stays put when the bars show or hide, so it never slides away from the mouse */
+.reader.hide-ui .autopop { opacity: .5; }
 .reader.hide-ui .autopop:hover { opacity: 1; }
 .reader .autopop .avw { display: grid; justify-items: center; min-width: 46px; line-height: 1.05; }
 .reader .autopop .av { font-size: .95em; }

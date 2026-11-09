@@ -46,6 +46,7 @@ const ICONS = {
   refresh: '<path d="M20 11a8 8 0 0 0-14.6-4.5L4 8M4 4v4h4M4 13a8 8 0 0 0 14.6 4.5L20 16M20 20v-4h-4"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   chart: '<path d="M4 20h16M7 20v-6M12 20V6M17 20v-9"/>',
+  grip: '<circle cx="9" cy="7" r="1.2"/><circle cx="15" cy="7" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/><circle cx="9" cy="17" r="1.2"/><circle cx="15" cy="17" r="1.2"/>',
   auto: '<path d="M7 5l5 5 5-5M7 12l5 5 5-5"/>',
   pause: '<path d="M8.5 5v14M15.5 5v14"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
