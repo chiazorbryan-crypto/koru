@@ -125,7 +125,7 @@
         slider('Ambient strength', ro.ambStrength, 0, 100, 1, '%', v => setR({ ambStrength: v })),
         slider('Ambient softness', ro.ambBlur, 20, 220, 5, 'px', v => setR({ ambBlur: v })),
         toggle('Right to left', ro.rtl, v => setR({ rtl: v }), 'For manga in page mode'),
-        toggle('Auto next chapter', ro.autoNext, v => setR({ autoNext: v })),
+        toggle('Keep reading into the next chapter', ro.autoNext, v => setR({ autoNext: v }), 'Long strip: the next chapter joins underneath as you reach the end, like Kotatsu'),
         toggle('Tap sides to turn', ro.tapZones, v => setR({ tapZones: v })),
         toggle('Zen mode', ro.zen, v => setR({ zen: v }), 'Chapters open full screen with just the pages. Press Z while reading to switch'),
         toggle('Show frame rate', ro.fps, v => setR({ fps: v }), 'A small meter while reading, to check for lag')));

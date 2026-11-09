@@ -36,17 +36,15 @@
 
   function saveProgress() {
     if (!state?.chapter || !state.pages?.length || K.incognito() || K.flag(state.provider, state.slug).trash) return;
-    const { provider, slug, series, chapter } = state;
+    const { provider, slug, series } = state;
+    const loc = state.local?.() || { chapter: state.chapter, page: state.page, total: state.pages.length };
+    const chapter = loc.chapter;
     const k = K.key(provider, slug);
     K.data.history[k] = { provider, slug, title: series?.title || slug, cover: series?.cover || K.data.history[k]?.cover,
-      chapterSlug: chapter.slug, chapterName: chapter.name.replace(/ — .*/, ''), page: state.page, off: state.where?.() || 0,
-      done: !!state.finished, total: state.pages.length, at: Date.now() };
+      chapterSlug: chapter.slug, chapterName: chapter.name.replace(/ — .*/, ''), page: loc.page, off: state.where?.() || 0,
+      done: !!state.finished, total: loc.total, at: Date.now() };
     K.save('history');
-    if (state.finished || state.page >= state.pages.length - 1) {
-      if (!state.counted && !K.isRead(provider, slug, chapter.slug)) K.stats.chapter(state);
-      state.counted = true;
-      K.markRead(provider, slug, chapter.slug, true);
-    }
+    if (state.finished || loc.page >= loc.total - 1) K.finishChapter?.(chapter);
   }
 
   K.openReader = async function (provider, slug, chapterSlug) {
@@ -101,7 +99,8 @@
 
   function goChapter(c) { K.go(`/read/${state.provider}/${encodeURIComponent(state.slug)}/${encodeURIComponent(c.slug)}`, true); }
 
-  const markId = () => `${state.provider}:${state.slug}:${state.chapter?.slug}:${state.page}`;
+  const localPage = () => state?.local ? state.local().page : state?.page;
+  const markId = () => `${state.provider}:${state.slug}:${state.chapter?.slug}:${localPage()}`;
   function paintMark() {
     const b = box?.querySelector('.markb');
     if (b && state) b.classList.toggle('on', !!K.data.bookmarks[markId()]);
@@ -114,8 +113,8 @@
       if (K.data.bookmarks[id]) { delete K.data.bookmarks[id]; K.toast('Bookmark removed'); }
       else {
         K.data.bookmarks[id] = { id, provider: s.provider, slug: s.slug, title: s.series?.title || s.slug, cover: s.series?.cover || null,
-          chapterSlug: s.chapter.slug, chapterName: s.chapter.name.replace(/ — .*/, ''), page: s.page, at: Date.now() };
-        K.toast(`Page ${s.page + 1} bookmarked`, 'ok');
+          chapterSlug: s.chapter.slug, chapterName: s.chapter.name.replace(/ — .*/, ''), page: localPage(), at: Date.now() };
+        K.toast(`Page ${localPage() + 1} bookmarked`, 'ok');
       }
       K.save('bookmarks'); paintMark();
     } }, icon('bookmark'));
@@ -214,7 +213,7 @@
         if (live()) st[i] = 'ready';
       } catch { if (live()) { st[i] = ''; freeSlices(wrap); failed(i); } }
     }
-    const imgs = s.pages.map((p, i) => {
+    const addPage = (p, i) => {
       const im = el('img', { alt: `Page ${i + 1}`, decoding: 'async', referrerPolicy: 'no-referrer', draggable: false });
       im.dataset.src = p.url;
       // page mode shows the picture directly
@@ -229,9 +228,10 @@
       ph.onclick = () => { if (st[i]) return; ph.textContent = String(i + 1); ph.style.fontSize = ''; ph.style.cursor = ''; files.delete(i); load(i); };
       const wrap = el('div.pg', { dataset: { i } }, im, ph);
       if (p.w && p.h) wrap.style.aspectRatio = `${p.w} / ${p.h}`; else wrap.style.minHeight = '70vh';
-      strip.append(wrap);
       return im;
-    });
+    };
+    const imgs = s.pages.map((p, i) => { const im = addPage(p, i); strip.append(im.parentElement); return im; });
+    const pg = i => imgs[i]?.parentElement;
     const load = i => {
       const im = imgs[i];
       if (!im || st[i]) return;
@@ -247,24 +247,64 @@
       freeSlices(im.parentElement);
     };
 
-    // end of chapter
-    const end = el('div.endcard.glass',
-      el('h3', { text: s.next ? 'End of ' + s.chapter.name.replace(/ — .*/, '') : 'You\'re all caught up' }),
-      el('p.muted', { text: s.next ? 'Up next: ' + s.next.name : 'No newer free chapter yet.' }),
-      el('div.row', { style: { justifyContent: 'center' } },
-        s.next ? el('button.btn.primary', { onclick: () => goChapter(s.next) }, 'Next chapter', icon('next')) : null,
-        el('button.btn', { onclick: () => K.closeReader() }, 'Back to series')));
+    // Chapters in this strip. With "Keep reading into the next chapter" on, the next free chapter is added
+    // underneath as you near the end, so you just keep scrolling; the title, page count and history follow along.
+    const seamless = opt.mode === 'strip' && opt.autoNext;
+    const segs = [{ chapter: s.chapter, start: 0, count: s.pages.length }];
+    const segOf = i => { for (let k = segs.length - 1; k >= 0; k--) if (i >= segs[k].start) return segs[k]; return segs[0]; };
+    const nextAfter = ch => { const i = s.chapters.findIndex(c => c.slug === ch.slug); return i > 0 ? s.chapters.slice(0, i).reverse().find(c => !c.locked) : null; };
+    const prevBefore = ch => { const i = s.chapters.findIndex(c => c.slug === ch.slug); return i >= 0 ? s.chapters.slice(i + 1).find(c => !c.locked) : null; };
+    s.local = () => { const g = segOf(s.page); return { chapter: g.chapter, page: s.page - g.start, total: g.count }; };
+    let appending = false, appendErr = null;
+    const short = n => String(n || '').replace(/ — .*/, '');
+    // the chapter you finished: read mark + Stats, once
+    K.finishChapter = ch => {
+      if (!ch || K.incognito() || K.flag(s.provider, s.slug).trash) return;
+      if (!K.isRead(s.provider, s.slug, ch.slug)) { K.stats.chapter({ ...s, chapter: ch }); K.markRead(s.provider, s.slug, ch.slug, true); }
+    };
+    const end = el('div.endcard.glass');
+    function paintEnd() {
+      const last = segs[segs.length - 1].chapter, nx = nextAfter(last);
+      end.replaceChildren(
+        el('h3', { text: nx ? (appending ? 'Loading ' + short(nx.name) + '…' : 'End of ' + short(last.name)) : 'You\'re all caught up' }),
+        el('p.muted', { text: appendErr ? appendErr.message : nx ? 'Up next: ' + nx.name : 'No newer free chapter yet.' }),
+        appending ? el('div.spinner', { style: { margin: '6px auto' } }) : el('div.row', { style: { justifyContent: 'center' } },
+          nx ? el('button.btn.primary', { onclick: () => (seamless ? appendNext() : goChapter(nx)) }, appendErr ? 'Try again' : 'Next chapter', icon('next')) : null,
+          el('button.btn', { onclick: () => K.closeReader() }, 'Back to series')));
+    }
+    let observe = () => {};
+    async function appendNext() {
+      const last = segs[segs.length - 1], nx = nextAfter(last.chapter);
+      if (!nx || appending || state !== s) return;
+      appending = true; appendErr = null; paintEnd();
+      try {
+        let pages = K.localPages(`${s.provider}:${s.slug}:${nx.slug}`);
+        if (!pages) pages = await K.providers[s.provider].pages(s.slug, nx.slug);
+        if (state !== s) return;
+        if (!pages?.length) throw new Error(short(nx.name) + ' has no pages.');
+        const start = s.pages.length;
+        strip.insertBefore(el('div.chdiv', el('span', { text: 'End of ' + short(last.chapter.name) }), el('b', { text: nx.name })), end);
+        pages.forEach((pp, k) => { s.pages.push(pp); st.push(''); job.push(''); const im = addPage(pp, start + k); imgs.push(im); strip.insertBefore(im.parentElement, end); observe(im.parentElement); });
+        segs.push({ chapter: nx, start, count: pages.length });
+      } catch (e) {
+        if (e.locked) { nx.locked = true; appending = false; return appendNext(); }   // paid chapter: skip to the next free one
+        appendErr = e;
+      } finally { appending = false; if (state === s) paintEnd(); }
+    }
+    paintEnd();
     if (opt.mode === 'strip') strip.append(end);
 
     // bottom bar
+    const goNext = () => { if (!s.next) return; const g = segs.find(x => x.chapter.slug === s.next.slug); if (g) pg(g.start)?.scrollIntoView({ block: 'start' }); else goChapter(s.next); };
+    const goPrev = () => { if (!s.prev) return; const g = segs.find(x => x.chapter.slug === s.prev.slug); if (g) pg(g.start)?.scrollIntoView({ block: 'start' }); else goChapter(s.prev); };
+    const prevBtn = el('button.btn.icon', { title: 'Previous chapter', disabled: !s.prev, onclick: goPrev }, icon('back'));
+    const nextBtn = el('button.btn.icon', { title: 'Next chapter', disabled: !s.next, onclick: goNext }, icon('next'));
     const slider = el('input', { type: 'range', min: 1, max: s.pages.length, value: startPage + 1, step: 1 });
     const pc = el('span.pc');
     const modeBtn = el('button.btn.icon', { title: opt.mode === 'strip' ? 'Switch to pages' : 'Switch to long strip', onclick: () => { saveProgress(); setReader({ mode: opt.mode === 'strip' ? 'paged' : 'strip' }); K.openReader(s.provider, s.slug, s.chapter.slug); } },
       icon(opt.mode === 'strip' ? 'pages' : 'scroll'));
     const bottom = el('div.rbar.bottom.glass',
-      el('button.btn.icon', { title: 'Previous chapter', disabled: !s.prev, onclick: () => s.prev && goChapter(s.prev) }, icon('back')),
-      slider, pc,
-      el('button.btn.icon', { title: 'Next chapter', disabled: !s.next, onclick: () => s.next && goChapter(s.next) }, icon('next')),
+      prevBtn, slider, pc, nextBtn,
       modeBtn,
       el('button.btn.icon', { title: 'Reader settings', onclick: () => toggleSettings() }, icon('settings')));
     if (offline) bottom.prepend(el('span.tag', { text: 'Offline' }));
@@ -278,6 +318,7 @@
       const row = el('div.item' + (c.slug === s.chapter.slug ? '.current' : '') + (read ? '.read' : '') + (c.locked ? '.locked' : ''),
         el('div.n', el('b', { text: c.name }), el('small', { text: c.locked ? 'Locked' : K.dl.index.has(`${s.provider}:${s.slug}:${c.slug}`) ? 'Downloaded' : K.ago(c.date) })),
         c.locked ? icon('lock') : null);
+      row.dataset.slug = c.slug;
       row.onclick = () => { if (!c.locked) goChapter(c); };
       dlist.append(row);
     }
@@ -314,21 +355,38 @@
     const showUi = () => { if (box.classList.contains('zen')) return; box.classList.remove('hide-ui'); clearTimeout(hideT); hideT = setTimeout(() => { if (!box?.querySelector('.rset') && !drawer.classList.contains('open')) box?.classList.add('hide-ui'); }, 3500); };
     showUi();
 
+    // crossing into another chapter of the strip: title, buttons, chapter list and address follow
+    function switchTo(g) {
+      const old = s.chapter;
+      const oldSeg = segs.find(x => x.chapter === old);
+      if (oldSeg && g.start > oldSeg.start) K.finishChapter(old);   // scrolled on past it
+      saveProgress();
+      Object.assign(s, { chapter: g.chapter, next: nextAfter(g.chapter), prev: prevBefore(g.chapter), finished: false });
+      const tt = box.querySelector('.rbar.top .tt small'); if (tt) tt.textContent = g.chapter.name;
+      prevBtn.disabled = !s.prev; nextBtn.disabled = !s.next;
+      dlist.querySelectorAll('.item').forEach(r => r.classList.toggle('current', r.dataset.slug === g.chapter.slug));
+      dlist.querySelector(`.item[data-slug="${CSS.escape(g.chapter.slug)}"]`)?.classList.add('read');
+      history.replaceState(null, '', `#/read/${s.provider}/${encodeURIComponent(s.slug)}/${encodeURIComponent(g.chapter.slug)}`);
+    }
     function setPage(i, fromScroll) {
       i = Math.max(0, Math.min(s.pages.length - 1, i));
       s.page = i;
-      slider.value = i + 1;
-      slider.style.setProperty('--p', (s.pages.length > 1 ? (i / (s.pages.length - 1)) * 100 : 100) + '%');
-      pc.textContent = `${i + 1} / ${s.pages.length}`;
+      const g = segOf(i);
+      if (g.chapter !== s.chapter) switchTo(g);
+      const li = i - g.start;
+      slider.max = g.count;
+      slider.value = li + 1;
+      slider.style.setProperty('--p', (g.count > 1 ? (li / (g.count - 1)) * 100 : 100) + '%');
+      pc.textContent = `${li + 1} / ${g.count}`;
       paintMark();
       for (let k = i; k <= i + opt.preload; k++) load(k);
       setAmb(i);
       if (i > 0) load(i - 1);
       if (opt.mode === 'paged') {
         strip.querySelectorAll('.pg.cur').forEach(p => p.classList.remove('cur'));
-        strip.children[i]?.classList.add('cur');
+        pg(i)?.classList.add('cur');
       } else if (!fromScroll) {
-        strip.children[i]?.scrollIntoView({ block: 'start' });
+        pg(i)?.scrollIntoView({ block: 'start' });
       }
       saveSoon();
     }
@@ -337,7 +395,7 @@
     // until that page has its size, unless you start scrolling yourself first.
     let jump = opt.mode === 'strip' && (startPage > 0 || startOff > 0) ? { i: startPage, off: startOff } : null;
     const doJump = () => {
-      const p = jump && strip.children[jump.i];
+      const p = jump && pg(jump.i);
       if (!p) return;
       pagesBox.style.scrollBehavior = 'auto';
       pagesBox.scrollTop = p.offsetTop + jump.off * p.offsetHeight - pagesBox.clientHeight * 0.4;
@@ -350,7 +408,7 @@
     s.where = () => {
       if (opt.mode !== 'strip') return 0;
       if (jump && jump.i === s.page) return jump.off;
-      const p = strip.children[s.page];
+      const p = pg(s.page);
       if (!p || !p.offsetHeight) return 0;
       return Math.max(0, Math.min(0.999, (pagesBox.scrollTop + pagesBox.clientHeight * 0.4 - p.offsetTop) / p.offsetHeight));
     };
@@ -370,16 +428,22 @@
       const far = new IntersectionObserver(entries => {
         for (const e of entries) if (!e.isIntersecting) unload(Number(e.target.dataset.i));
       }, { root: pagesBox, rootMargin: '9000px 0px' });
-      const atEnd = new IntersectionObserver(es => { if (es[0].isIntersecting && !jump) { s.page = s.pages.length - 1; s.finished = true; saveProgress(); } }, { root: pagesBox });
-      [...strip.querySelectorAll('.pg')].forEach(p => { io.observe(p); line.observe(p); far.observe(p); });
-      atEnd.observe(end);
+      const atEnd = new IntersectionObserver(es => {
+        if (!es[0].isIntersecting || jump) return;
+        if (seamless && nextAfter(segs[segs.length - 1].chapter)) return;   // the next chapter is joining underneath
+        s.page = s.pages.length - 1; s.finished = true; saveProgress();
+      }, { root: pagesBox });
+      const nearEnd = new IntersectionObserver(es => { if (es[0].isIntersecting && seamless && !jump) appendNext(); }, { root: pagesBox, rootMargin: '0px 0px 2500px 0px' });
+      observe = p => { io.observe(p); line.observe(p); far.observe(p); };
+      [...strip.querySelectorAll('.pg')].forEach(observe);
+      atEnd.observe(end); nearEnd.observe(end);
       let lastY = 0, ticking = false;
       pagesBox.addEventListener('scroll', () => {
         if (ticking) return;
         ticking = true;
         requestAnimationFrame(() => { ticking = false; const y = pagesBox.scrollTop; if (Math.abs(y - lastY) > 80) { if (y > lastY && !box?.classList.contains('hide-ui')) box?.classList.add('hide-ui'); lastY = y; } });
       }, { passive: true });
-      s.cleanup = () => { io.disconnect(); line.disconnect(); far.disconnect(); atEnd.disconnect(); for (const b of ambCache.values()) b?.close?.(); files.clear(); st.fill(''); strip.querySelectorAll('.pg').forEach(w => { if (job[Number(w.dataset.i)]) freeSlices(w); }); };
+      s.cleanup = () => { io.disconnect(); line.disconnect(); far.disconnect(); atEnd.disconnect(); nearEnd.disconnect(); for (const b of ambCache.values()) b?.close?.(); files.clear(); st.fill(''); strip.querySelectorAll('.pg').forEach(w => { if (job[Number(w.dataset.i)]) freeSlices(w); }); };
     }
 
     // Auto-scroll: the strip glides down by itself (in page mode, pages turn by themselves).
@@ -453,7 +517,10 @@
             const px = Math.floor(autoAcc); autoAcc -= px;
             const before = pagesBox.scrollTop;
             pagesBox.scrollTop = before + px;
-            if (pagesBox.scrollTop === before && before > 0) { setAuto(false); K.toast('End of the chapter'); return; }   // reached the bottom
+            if (pagesBox.scrollTop === before && before > 0) {   // reached the bottom
+              if (appending || (seamless && nextAfter(segs[segs.length - 1].chapter) && !appendErr)) { autoHold = performance.now() + 600; appendNext(); }
+              else { setAuto(false); K.toast('End of the chapter'); return; }
+            }
           }
         } else if ((autoT += dt) >= o.autoSecs * 1000) {
           autoT = 0;
@@ -491,7 +558,7 @@
       if (performance.now() - lastAct < 60000 || autoOn) K.stats.add(s, 5000);
     }, 5000);
 
-    slider.oninput = () => setPage(Number(slider.value) - 1);
+    slider.oninput = () => setPage(segOf(s.page).start + Number(slider.value) - 1);
     const step = d => {
       if (opt.mode === 'paged') {
         const n = s.page + d;
@@ -521,8 +588,8 @@
       else if (e.key === 'ArrowRight' || e.key === 'd') step(opt.rtl && opt.mode === 'paged' ? -1 : 1);
       else if (e.key === 'ArrowLeft' || e.key === 'a') step(opt.rtl && opt.mode === 'paged' ? 1 : -1);
       else if (e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
-      else if (e.key === 'n' && s.next) goChapter(s.next);
-      else if (e.key === 'p' && s.prev) goChapter(s.prev);
+      else if (e.key === 'n' && s.next) goNext();
+      else if (e.key === 'p' && s.prev) goPrev();
       else return;
     };
     document.addEventListener('keydown', onKey);
@@ -566,7 +633,7 @@
         ambRange('Ambient strength', 'ambStrength', 0, 100, 1, '%'),
         ambRange('Ambient softness', 'ambBlur', 20, 220, 5, 'px'),
         tog('Right to left', 'rtl', 'For manga in page mode', true),
-        tog('Auto next chapter', 'autoNext', 'In page mode, go on after the last page'),
+        tog('Keep reading into the next chapter', 'autoNext', 'Long strip: the next chapter joins underneath. Pages: goes on after the last page', true),
         tog('Tap sides to turn', 'tapZones', ''),
         el('div.ctl', el('div.lab', 'Zen mode', el('small', { text: 'Full screen, just the pages. Z or Esc to leave' })),
           el('button.btn.small', { onclick: () => K.toggleZen() }, icon('zen'), 'Enter')),
