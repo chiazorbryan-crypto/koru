@@ -3,11 +3,12 @@
 'use strict';
 (function () {
   const { el, icon } = K;
-  const DEFAULTS = { mode: 'strip', rtl: false, gap: 0, width: 760, autoNext: true, preload: 4, tapZones: true, ambient: true, ambStrength: 55, ambBlur: 90, fps: false, zen: false };
+  const DEFAULTS = { mode: 'strip', rtl: false, gap: 0, width: 760, autoNext: true, preload: 4, tapZones: true, ambient: true, ambStrength: 55, ambBlur: 90, fps: false, zen: false, autoSpeed: 90, autoSecs: 8, autoStart: false };
   K.readerSettings = () => ({ ...DEFAULTS, ...(K.data.settings.reader || {}) });
   const setReader = patch => { K.data.settings.reader = { ...K.readerSettings(), ...patch }; K.save('settings'); };
 
   let box = null, state = null;
+  let autoKeep = false;   // auto-scroll carries on into the next chapter while it's on
 
   // Background worker that decodes pages and draws their slices (see slicer.js).
   let slicer = null, sliceSeq = 0;
@@ -41,7 +42,11 @@
       chapterSlug: chapter.slug, chapterName: chapter.name.replace(/ — .*/, ''), page: state.page, off: state.where?.() || 0,
       done: !!state.finished, total: state.pages.length, at: Date.now() };
     K.save('history');
-    if (state.finished || state.page >= state.pages.length - 1) K.markRead(provider, slug, chapter.slug, true);
+    if (state.finished || state.page >= state.pages.length - 1) {
+      if (!state.counted && !K.isRead(provider, slug, chapter.slug)) K.stats.chapter(state);
+      state.counted = true;
+      K.markRead(provider, slug, chapter.slug, true);
+    }
   }
 
   K.openReader = async function (provider, slug, chapterSlug) {
@@ -119,6 +124,7 @@
       el('div.tt', el('b', { text: s.series?.title || s.slug }), el('small', { text: s.chapter?.name || '' })),
       K.incognito() ? el('span.tag', { title: 'Nothing is saved while incognito' }, 'Incognito') : null,
       s.pages?.length ? mark : null,
+      el('button.btn.icon.autob', { title: 'Auto-scroll (S)', onclick: () => K.toggleAuto?.() }, icon('auto')),
       el('button.btn.icon', { title: 'Zen mode (Z)', onclick: () => K.toggleZen?.() }, icon('zen')),
       el('button.btn.icon', { title: 'Chapters', onclick: () => box.querySelector('.drawer')?.classList.toggle('open') }, icon('list')));
   }
@@ -376,6 +382,83 @@
       s.cleanup = () => { io.disconnect(); line.disconnect(); far.disconnect(); atEnd.disconnect(); for (const b of ambCache.values()) b?.close?.(); files.clear(); st.fill(''); strip.querySelectorAll('.pg').forEach(w => { if (job[Number(w.dataset.i)]) freeSlices(w); }); };
     }
 
+    // Auto-scroll: the strip glides down by itself (in page mode, pages turn by themselves).
+    // A small pop-up holds play/pause and the speed. Scrolling yourself just holds it for a moment.
+    const SPEEDS = [15, 25, 40, 60, 90, 130, 180, 250, 350, 500, 700];
+    const SECS = [3, 4, 5, 6, 8, 10, 12, 15, 20, 30, 45, 60];
+    let autoOn = false, autoShown = false, autoRaf = 0, autoLast = 0, autoHold = 0, autoAcc = 0, autoT = 0;
+    const isStrip = opt.mode === 'strip';
+    const autoVal = el('b.av');
+    const autoPlay = el('button.btn.small.icon', { title: 'Pause or play (S)', onclick: () => setAuto(!autoOn) });
+    const nudge = d => {
+      const o = K.readerSettings(), list = isStrip ? SPEEDS : SECS, key = isStrip ? 'autoSpeed' : 'autoSecs';
+      let i = list.findIndex(v => v >= o[key]); if (i < 0) i = list.length - 1;
+      const dir = isStrip ? d : -d;   // "faster" means fewer seconds per page
+      const v = list[Math.max(0, Math.min(list.length - 1, i + dir))];
+      setReader({ [key]: v }); paintAuto();
+    };
+    const pop = el('div.autopop.glass', autoPlay,
+      el('button.btn.small.icon', { title: 'Slower', onclick: () => nudge(-1) }, icon('minus')),
+      el('div.avw', autoVal, el('small', { text: isStrip ? 'speed' : 'per page' })),
+      el('button.btn.small.icon', { title: 'Faster', onclick: () => nudge(1) }, icon('plus')),
+      el('button.btn.small.icon', { title: 'Turn auto-scroll off', onclick: () => { autoKeep = false; showAuto(false); } }, icon('x')));
+    function paintAuto() {
+      const o = K.readerSettings();
+      autoVal.textContent = isStrip ? `${Math.round(o.autoSpeed / 10) / 10}×` : `${o.autoSecs}s`;
+      autoVal.title = isStrip ? o.autoSpeed + ' px per second' : o.autoSecs + ' seconds per page';
+      autoPlay.replaceChildren(icon(autoOn ? 'pause' : 'play'));
+      pop.classList.toggle('paused', !autoOn);
+      box.querySelector('.autob')?.classList.toggle('on', autoShown);
+    }
+    function autoTick(t) {
+      if (!autoOn || state !== s || !box) return;
+      const dt = autoLast ? Math.min(64, t - autoLast) : 16; autoLast = t;
+      if (t > autoHold) {
+        const o = K.readerSettings();
+        if (isStrip) {
+          autoAcc += o.autoSpeed * dt / 1000;
+          if (autoAcc >= 1) {
+            const px = Math.floor(autoAcc); autoAcc -= px;
+            const before = pagesBox.scrollTop;
+            pagesBox.scrollTop = before + px;
+            if (pagesBox.scrollTop === before && before > 0) { setAuto(false); K.toast('End of the chapter'); return; }   // reached the bottom
+          }
+        } else if ((autoT += dt) >= o.autoSecs * 1000) {
+          autoT = 0;
+          if (s.page >= s.pages.length - 1) { setAuto(false); step(1); return; }
+          step(1);
+        }
+      }
+      autoRaf = requestAnimationFrame(autoTick);
+    }
+    function setAuto(on) {
+      autoOn = on; autoLast = 0; autoAcc = 0; autoT = 0; cancelAnimationFrame(autoRaf);
+      if (on) { stopJump?.(); autoRaf = requestAnimationFrame(autoTick); }
+      paintAuto();
+    }
+    function showAuto(on) {
+      autoShown = on;
+      if (on) { autoKeep = true; if (!pop.isConnected) box.append(pop); setAuto(true); K.toast('Auto-scroll on · S to pause', 'ok'); }
+      else { setAuto(false); pop.remove(); }
+      paintAuto();
+    }
+    K.toggleAuto = () => { if (!autoShown) showAuto(true); else setAuto(!autoOn); };
+    // your own scrolling, dragging or keys hold it briefly instead of fighting you
+    const hold = () => { autoHold = performance.now() + 1400; autoAcc = 0; };
+    for (const ev of ['wheel', 'touchstart', 'pointerdown']) pagesBox.addEventListener(ev, hold, { passive: true });
+    if (opt.autoStart || autoKeep) setTimeout(() => { if (state === s) showAuto(true); }, 900);
+
+    // Reading time for Stats: only while you're actually reading (you scrolled, tapped or pressed a key in the
+    // last minute, or auto-scroll is running) and Koru is on screen.
+    let lastAct = performance.now();
+    const act = () => { lastAct = performance.now(); };
+    for (const ev of ['scroll', 'wheel', 'pointerdown', 'touchstart']) pagesBox.addEventListener(ev, act, { passive: true });
+    document.addEventListener('keydown', act);
+    const statT = setInterval(() => {
+      if (state !== s || document.hidden) return;
+      if (performance.now() - lastAct < 60000 || autoOn) K.stats.add(s, 5000);
+    }, 5000);
+
     slider.oninput = () => setPage(Number(slider.value) - 1);
     const step = d => {
       if (opt.mode === 'paged') {
@@ -399,6 +482,7 @@
     const onKey = e => {
       if (!box || e.target.matches?.('input, select, textarea')) return;
       if (e.key === 'z' || e.key === 'Z') K.toggleZen();
+      else if (e.key === 's' || e.key === 'S') K.toggleAuto();
       else if (e.key === 'Escape' && box.classList.contains('zen')) K.toggleZen();
       else if (e.key === 'Escape') { if (drawer.classList.contains('open')) drawer.classList.remove('open'); else K.closeReader(); }
       else if (e.key === 'ArrowRight' || e.key === 'd') step(opt.rtl && opt.mode === 'paged' ? -1 : 1);
@@ -410,7 +494,7 @@
     };
     document.addEventListener('keydown', onKey);
     const oldCleanup = s.cleanup;
-    s.cleanup = () => { oldCleanup?.(); document.removeEventListener('keydown', onKey); clearTimeout(hideT); clearTimeout(idleT); cancelAnimationFrame(fpsRaf); };
+    s.cleanup = () => { oldCleanup?.(); document.removeEventListener('keydown', onKey); clearTimeout(hideT); clearTimeout(idleT); cancelAnimationFrame(fpsRaf); cancelAnimationFrame(autoRaf); clearInterval(statT); document.removeEventListener('keydown', act); };
 
     // reader settings popover
     function toggleSettings() {
@@ -442,6 +526,9 @@
         range('Page width', 'width', 400, 1600, 20, 'px'),
         range('Gap between pages', 'gap', 0, 40, 1, 'px'),
         range('Pages to load ahead', 'preload', 1, 10, 1, ''),
+        el('div.ctl', el('div.lab', 'Auto-scroll', el('small', { text: 'Hands-free reading with a speed pop-up. Key: S' })),
+          el('button.btn.small', { onclick: () => { box.querySelector('.rset')?.remove(); K.toggleAuto(); } }, icon('auto'), 'Start')),
+        tog('Start auto-scroll on every chapter', 'autoStart', ''),
         tog('Ambient light', 'ambient', 'A soft glow from the page around it', true),
         ambRange('Ambient strength', 'ambStrength', 0, 100, 1, '%'),
         ambRange('Ambient softness', 'ambBlur', 20, 220, 5, 'px'),

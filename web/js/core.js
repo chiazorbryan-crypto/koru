@@ -45,6 +45,11 @@ const ICONS = {
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
   refresh: '<path d="M20 11a8 8 0 0 0-14.6-4.5L4 8M4 4v4h4M4 13a8 8 0 0 0 14.6 4.5L20 16M20 20v-4h-4"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  chart: '<path d="M4 20h16M7 20v-6M12 20V6M17 20v-9"/>',
+  auto: '<path d="M7 5l5 5 5-5M7 12l5 5 5-5"/>',
+  pause: '<path d="M8.5 5v14M15.5 5v14"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  minus: '<path d="M5 12h14"/>',
   zen: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><circle cx="12" cy="12" r="2.5"/>',
   list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
   external: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
@@ -116,7 +121,7 @@ K.api = {
 
 // ---------- saved data ----------
 // library: favourites   history: last read spot per series   read: read chapters per series   settings: everything else
-K.data = { library: {}, history: {}, read: {}, settings: {}, liked: {}, bookmarks: {}, flags: {} };
+K.data = { library: {}, history: {}, read: {}, settings: {}, liked: {}, bookmarks: {}, flags: {}, stats: {} };
 K.flag = (provider, slug) => K.data.flags[provider + ':' + slug] || {};
 K.notTrash = s => !K.flag(s.provider, s.slug).trash;
 K.incognito = () => !!K.data.settings.incognito;
@@ -129,6 +134,20 @@ K.loadData = async function loadData() {
   await Promise.all(Object.keys(K.data).map(async k => { try { K.data[k] = (await K.api.load(k)) || {}; } catch { K.data[k] = {}; } }));
 };
 K.key = (provider, slug) => provider + ':' + slug;
+// Reading stats: active reading time per day and per series, and chapters finished. Nothing is kept in incognito.
+K.dayKey = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+function statEntry(s) {
+  if (!s?.provider || !s.slug || K.incognito() || K.flag(s.provider, s.slug).trash) return null;
+  const st = K.data.stats; st.days ||= {}; st.series ||= {};
+  const k = K.key(s.provider, s.slug), d = st.days[K.dayKey()] ||= { ms: 0, ch: 0, s: {}, c: {} };
+  const m = st.series[k] ||= { ms: 0, ch: 0 };
+  Object.assign(m, { provider: s.provider, slug: s.slug, title: s.series?.title || m.title || s.slug, cover: s.series?.cover || m.cover || null, last: Date.now() });
+  return { k, d, m };
+}
+K.stats = {
+  add(s, ms) { const e = statEntry(s); if (!e) return; e.d.ms += ms; (e.d.s ||= {})[e.k] = (e.d.s[e.k] || 0) + ms; e.m.ms += ms; K.save('stats'); },
+  chapter(s) { const e = statEntry(s); if (!e) return; e.d.ch = (e.d.ch || 0) + 1; (e.d.c ||= {})[e.k] = (e.d.c[e.k] || 0) + 1; e.m.ch = (e.m.ch || 0) + 1; K.save('stats'); }
+};
 
 // ---------- small helpers ----------
 K.toast = function toast(msg, kind = 'info') {

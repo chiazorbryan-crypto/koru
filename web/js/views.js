@@ -778,4 +778,102 @@
     }
     drawHero(); drawTools(); drawList();
   };
+  // ---------- Stats: reading time, chapters, series, and your top series for a period ----------
+  K.views.stats = async function (root) {
+    let period = sessionStorage.getItem('koru-statp') || 'month', offset = 0;
+    root.append(el('div.head', el('div', el('h1', { text: 'Stats' }), el('div.sub', { text: 'Counted only while you’re actually reading' }))));
+    const bar = el('div.row.statbar'), body = el('div');
+    root.append(bar, body);
+    const fmt = ms => { const m = Math.round(ms / 60000); return m < 60 ? m + 'm' : Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm'; };
+    const dk = d => K.dayKey(d);
+    function range() {
+      const now = new Date(); now.setHours(0, 0, 0, 0);
+      if (period === 'week') { const end = new Date(now); end.setDate(end.getDate() - offset * 7); const start = new Date(end); start.setDate(start.getDate() - 6); return { start, end, label: offset ? `${start.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${end.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : 'Last 7 days' }; }
+      if (period === 'month') { const start = new Date(now.getFullYear(), now.getMonth() - offset, 1); const end = new Date(start.getFullYear(), start.getMonth() + 1, 0); return { start, end, label: start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) }; }
+      if (period === 'year') { const y = now.getFullYear() - offset; return { start: new Date(y, 0, 1), end: new Date(y, 11, 31), label: String(y) }; }
+      return { start: new Date(2000, 0, 1), end: now, label: 'All time' };
+    }
+    function drawBar() {
+      const r = range();
+      bar.replaceChildren(
+        segmented([['week', 'Week'], ['month', 'Month'], ['year', 'Year'], ['all', 'All time']], period, v => { period = v; offset = 0; sessionStorage.setItem('koru-statp', v); drawBar(); draw(); }),
+        period === 'all' ? null : el('div.row.statnav',
+          el('button.btn.small.icon', { title: 'Earlier', onclick: () => { offset++; drawBar(); draw(); } }, icon('back')),
+          el('b', { text: r.label }),
+          el('button.btn.small.icon', { title: 'Later', disabled: offset === 0, onclick: () => { offset = Math.max(0, offset - 1); drawBar(); draw(); } }, icon('next'))));
+    }
+    function draw() {
+      const st = K.data.stats || {}, days = st.days || {}, meta = st.series || {};
+      const r = range(), from = dk(r.start), to = dk(r.end);
+      const inRange = Object.entries(days).filter(([d]) => d >= from && d <= to);
+      if (!Object.keys(days).length) { body.replaceChildren(el('div.empty', K.fox(), el('h3', { text: 'No reading yet' }), el('p', { text: 'Open a chapter and read. Koru counts the time you’re actively reading, and your top series show up here.' }))); return; }
+      const total = inRange.reduce((a, [, d]) => a + (d.ms || 0), 0), chapters = inRange.reduce((a, [, d]) => a + (d.ch || 0), 0);
+      const per = {};
+      for (const [, d] of inRange) {
+        for (const [k, ms] of Object.entries(d.s || {})) (per[k] ||= { ms: 0, ch: 0 }).ms += ms;
+        for (const [k, n] of Object.entries(d.c || {})) (per[k] ||= { ms: 0, ch: 0 }).ch += n;
+      }
+      const seriesN = Object.values(per).filter(x => x.ms >= 60000 || x.ch).length;
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const firstDay = Object.keys(days).sort()[0];
+      const spanStart = period === 'all' ? new Date(firstDay + 'T00:00') : r.start;
+      const spanEnd = r.end > today ? today : r.end;
+      const dayCount = Math.max(1, Math.round((spanEnd - spanStart) / 864e5) + 1);
+      // current streak: days in a row (ending today or yesterday) with at least a minute of reading
+      let streak = 0; { const d = new Date(today); if (!((days[dk(d)]?.ms || 0) >= 60000)) d.setDate(d.getDate() - 1); while ((days[dk(d)]?.ms || 0) >= 60000) { streak++; d.setDate(d.getDate() - 1); } }
+      const tiles = el('div.tiles',
+        tile('Reading time', fmt(total), period === 'all' ? 'since ' + new Date(firstDay + 'T00:00').toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : r.label),
+        tile('Chapters read', String(chapters), chapters ? (chapters / dayCount).toFixed(1) + ' a day' : 'finish a chapter to count it'),
+        tile('Series read', String(seriesN), 'at least a minute each'),
+        tile('Daily average', fmt(total / dayCount), dayCount + ' day' + (dayCount > 1 ? 's' : '')),
+        tile('Streak', streak + (streak === 1 ? ' day' : ' days'), 'in a row, a minute or more'));
+      body.replaceChildren(tiles, chart(r, days), topList(per, meta));
+    }
+    function tile(label, value, sub) { return el('div.tile.glass', el('small', { text: label }), el('b', { text: value }), el('span.muted', { text: sub })); }
+    // one bar per day (per month for a year or all time): how long you read
+    function chart(r, days) {
+      const bins = [];
+      if (period === 'year' || period === 'all') {
+        const months = period === 'year' ? Array.from({ length: 12 }, (_, i) => new Date(r.start.getFullYear(), i, 1))
+          : Array.from({ length: 12 }, (_, i) => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth() - 11 + i, 1); });
+        for (const m of months) {
+          const pre = m.getFullYear() + '-' + String(m.getMonth() + 1).padStart(2, '0');
+          const ms = Object.entries(days).filter(([d]) => d.startsWith(pre)).reduce((a, [, d]) => a + (d.ms || 0), 0);
+          bins.push({ ms, label: m.toLocaleDateString(undefined, { month: 'short' }), tip: m.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }), tick: true });
+        }
+      } else {
+        for (let d = new Date(r.start), i = 0; d <= r.end; d.setDate(d.getDate() + 1), i++) {
+          const ms = days[dk(d)]?.ms || 0;
+          bins.push({ ms, label: period === 'week' ? d.toLocaleDateString(undefined, { weekday: 'short' }) : String(d.getDate()),
+            tip: d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }), tick: period === 'week' || d.getDate() === 1 || d.getDate() % 5 === 0, future: d > new Date() });
+        }
+      }
+      const max = Math.max(...bins.map(b => b.ms), 60000);
+      const tip = el('div.ctip');
+      const plot = el('div.plot', ...bins.map(b => {
+        const col = el('div.col' + (b.future ? '.future' : ''), el('i', { style: { height: (b.ms ? Math.max(3, b.ms / max * 100) : 0) + '%' } }), el('span', { text: b.tick ? b.label : '' }));
+        col.addEventListener('pointerenter', () => { tip.replaceChildren(el('b', { text: b.ms ? fmt(b.ms) : 'No reading' }), el('small', { text: b.tip })); tip.classList.add('on'); col.classList.add('hot'); });
+        col.addEventListener('pointermove', e => { const box = plot.getBoundingClientRect(); tip.style.left = Math.min(box.width - 140, Math.max(0, e.clientX - box.left - 70)) + 'px'; });
+        col.addEventListener('pointerleave', () => { tip.classList.remove('on'); col.classList.remove('hot'); });
+        return col;
+      }), tip);
+      return el('div.chartcard.glass', el('div.row', { style: { justifyContent: 'space-between' } }, el('b', { text: 'Reading time' }), el('small.muted', { text: 'top line ' + fmt(max) })), plot);
+    }
+    function topList(per, meta) {
+      const top = Object.entries(per).filter(([, x]) => x.ms > 0 || x.ch).sort((a, b) => b[1].ms - a[1].ms).slice(0, 10);
+      if (!top.length) return el('div.chartcard.glass', el('b', { text: 'Top series' }), el('p.muted', { text: 'Nothing read in this period.' }));
+      const best = top[0][1].ms || 1;
+      return el('div.chartcard.glass', el('b', { text: period === 'month' ? 'Top series this month' : period === 'week' ? 'Top series this week' : period === 'year' ? 'Top series this year' : 'Top series' }),
+        el('div.toplist', ...top.map(([k, x], i) => {
+          const m = meta[k] || {}, [provider, ...rest] = k.split(':'), slug = m.slug || rest.join(':');
+          return el('a.toprow', { href: `#/series/${provider}/${encodeURIComponent(slug)}` },
+            el('span.rank', { text: String(i + 1) }),
+            el('div.th', img(m.cover || K.data.library[k]?.cover || K.data.history[k]?.cover, '')),
+            el('div.tinfo', el('b', { text: m.title || slug }), el('small.muted', { text: (P(provider)?.name || provider) + (x.ch ? ` · ${x.ch} chapter${x.ch > 1 ? 's' : ''}` : '') }),
+              el('div.tbar', el('i', { style: { width: Math.max(2, x.ms / best * 100) + '%' } }))),
+            el('b.ttime', { text: fmt(x.ms) }));
+        })));
+    }
+    drawBar(); draw();
+  };
 })();

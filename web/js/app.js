@@ -7,6 +7,7 @@
     ['explore', 'Explore', 'explore'],
     ['search', 'Search', 'search'],
     ['downloads', 'Downloads', 'download'],
+    ['stats', 'Stats', 'chart'],
     ['settings', 'Settings', 'settings']
   ];
 

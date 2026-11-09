@@ -519,6 +519,52 @@ html.plain .nav-btn .dotb, html.plain .card .newb { box-shadow: none; }
 .chlist .item.picked .check { background: var(--accent-solid); border-color: transparent; color: var(--on-accent); }
 .chlist .item .check .ic { width: 14px; height: 14px; }
 
+/* auto-scroll pop-up */
+.reader .autopop { position: absolute; right: max(14px, calc(50% - 520px)); bottom: 86px; z-index: 5; display: flex; align-items: center; gap: 4px; padding: 6px; border-radius: 99px;
+  animation: rise-in var(--t) var(--ease); transition: bottom var(--t) var(--ease), opacity var(--t); opacity: .82; }
+.reader .autopop:hover { opacity: 1; }
+.reader.hide-ui .autopop { bottom: 18px; opacity: .5; }
+.reader.hide-ui .autopop:hover { opacity: 1; }
+.reader .autopop .avw { display: grid; justify-items: center; min-width: 46px; line-height: 1.05; }
+.reader .autopop .av { font-size: .95em; }
+.reader .autopop small { font-size: .62em; color: var(--muted); }
+.reader .autopop.paused .av { color: var(--muted); }
+.reader .autob.on { color: var(--accent-solid); border-color: var(--accent); }
+.reader.zen .autopop { display: flex !important; }
+
+/* Stats */
+.statbar { gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
+.statnav { gap: 8px; align-items: center; }
+.statnav b { min-width: 130px; text-align: center; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.tile { padding: 14px 16px; display: grid; gap: 4px; }
+.tile small { color: var(--muted); font-size: .8em; }
+.tile b { font-family: var(--title-font); font-size: 1.7em; line-height: 1.1; letter-spacing: -.01em; }
+.tile .muted { font-size: .76em; }
+.chartcard { padding: 16px; margin-bottom: 14px; display: grid; gap: 12px; }
+.plot { position: relative; height: 190px; display: flex; align-items: stretch; gap: 2px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,.12); }
+.plot .col { flex: 1; display: grid; grid-template-rows: 1fr 18px; min-width: 0; cursor: default; }
+.plot .col i { align-self: end; display: block; width: min(100%, 26px); margin: 0 auto; border-radius: 4px 4px 0 0; background: var(--accent-solid); opacity: .85; transition: opacity var(--t-fast); }
+.plot .col.hot i { opacity: 1; }
+.plot .col.future i { opacity: .25; }
+.plot .col span { font-size: .68em; color: var(--muted); text-align: center; white-space: nowrap; overflow: visible; padding-top: 4px; border-top: 1px solid rgba(255,255,255,.14); }
+.ctip { position: absolute; top: -6px; width: 140px; padding: 6px 10px; border-radius: 10px; background: color-mix(in srgb, var(--bg) 92%, #fff 6%); border: 1px solid var(--edge);
+  display: grid; gap: 2px; pointer-events: none; opacity: 0; transform: translateY(-100%); transition: opacity var(--t-fast); z-index: 2; }
+.ctip.on { opacity: 1; }
+.ctip small { color: var(--muted); font-size: .76em; }
+.toplist { display: grid; gap: 6px; }
+.toprow { display: grid; grid-template-columns: 26px 44px 1fr auto; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 12px; color: inherit; text-decoration: none; transition: background var(--t-fast); }
+.toprow:hover { background: rgba(255,255,255,.06); }
+.toprow .rank { font-weight: 800; color: var(--muted); text-align: center; }
+.toprow:first-child .rank { color: var(--accent-solid); }
+.toprow .th { width: 44px; height: 60px; border-radius: 8px; overflow: hidden; background: var(--glass); }
+.toprow .th img { width: 100%; height: 100%; object-fit: cover; }
+.toprow .tinfo { min-width: 0; display: grid; gap: 3px; }
+.toprow .tinfo b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toprow .tbar { height: 4px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
+.toprow .tbar i { display: block; height: 100%; border-radius: 99px; background: var(--accent-solid); }
+.toprow .ttime { font-variant-numeric: tabular-nums; }
+
 /* toasts */
 #toasts { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 300; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
 .toast { display: flex; align-items: center; gap: 10px; padding: 11px 18px; border-radius: 99px; animation: toast-in var(--t) var(--ease) both; }

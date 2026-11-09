@@ -7,6 +7,8 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { createBackend } from './backend.js';
+import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const WEB = path.join(here, '..', 'web');
@@ -46,6 +48,57 @@ else {
 const VENDORS = { 4318: 'NVIDIA', 4098: 'AMD', 32902: 'Intel', 5140: 'Microsoft (software)' };
 if (!app.requestSingleInstanceLock()) app.quit();
 let win = null;
+
+// The desktop, Start menu and pinned-taskbar shortcuts get the same themed icon as the window.
+// The themed picture is saved as an .ico (PNG inside, as Windows allows) and each Koru shortcut is pointed at it.
+function pngToIco(images) {
+  const head = Buffer.alloc(6 + 16 * images.length);
+  head.writeUInt16LE(0, 0); head.writeUInt16LE(1, 2); head.writeUInt16LE(images.length, 4);
+  let offset = head.length;
+  images.forEach(({ size, png }, i) => {
+    const e = 6 + 16 * i;
+    head.writeUInt8(size >= 256 ? 0 : size, e); head.writeUInt8(size >= 256 ? 0 : size, e + 1);
+    head.writeUInt16LE(1, e + 4); head.writeUInt16LE(32, e + 6);
+    head.writeUInt32LE(png.length, e + 8); head.writeUInt32LE(offset, e + 12);
+    offset += png.length;
+  });
+  return Buffer.concat([head, ...images.map(x => x.png)]);
+}
+let shortcutTimer = null;
+function themeShortcuts(img) {
+  if (process.platform !== 'win32' || !app.isPackaged || process.env.KORU_BG_TEST) return;   // only the installed app touches your shortcuts
+  clearTimeout(shortcutTimer);
+  shortcutTimer = setTimeout(() => {
+    try {
+      const images = [256, 64, 48, 32, 16].map(size => ({ size, png: img.resize({ width: size, height: size, quality: 'best' }).toPNG() }));
+      const ico = pngToIco(images);
+      const hash = crypto.createHash('sha1').update(ico).digest('hex').slice(0, 10);
+      const dir = path.join(app.getPath('userData'), 'icons');
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, `koru-${hash}.ico`);   // a new name per theme, so Windows doesn't show an old cached icon
+      if (!fs.existsSync(file)) fs.writeFileSync(file, ico);
+      for (const f of fs.readdirSync(dir)) if (f.startsWith('koru-') && f.endsWith('.ico') && path.join(dir, f) !== file) { try { fs.unlinkSync(path.join(dir, f)); } catch {} }
+      const appData = app.getPath('appData');
+      const links = [
+        path.join(app.getPath('desktop'), 'Koru.lnk'),
+        path.join(process.env.PUBLIC || 'C:\\Users\\Public', 'Desktop', 'Koru.lnk'),
+        path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Koru.lnk'),
+        path.join(appData, 'Microsoft', 'Internet Explorer', 'Quick Launch', 'User Pinned', 'TaskBar', 'Koru.lnk')
+      ];
+      let changed = 0;
+      for (const l of links) {
+        if (!fs.existsSync(l)) continue;
+        try {
+          const cur = shell.readShortcutLink(l);
+          if (cur.icon === file) continue;
+          if (shell.writeShortcutLink(l, 'update', { icon: file, iconIndex: 0 })) changed++;
+        } catch {}
+      }
+      // ask Explorer to redraw shortcut icons
+      if (changed) { try { spawn(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'ie4uinit.exe'), ['-show'], { detached: true, stdio: 'ignore', windowsHide: true }).unref(); } catch {} }
+    } catch {}
+  }, 1500);
+}
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
 
 app.whenReady().then(() => {
@@ -60,7 +113,7 @@ app.whenReady().then(() => {
     fetchImpl: (url, opts) => net.fetch(url, opts),
     onOpenPath: p => shell.openPath(p),
     onOpenExternal: u => shell.openExternal(u),
-    onWindowIcon: png => { const img = nativeImage.createFromDataURL(png); if (win && !img.isEmpty()) win.setIcon(img); }
+    onWindowIcon: png => { const img = nativeImage.createFromDataURL(png); if (img.isEmpty()) return; if (win) win.setIcon(img); themeShortcuts(img); }
   });
 
   protocol.handle('koru', async request => {

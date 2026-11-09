@@ -118,6 +118,9 @@
         slider('Page width', ro.width, 400, 1600, 20, 'px', v => setR({ width: v })),
         slider('Gap between pages', ro.gap, 0, 40, 1, 'px', v => setR({ gap: v })),
         slider('Pages to load ahead', ro.preload, 1, 10, 1, '', v => setR({ preload: v })),
+        slider('Auto-scroll speed', ro.autoSpeed, 15, 700, 5, ' px/s', v => setR({ autoSpeed: v }), 'Long strip. Press S while reading, or the arrows button in the top bar'),
+        slider('Auto page turn', ro.autoSecs, 3, 60, 1, ' s', v => setR({ autoSecs: v }), 'Page mode: seconds on each page'),
+        toggle('Start auto-scroll on every chapter', ro.autoStart, v => setR({ autoStart: v })),
         toggle('Ambient light', ro.ambient, v => setR({ ambient: v }), 'A soft glow from the page you\'re on fills the space around it'),
         slider('Ambient strength', ro.ambStrength, 0, 100, 1, '%', v => setR({ ambStrength: v })),
         slider('Ambient softness', ro.ambBlur, 20, 220, 5, 'px', v => setR({ ambBlur: v })),
@@ -169,7 +172,7 @@
         try {
           const j = JSON.parse(await fileIn.files[0].text());
           if (!j || j.app !== 'koru') throw new Error();
-          for (const k of ['library', 'liked', 'bookmarks', 'flags', 'history', 'read']) if (j[k] && typeof j[k] === 'object') { K.data[k] = { ...K.data[k], ...j[k] }; K.save(k); }
+          for (const k of ['library', 'liked', 'bookmarks', 'flags', 'history', 'read', 'stats']) if (j[k] && typeof j[k] === 'object') { K.data[k] = { ...K.data[k], ...j[k] }; K.save(k); }
           K.toast('Library imported', 'ok');
         } catch { K.toast('That isn\'t a Koru backup.', 'error'); }
         fileIn.value = '';
@@ -217,7 +220,7 @@
       grid.append(panel('folder', 'Library and data', 'Back up your library, likes, bookmarks, reading history and read marks.',
         el('div.row',
           el('button.btn.small', { onclick: () => {
-            const blob = new Blob([JSON.stringify({ app: 'koru', at: new Date().toISOString(), library: K.data.library, liked: K.data.liked, bookmarks: K.data.bookmarks, flags: K.data.flags, history: K.data.history, read: K.data.read }, null, 1)], { type: 'application/json' });
+            const blob = new Blob([JSON.stringify({ app: 'koru', at: new Date().toISOString(), library: K.data.library, liked: K.data.liked, bookmarks: K.data.bookmarks, flags: K.data.flags, history: K.data.history, read: K.data.read, stats: K.data.stats }, null, 1)], { type: 'application/json' });
             const a = el('a', { href: URL.createObjectURL(blob), download: `koru-backup-${new Date().toISOString().slice(0, 10)}.json` });
             document.body.append(a); a.click(); a.remove();
           } }, icon('download'), 'Export backup'),
