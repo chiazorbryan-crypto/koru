@@ -7,7 +7,7 @@
 
   // ---------- shared pieces ----------
   function card(s, i = 0, extra = {}) {
-    const a = el('a.card', { href: `#/series/${s.provider}/${encodeURIComponent(s.slug)}`, style: { '--i': i } });
+    const a = el('a.card', { href: extra.href || `#/series/${s.provider}/${encodeURIComponent(s.slug)}`, style: { '--i': i } });
     const cv = el('div.cv', img(s.cover, s.title));
     cv.append(el('span.src', { text: P(s.provider)?.short || s.provider, style: { color: P(s.provider)?.hue } }));
     if (extra.newCount) cv.append(el('span.newb', { text: extra.newCount > 99 ? '99+' : String(extra.newCount), title: 'New chapters' }));
@@ -133,8 +133,8 @@
   K.dl = { index: new Map(), jobs: [] }; // index: id -> { dir, files }
   K.refreshDownloads = async function () {
     try {
-      const { series } = await K.api.get('/k/dl/list');
-      K.dl.series = series;
+      const { series, disk } = await K.api.get('/k/dl/list');
+      K.dl.series = series; K.dl.disk = disk || null;
       K.dl.index = new Map();
       for (const s of series) for (const c of s.chapters) K.dl.index.set(c.id, c);
     } catch {}
@@ -604,52 +604,178 @@
   };
 
   // ---------- Downloads ----------
+  // ---------- Downloads: local storage (covers + titles) and the download queue, Kotatsu style ----------
+  const dlKey = s => `${s.provider}:${s.seriesSlug}`;
+  const coverOf = s => s.cover || K.data.library[dlKey(s)]?.cover || K.data.history[dlKey(s)]?.cover || null;
+  const chapSort = (a, b) => (a.number ?? -1) - (b.number ?? -1) || String(a.chapterName).localeCompare(String(b.chapterName), undefined, { numeric: true });
+  const savedAt = s => Math.max(0, ...s.chapters.map(c => Date.parse(c.savedAt) || 0));
+  // what "Continue" opens for a downloaded series: the chapter you were in, else the next unread one, else the first
+  K.localResume = s => {
+    const chs = [...s.chapters].sort(chapSort), h = K.data.history[dlKey(s)];
+    const cur = h && chs.find(c => c.chapterSlug === h.chapterSlug);
+    if (cur && !h.done) return { c: cur, label: 'Continue ' + cur.chapterName.replace(/ — .*/, ''), page: h.page };
+    const after = cur ? chs.slice(chs.indexOf(cur) + 1) : chs;
+    const next = after.find(c => !K.isRead(s.provider, s.seriesSlug, c.chapterSlug)) || chs.find(c => !K.isRead(s.provider, s.seriesSlug, c.chapterSlug));
+    if (next) return { c: next, label: (cur || chs.some(c => K.isRead(s.provider, s.seriesSlug, c.chapterSlug)) ? 'Continue ' : 'Read ') + next.chapterName.replace(/ — .*/, '') };
+    return { c: chs[0], label: 'Read again from ' + chs[0].chapterName.replace(/ — .*/, '') };
+  };
+  const readLocal = (s, c) => K.go(`/read/${s.provider}/${encodeURIComponent(s.seriesSlug)}/${encodeURIComponent(c.chapterSlug)}`);
+
   K.views.downloads = async function (root) {
-    const total = el('div.sub');
-    const head = el('div.head', el('div', el('h1', { text: 'Downloads' }), total), el('div.sp'),
-      K.info?.platform === 'desktop' ? el('button.btn', { onclick: () => K.api.post('/k/open-downloads') }, icon('folder'), 'Open folder') : null);
-    root.append(head);
-    const jobsBox = el('div'), listBox = el('div');
-    root.append(jobsBox, listBox);
-    function drawJobs() {
+    let tab = sessionStorage.getItem('koru-dltab') || 'saved';
+    let sort = localStorage.getItem('koru-dlsort') || 'recent', q = '';
+    const sub = el('div.sub');
+    root.append(el('div.head', el('div', el('h1', { text: 'Downloads' }), sub), el('div.sp'),
+      K.info?.platform === 'desktop' ? el('button.btn', { onclick: () => K.api.post('/k/open-downloads') }, icon('folder'), 'Open folder') : null));
+    const store = el('div.storage.glass');
+    const tabsBox = el('div.section'), body = el('div');
+    root.append(store, tabsBox, body);
+
+    function drawStore() {
+      const series = K.dl.series || [], used = series.reduce((a, s) => a + s.bytes, 0), d = K.dl.disk;
+      const count = series.reduce((a, s) => a + s.chapters.length, 0);
+      sub.textContent = count ? `${series.length} series · ${count} chapters · ${K.bytes(used)}` : 'Save chapters to read anywhere, even offline';
+      const kids = [el('div.row', { style: { justifyContent: 'space-between' } }, el('b', { text: 'Local storage' }),
+        el('span.muted', { text: d ? `${K.bytes(d.free)} free of ${K.bytes(d.total)}` : K.bytes(used) + ' used' }))];
+      if (d?.total) {
+        const other = Math.max(0, d.total - d.free - used);
+        kids.push(el('div.sbar', el('i.koru', { style: { width: Math.max(used ? 0.6 : 0, used / d.total * 100) + '%' } }), el('i.other', { style: { width: other / d.total * 100 + '%' } })),
+          el('div.legend', el('span', el('i.koru'), 'Koru ' + K.bytes(used)), el('span', el('i.other'), 'Other files ' + K.bytes(other)), el('span', el('i.free'), 'Free ' + K.bytes(d.free))));
+      }
+      store.replaceChildren(...kids);
+    }
+    function drawTabs() {
+      const busy = K.dl.jobs.filter(j => j.state === 'downloading' || j.state === 'queued' || j.state === 'failed').length;
+      tabsBox.replaceChildren(segmented([['saved', 'Saved', 'folder'], ['queue', busy ? `Queue (${busy})` : 'Queue', 'download']], tab,
+        v => { tab = v; sessionStorage.setItem('koru-dltab', v); drawBody(); }));
+    }
+    function drawBody() { tab === 'queue' ? drawQueue() : drawSaved(); }
+
+    function drawSaved() {
+      const all = K.dl.series || [];
+      if (!all.length) { body.replaceChildren(el('div.empty', K.fox(), el('h3', { text: 'Nothing saved yet' }), el('p', { text: 'Open a series and use the download button, or select chapters and tap Download.' }))); return; }
+      const search = el('input', { type: 'search', placeholder: 'Filter saved series', value: q, oninput: () => { q = search.value; paint(); } });
+      const sortSel = el('select.sel-in', [['recent', 'Recently saved'], ['title', 'Title A–Z'], ['chapters', 'Most chapters'], ['size', 'Biggest']].map(([v, l]) => el('option', { value: v, text: l, selected: v === sort })));
+      sortSel.onchange = () => { sort = sortSel.value; localStorage.setItem('koru-dlsort', sort); paint(); };
+      const grid = el('div.grid');
+      body.replaceChildren(el('div.row.dltools', el('label.searchbox.glass.small', icon('search'), search), sortSel), grid);
+      function paint() {
+        const list = all.filter(s => !q || s.title.toLowerCase().includes(q.toLowerCase()));
+        const by = { recent: (a, b) => savedAt(b) - savedAt(a), title: (a, b) => a.title.localeCompare(b.title), chapters: (a, b) => b.chapters.length - a.chapters.length, size: (a, b) => b.bytes - a.bytes }[sort];
+        list.sort(by);
+        grid.replaceChildren(...list.map((s, i) => {
+          const read = s.chapters.filter(c => K.isRead(s.provider, s.seriesSlug, c.chapterSlug)).length;
+          const a = card({ provider: s.provider, slug: s.seriesSlug, title: s.title, cover: coverOf(s) }, i,
+            { sub: `${s.chapters.length} chapter${s.chapters.length > 1 ? 's' : ''} · ${K.bytes(s.bytes)}`, progress: read / s.chapters.length, href: `#/local/${s.provider}/${encodeURIComponent(s.seriesSlug)}` });
+          a.querySelector('.cv').append(el('span.dlcount', { title: 'Downloaded chapters' }, icon('download'), String(s.chapters.length)));
+          return a;
+        }));
+        if (!list.length) grid.replaceChildren(el('p.muted', { text: 'No saved series match.' }));
+      }
+      paint();
+    }
+
+    function drawQueue() {
       const jobs = K.dl.jobs.filter(j => j.state === 'downloading' || j.state === 'queued' || j.state === 'failed');
-      jobsBox.replaceChildren();
-      if (!jobs.length) return;
-      jobsBox.append(el('div.section', el('h2', { text: 'Downloading' }), el('span.count', { text: String(jobs.length) }), el('div', { style: { flex: 1 } }),
-        el('button.btn.small', { onclick: () => K.api.post('/k/dl/cancel', { id: '*' }).then(pollQueue) }, icon('x'), 'Cancel all')));
-      for (const j of jobs) {
-        const pct = j.total ? j.done / j.total : 0;
-        jobsBox.append(el('div.job.glass',
-          el('div.meta', el('b', { text: j.seriesTitle }), el('div.muted', { text: `${j.chapterName} · ${j.state === 'queued' ? 'Waiting' : j.state === 'failed' ? (j.error || 'Failed') : `${j.done} of ${j.total} pages`}` }),
-            el('div.bar', { style: { marginTop: '8px' } }, el('i', { style: { width: Math.round(pct * 100) + '%' } }))),
-          j.state === 'failed' ? null : el('button.btn.small.icon', { title: 'Cancel', onclick: () => K.api.post('/k/dl/cancel', { id: j.id }).then(pollQueue) }, icon('x'))));
-      }
+      if (!jobs.length) { body.replaceChildren(el('div.empty', K.fox(), el('h3', { text: 'Nothing downloading' }), el('p', { text: 'Chapters you download show up here with their progress.' }))); return; }
+      const groups = new Map();
+      for (const j of jobs) { const k = `${j.provider}:${j.seriesSlug}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(j); }
+      body.replaceChildren(el('div.row', { style: { justifyContent: 'flex-end', marginBottom: '10px' } },
+        el('button.btn.small', { onclick: () => K.api.post('/k/dl/cancel', { id: '*' }).then(pollQueue) }, icon('x'), 'Cancel all')),
+        ...[...groups.values()].map(js => {
+          const j0 = js[0], done = js.reduce((a, j) => a + (j.done || 0), 0), total = js.reduce((a, j) => a + (j.total || 0), 0);
+          const cover = j0.cover || K.data.library[`${j0.provider}:${j0.seriesSlug}`]?.cover;
+          return el('div.qgroup.glass',
+            el('div.th', img(cover, j0.seriesTitle)),
+            el('div.qbody',
+              el('div.row', { style: { justifyContent: 'space-between' } }, el('b', { text: j0.seriesTitle }), el('span.muted', { text: `${js.length} chapter${js.length > 1 ? 's' : ''}` })),
+              el('div.bar', el('i', { style: { width: (total ? Math.round(done / total * 100) : 0) + '%' } })),
+              ...js.map(j => el('div.qrow',
+                el('span', { text: j.chapterName.replace(/ — .*/, '') }),
+                el('small.muted', { text: j.state === 'queued' ? 'Waiting' : j.state === 'failed' ? (j.error || 'Failed') : `${j.done} / ${j.total} pages` }),
+                j.state === 'failed' ? null : el('button.btn.small.icon', { title: 'Cancel', onclick: () => K.api.post('/k/dl/cancel', { id: j.id }).then(pollQueue) }, icon('x'))))));
+        }));
     }
-    function drawList() {
-      const series = K.dl.series || [];
-      const bytes = series.reduce((a, s) => a + s.bytes, 0), count = series.reduce((a, s) => a + s.chapters.length, 0);
-      total.textContent = count ? `${count} chapter${count > 1 ? 's' : ''} · ${K.bytes(bytes)} · read them offline` : 'Read anywhere, even offline';
-      if (!series.length) {
-        listBox.replaceChildren(K.dl.jobs.length ? '' : el('div.empty', K.fox(), el('h3', { text: 'No downloads yet' }), el('p', { text: 'Open a series and tap the download button on a chapter, or use Download all.' })));
-        return;
-      }
-      listBox.replaceChildren(el('div.section', el('h2', { text: 'Saved for offline' })));
-      for (const s of series) {
-        const chs = [...s.chapters].sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
-        listBox.append(el('div.dlgroup.glass',
-          el('div.top', el('div.th', img(s.cover, s.title)),
-            el('div', { style: { flex: 1, minWidth: 0 } }, el('b', { text: s.title }), el('div.muted', { text: `${P(s.provider)?.name || s.provider} · ${chs.length} chapters · ${K.bytes(s.bytes)}` })),
-            el('a.btn.small', { href: `#/series/${s.provider}/${encodeURIComponent(s.seriesSlug)}` }, 'Open'),
-            el('button.btn.small.icon', { title: 'Delete all', onclick: async () => { if (!confirm(`Delete all downloaded chapters of ${s.title}?`)) return; await K.api.post('/k/dl/delete', { series: `${s.provider}:${s.seriesSlug}` }); await K.refreshDownloads(); } }, icon('trash'))),
-          el('div.chs', chs.map(c => el('span.chip', { style: { cursor: 'pointer' }, title: `${c.files.length} pages · ${K.bytes(c.bytes)}`, onclick: () => K.go(`/read/${s.provider}/${encodeURIComponent(s.seriesSlug)}/${encodeURIComponent(c.chapterSlug)}`) },
-            c.chapterName.replace(/ — .*/, ''),
-            el('span', { title: 'Delete', style: { display: 'inline-flex', opacity: .6 }, onclick: async e => { e.stopPropagation(); await K.api.post('/k/dl/delete', { id: c.id }); await K.refreshDownloads(); } }, icon('x')))))));
-      }
-    }
-    drawJobs(); drawList();
-    const onQ = () => root.isConnected && !document.querySelector('.reader') && drawJobs(), onD = () => root.isConnected && !document.querySelector('.reader') && drawList();
+
+    drawStore(); drawTabs(); drawBody();
+    const onQ = () => { if (!root.isConnected || document.querySelector('.reader')) return; drawTabs(); if (tab === 'queue') drawQueue(); };
+    const onD = () => { if (!root.isConnected || document.querySelector('.reader')) return; drawStore(); if (tab === 'saved') drawSaved(); };
     document.addEventListener('koru-queue', onQ); document.addEventListener('koru-downloads', onD);
     await K.refreshDownloads();
     pollQueue();
+  };
+
+  // ---------- one downloaded series: its saved chapters, Continue, delete, Kotatsu style ----------
+  K.views.local = async function (root, r) {
+    const [provider, slug] = r.parts;
+    if (!K.dl.series) await K.refreshDownloads();
+    const find = () => (K.dl.series || []).find(x => x.provider === provider && x.seriesSlug === slug);
+    let s = find();
+    if (!s) { root.append(el('div.empty', K.fox(), el('h3', { text: 'Not downloaded' }), el('p', { text: 'This series has no saved chapters on this PC.' }),
+      el('a.btn', { href: '#/downloads' }, icon('back'), 'Back to downloads'))); return; }
+    let newest = localStorage.getItem('koru-localsort') !== 'old', picking = false;
+    const picked = new Set();
+    const hero = el('div.hero'), tools = el('div.section'), list = el('div.list.chlist');
+    root.append(hero, tools, list);
+
+    function drawHero() {
+      const cover = coverOf(s), res = K.localResume(s);
+      const read = s.chapters.filter(c => K.isRead(provider, slug, c.chapterSlug)).length;
+      hero.replaceChildren(
+        el('div.bd', { style: cover ? { backgroundImage: `url("${cover.replace(/["\\]/g, '')}")` } : {} }),
+        el('button.btn.backb', { title: 'Back (Alt+Left)', onclick: () => K.back() }, icon('back'), 'Back'),
+        el('div.wrap',
+          el('div.poster', img(cover, s.title, '', 320)),
+          el('div.info',
+            el('span.tag', { text: (P(provider)?.name || provider) + ' · saved on this PC' }),
+            el('h1', { text: s.title }),
+            el('div.muted', { text: `${s.chapters.length} chapters downloaded · ${K.bytes(s.bytes)} · ${read} read` }),
+            el('div.sprog', el('i', { style: { width: Math.round(read / s.chapters.length * 100) + '%' } })),
+            el('div.row', { style: { marginTop: '16px' } },
+              el('button.btn.primary', { onclick: () => readLocal(s, res.c) }, icon('play'), res.label),
+              el('a.btn', { href: `#/series/${provider}/${encodeURIComponent(slug)}` }, icon('explore'), 'Series page'),
+              el('button.btn', { title: 'Delete every downloaded chapter of this series', onclick: async () => {
+                if (!confirm(`Delete all ${s.chapters.length} downloaded chapters of ${s.title}? They can be downloaded again later.`)) return;
+                await K.api.post('/k/dl/delete', { series: `${provider}:${slug}` }); await K.refreshDownloads(); K.toast('Downloads deleted'); K.go('/downloads', true);
+              } }, icon('trash'), 'Delete all')))));
+    }
+    function drawTools() {
+      tools.replaceChildren(el('h2', { text: 'Saved chapters' }), el('span.count', { text: String(s.chapters.length) }), el('div', { style: { flex: 1 } }),
+        picking
+          ? el('div.row', el('span.muted', { text: picked.size + ' selected' }),
+            el('button.btn.small', { onclick: () => { s.chapters.forEach(c => picked.add(c.id)); drawList(); drawTools(); } }, 'All'),
+            el('button.btn.small', { disabled: !picked.size, onclick: () => { for (const c of s.chapters) if (picked.has(c.id)) K.markRead(provider, slug, c.chapterSlug, true); done(); } }, icon('done'), 'Mark read'),
+            el('button.btn.small', { disabled: !picked.size, onclick: () => { for (const c of s.chapters) if (picked.has(c.id)) K.markRead(provider, slug, c.chapterSlug, false); done(); } }, icon('undo'), 'Mark unread'),
+            el('button.btn.small', { disabled: !picked.size, onclick: async () => {
+              if (!confirm(`Delete ${picked.size} downloaded chapter${picked.size > 1 ? 's' : ''}?`)) return;
+              for (const id of picked) await K.api.post('/k/dl/delete', { id });
+              await K.refreshDownloads(); s = find(); if (!s) { K.go('/downloads', true); return; } done();
+            } }, icon('trash'), 'Delete'),
+            el('button.btn.small', { onclick: () => { picking = false; picked.clear(); drawTools(); drawList(); } }, icon('x'), 'Done'))
+          : el('div.row',
+            el('button.btn.small', { onclick: () => { newest = !newest; localStorage.setItem('koru-localsort', newest ? 'new' : 'old'); drawTools(); drawList(); } }, icon('refresh'), newest ? 'Newest first' : 'Oldest first'),
+            el('button.btn.small', { onclick: () => { picking = true; drawTools(); drawList(); } }, icon('select'), 'Select')));
+    }
+    function done() { picking = false; picked.clear(); drawHero(); drawTools(); drawList(); }
+    function drawList() {
+      const h = K.data.history[`${provider}:${slug}`];
+      const chs = [...s.chapters].sort(chapSort);
+      if (newest) chs.reverse();
+      list.replaceChildren(...chs.map((c, i) => {
+        const read = K.isRead(provider, slug, c.chapterSlug), cur = h?.chapterSlug === c.chapterSlug && !h.done;
+        const row = el('div.item' + (read ? '.read' : '') + (cur ? '.current' : '') + (picked.has(c.id) ? '.picked' : ''), { style: { '--i': Math.min(i, 20) } },
+          picking ? el('span.check', picked.has(c.id) ? icon('done') : null) : null,
+          el('div.n', el('b', { text: c.chapterName }),
+            el('small', { text: [cur ? `Reading · page ${(h.page || 0) + 1} of ${c.files.length}` : read ? 'Read' : null, `${c.files.length} pages`, K.bytes(c.bytes || 0), c.savedAt ? 'saved ' + K.ago(c.savedAt) : null].filter(Boolean).join(' · ') })),
+          picking ? null : el('button.btn.small.icon', { title: 'Delete this download', onclick: async e => {
+            e.stopPropagation(); await K.api.post('/k/dl/delete', { id: c.id }); await K.refreshDownloads(); s = find();
+            if (!s) { K.go('/downloads', true); return; } drawHero(); drawTools(); drawList();
+          } }, icon('trash')));
+        row.onclick = () => { if (picking) { picked.has(c.id) ? picked.delete(c.id) : picked.add(c.id); drawTools(); drawList(); } else readLocal(s, c); };
+        row.addEventListener('contextmenu', e => { e.preventDefault(); if (!picking) { picking = true; picked.add(c.id); drawTools(); drawList(); } });
+        return row;
+      }));
+    }
+    drawHero(); drawTools(); drawList();
   };
 })();

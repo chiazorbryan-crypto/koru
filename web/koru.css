@@ -493,6 +493,32 @@ html.plain .nav-btn .dotb, html.plain .card .newb { box-shadow: none; }
 .srcs .chip { display: inline-flex; align-items: center; gap: 7px; }
 .srcs .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hue, var(--accent-solid)); box-shadow: 0 0 8px var(--hue, transparent); }
 
+/* Downloads: local storage */
+.storage { padding: 14px 16px; margin-bottom: 18px; display: grid; gap: 10px; }
+.storage .sbar { display: flex; height: 10px; border-radius: 99px; overflow: hidden; background: rgba(255,255,255,.08); }
+.storage .sbar i { display: block; height: 100%; }
+.storage i.koru { background: linear-gradient(90deg, var(--accent), var(--accent2)); box-shadow: 0 0 10px var(--accent); }
+.storage i.other { background: rgba(255,255,255,.28); }
+.storage i.free { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); }
+.storage .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: .82em; color: var(--muted); }
+.storage .legend span { display: inline-flex; align-items: center; gap: 6px; }
+.storage .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; box-shadow: none; }
+.dltools { margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
+.searchbox.small { height: 42px; max-width: 420px; flex: 1; min-width: 200px; padding: 0 14px; }
+.searchbox.small input { font-size: 1em; }
+.card .dlcount { position: absolute; top: 8px; right: 8px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 99px; font-size: .72em; font-weight: 700;
+  background: color-mix(in srgb, var(--bg) 82%, transparent); border: 1px solid rgba(255,255,255,.14); }
+.card .dlcount .ic { width: 12px; height: 12px; }
+.card:hover .dlcount { opacity: 0; }
+.qgroup { display: flex; gap: 14px; padding: 14px; margin-bottom: 12px; }
+.qgroup .th { width: 64px; height: 90px; border-radius: 10px; overflow: hidden; flex: none; background: var(--glass); }
+.qgroup .th img { width: 100%; height: 100%; object-fit: cover; }
+.qgroup .qbody { flex: 1; min-width: 0; display: grid; gap: 8px; align-content: start; }
+.qrow { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; font-size: .9em; }
+.chlist .item .check { width: 22px; height: 22px; border-radius: 7px; border: 2px solid var(--edge); display: grid; place-items: center; flex: none; }
+.chlist .item.picked .check { background: var(--accent-solid); border-color: transparent; color: var(--on-accent); }
+.chlist .item .check .ic { width: 14px; height: 14px; }
+
 /* toasts */
 #toasts { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 300; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
 .toast { display: flex; align-items: center; gap: 10px; padding: 11px 18px; border-radius: 99px; animation: toast-in var(--t) var(--ease) both; }

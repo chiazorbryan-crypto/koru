@@ -241,7 +241,11 @@ export function createBackend({ dataDir, downloadsDir, version = '0.0.0', platfo
         return json(200, { ok: true });
       }
       if (p === '/k/dl/queue' && method === 'GET') return json(200, { jobs: queue.map(jobView) });
-      if (p === '/k/dl/list' && method === 'GET') return json(200, { series: await listDownloads() });
+      if (p === '/k/dl/list' && method === 'GET') {
+        let disk = null;
+        try { await fsp.mkdir(downloadsDir, { recursive: true }); const st = await fsp.statfs(downloadsDir); disk = { free: st.bavail * st.bsize, total: st.blocks * st.bsize }; } catch {}
+        return json(200, { series: await listDownloads(), disk });
+      }
       if (p === '/k/dl/delete' && method === 'POST') {
         const b = JSON.parse(req.body || '{}');
         if (b.id) {
