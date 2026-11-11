@@ -8,7 +8,7 @@
   function slider(label, value, min, max, step, unit, onInput, sub) {
     const v = el('span.val');
     const r = el('input', { type: 'range', min, max, step, value });
-    const fmt = x => (unit === 'Ã—' ? Number(x).toFixed(2) : Number(x)) + unit;
+    const fmt = x => (unit === '×' ? Number(x).toFixed(2) : Number(x)) + unit;
     const paint = () => { r.style.setProperty('--p', ((r.value - min) / (max - min)) * 100 + '%'); v.textContent = fmt(r.value); };
     paint();
     r.oninput = () => { paint(); onInput(Number(r.value)); };
@@ -67,7 +67,26 @@
       grid.append(panel('palette', 'Style', 'Liquid glass, or a plain, fast, normal app look. Your colours carry over.',
         el('div.ctl', el('div.lab', { text: 'App style' }),
           K.segmented([['glass', 'Liquid glass', 'sparkle'], ['plain', 'Normal', 'list']], t.glassUi === false ? 'plain' : 'glass', v => { set({ glassUi: v === 'glass' }); setTimeout(K.movePill, 300); }))));
+      const lookName = el('input.txt', { type: 'text', placeholder: 'Name this look', maxLength: 40 });
+      const saveMine = () => {
+        const n = lookName.value.trim() || 'My look ' + (T().myLooks().length + 1);
+        T().saveLook(n); K.toast('Saved "' + n + '"', 'ok'); draw();
+      };
+      lookName.addEventListener('keydown', e => { if (e.key === 'Enter') saveMine(); });
+      const mine = T().myLooks();
+      const mineBox = el('div.presets', mine.map(l => {
+        const c = l.theme.colors || {};
+        const g = k => (c[k] || T().BASE.colors[k])[0];
+        return el('div.preset.mine', { role: 'button', tabIndex: 0, onclick: () => { T().useLook(l); draw(); setTimeout(K.movePill, 400); } },
+          el('div.pv', { style: { background: `linear-gradient(135deg, ${g('bg')}, ${g('bg2')})` } },
+            el('i', { style: { background: g('glow1'), left: '-10px', top: '-14px' } }), el('i', { style: { background: g('glow2'), right: '-12px', bottom: '-20px' } }),
+            el('i', { style: { background: g('accent'), left: '40%', top: '20%', width: '36px', height: '36px' } }), el('b')),
+          el('span', { text: l.name }),
+          el('button.del', { title: 'Delete this look', onclick: e => { e.stopPropagation(); T().deleteLook(l.name); draw(); } }, icon('x')));
+      }));
       grid.append(panel('sparkle', 'Looks', 'Picking a look only changes colours and glows. Your layout and other settings stay.', presetBox,
+        el('div.lookbar', lookName, el('button.btn.small.primary', { onclick: saveMine }, icon('plus'), 'Save my look')),
+        mine.length ? el('div.sub-h', { text: 'My looks' }) : null, mine.length ? mineBox : null,
         el('div.row', { style: { marginTop: '14px' } },
           el('button.btn.small', { onclick: () => { T().reset(); draw(); } }, icon('refresh'), 'Reset to Liquid glass'),
           el('button.btn.small', { onclick: async () => { try { await navigator.clipboard.writeText(JSON.stringify(T().current())); K.toast('Theme copied', 'ok'); } catch { K.toast('Couldn\'t copy', 'error'); } } }, icon('copy'), 'Copy theme'),
@@ -87,9 +106,26 @@
       const S = g => T().SLIDERS.filter(s => s[6] === g).map(([k, label, min, max, step, unit]) => slider(label, t[k], min, max, step, unit, v => set({ [k]: v })));
       const G = g => T().TOGGLES.filter(x => x[3] === g).map(([k, label, sub]) => toggle(label, t[k], v => set({ [k]: v }), sub));
 
+      grid.append(panel('palette', 'Gradients', 'How the background, buttons, glass and sidebar fade between colours.',
+        select('Background style', T().BG_TYPES, t.bgType, v => set({ bgType: v })),
+        select('Accent style', T().ACCENT_TYPES, t.accentType, v => set({ accentType: v })),
+        ...S('grad'), ...G('grad')));
+      const wallIn = el('input', { type: 'file', accept: 'image/*', style: { display: 'none' } });
+      wallIn.onchange = async () => {
+        const file = wallIn.files[0]; wallIn.value = '';
+        if (!file) return;
+        try { if (await T().setWallpaper(file)) { K.toast('Wallpaper set', 'ok'); draw(); } else K.toast('That picture is too big to keep. Try a smaller one.', 'error'); }
+        catch { K.toast('Couldn\'t open that picture.', 'error'); }
+      };
+      grid.append(panel('palette', 'Wallpaper', t.glassUi === false ? 'Wallpapers show in the Liquid glass style.' : 'Your own picture behind the glass. It stays on this PC.',
+        el('div.row', { style: { marginBottom: '6px' } },
+          el('button.btn.small.primary', { onclick: () => wallIn.click() }, icon('upload'), T().hasWallpaper() ? 'Change picture' : 'Choose a picture'),
+          T().hasWallpaper() ? el('button.btn.small', { onclick: async () => { await T().setWallpaper(null); K.toast('Wallpaper removed'); draw(); } }, icon('trash'), 'Remove') : null, wallIn),
+        ...S('wall')));
       grid.append(panel('sparkle', 'Glass', 'How frosted, bright and outlined the glass is.', ...S('glass'), ...G('glass')));
-      grid.append(panel('sparkle', 'Glow', 'The light orbs behind the glass, and glows on buttons, covers and titles.', ...S('glow')));
+      grid.append(panel('sparkle', 'Glow', 'The light orbs behind the glass, and glows on buttons, covers and titles.', ...S('glow'), ...G('glow')));
       grid.append(panel('refresh', 'Motion', 'Animations across the app.', ...G('motion').slice(0, 1),
+        select('Feel', T().FEELS, t.feel, v => set({ feel: v })),
         select('Page change', T().TRANSITIONS, t.transition, v => set({ transition: v })), ...S('motion'), ...G('motion').slice(1)));
       grid.append(panel('book', 'Shape and text', '',
         ...S('shape'),
@@ -121,9 +157,13 @@
         slider('Auto-scroll speed', ro.autoSpeed, 15, 700, 5, ' px/s', v => setR({ autoSpeed: v }), 'Long strip. Press S while reading, or the arrows button in the top bar'),
         slider('Auto page turn', ro.autoSecs, 3, 60, 1, ' s', v => setR({ autoSecs: v }), 'Page mode: seconds on each page'),
         toggle('Start auto-scroll on every chapter', ro.autoStart, v => setR({ autoStart: v })),
-        toggle('Ambient light', ro.ambient, v => setR({ ambient: v }), 'A soft glow from the page you\'re on fills the space around it'),
+        toggle('Ambient light', ro.ambient, v => setR({ ambient: v }), 'The colours of what you\'re reading glow in the space around the pages'),
+        select('Ambient follows', [['scroll', 'What\'s on screen, as you scroll'], ['page', 'The whole page']], ro.ambMode, v => setR({ ambMode: v })),
         slider('Ambient strength', ro.ambStrength, 0, 100, 1, '%', v => setR({ ambStrength: v })),
         slider('Ambient softness', ro.ambBlur, 20, 220, 5, 'px', v => setR({ ambBlur: v })),
+        slider('Ambient colour', ro.ambSat, 60, 250, 5, '%', v => setR({ ambSat: v }), 'How rich the glow colours are'),
+        slider('Ambient smoothness', ro.ambEase, 0, 100, 1, '%', v => setR({ ambEase: v }), 'Higher: the light changes more slowly and gently'),
+        toggle('Calm bright pages', ro.ambCalm, v => setR({ ambCalm: v }), 'White or very bright pages glow less, so they don\'t glare at night'),
         toggle('Right to left', ro.rtl, v => setR({ rtl: v }), 'For manga in page mode'),
         toggle('Keep reading into the next chapter', ro.autoNext, v => setR({ autoNext: v }), 'Long strip: the next chapter joins underneath as you reach the end, like Kotatsu'),
         toggle('Tap sides to turn', ro.tapZones, v => setR({ tapZones: v })),
@@ -131,7 +171,7 @@
         toggle('Show frame rate', ro.fps, v => setR({ fps: v }), 'A small meter while reading, to check for lag')));
 
       if (K.info?.platform === 'desktop') {
-        const stat = el('div.gpustat', el('span', { text: 'Checking your graphics cardâ€¦' }));
+        const stat = el('div.gpustat', el('span', { text: 'Checking your graphics card…' }));
         const body = el('div');
         grid.append(panel('sparkle', 'Graphics', 'If reading lags on a PC, try these. Changes apply when Koru restarts.', stat, body));
         K.api.get('/k/gpu').then(g => {
@@ -146,7 +186,7 @@
             soft ? el('span', { text: 'Turn on "Use the card even if it\'s blocked" below and restart, or update your graphics driver.' }) : null,
             act?.driver ? el('span', { text: 'Driver ' + act.driver }) : null,
             others.length ? el('span', { text: 'Also in this PC: ' + others.map(d => d.name || d.vendor).join(', ') }) : null,
-            el('span', { text: `Screen ${Math.round(screen.width * devicePixelRatio)}Ã—${Math.round(screen.height * devicePixelRatio)}` }, hz)].filter(Boolean));
+            el('span', { text: `Screen ${Math.round(screen.width * devicePixelRatio)}×${Math.round(screen.height * devicePixelRatio)}` }, hz)].filter(Boolean));
           // measure the screen's refresh rate (middle frame gap, once the page has settled)
           const gaps = []; let last = 0;
           const tick = t => { if (last) gaps.push(t - last); last = t; if (gaps.length < 90) requestAnimationFrame(tick); else { gaps.sort((x, y) => x - y); hz.textContent = ` at about ${Math.round(1000 / gaps[45])} Hz`; } };
@@ -181,7 +221,7 @@
       const rows = el('div.health');
       const last = (() => { try { return JSON.parse(localStorage.getItem('koru-health') || 'null'); } catch { return null; } })();
       const row = (p, st, msg) => el('div.hrow.' + st, el('i.dot', { style: { background: p.hue, boxShadow: '0 0 8px ' + p.hue } }), el('b', { text: p.name }),
-        el('span.hst', { text: { ok: 'Working', part: 'Partly working', bad: 'Not working', wait: 'Checkingâ€¦', idle: 'â€”' }[st] }), el('small', { text: msg || '' }));
+        el('span.hst', { text: { ok: 'Working', part: 'Partly working', bad: 'Not working', wait: 'Checking…', idle: '—' }[st] }), el('small', { text: msg || '' }));
       const draw = res => rows.replaceChildren(...K.providerList.map(p => { const r = res?.[p.id]; return row(p, r?.st || 'idle', r?.msg); }));
       draw(last?.res);
       const when = el('small.muted', { text: last ? 'Last checked ' + K.ago(last.at) : 'Not checked yet' });
@@ -209,7 +249,7 @@
         await Promise.all(Array.from({ length: 4 }, async () => { while (queue.length) { const p = queue.shift(); res[p.id] = await checkOne(p); draw(res); } }));
         localStorage.setItem('koru-health', JSON.stringify({ at: Date.now(), res }));
         const bad = Object.values(res).filter(r => r.st !== 'ok').length;
-        when.textContent = 'Checked just now Â· ' + (bad ? bad + ' need attention' : 'all working');
+        when.textContent = 'Checked just now · ' + (bad ? bad + ' need attention' : 'all working');
         checkBtn.disabled = false;
       } }, icon('refresh'), 'Check all sources');
       grid.append(panel('sparkle', 'Sources', 'Tests every source: its list, a series, its chapters and a page picture. Takes under a minute.',

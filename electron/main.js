@@ -18,7 +18,8 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'koru', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 
-if (process.platform === 'win32') app.setAppUserModelId('app.koru.reader.window');
+const AUMID = 'app.koru.reader.window';
+if (process.platform === 'win32') app.setAppUserModelId(AUMID);
 
 // Graphics options (Settings → Graphics). Chromium only reads these at launch, so changes need a restart.
 const GPU_FILE = path.join(app.getPath('userData'), 'gpu.json');
@@ -64,37 +65,73 @@ function pngToIco(images) {
   });
   return Buffer.concat([head, ...images.map(x => x.png)]);
 }
+// Pinning to the taskbar: Windows builds the pin from the window's "relaunch" details. Without them it used
+// Koru.exe's own built-in icon, which is why a fresh pin showed the original icon. So the window always
+// carries the themed .ico, and pins that already exist are found (by what they open) and updated too.
+const ICON_DIR = () => path.join(app.getPath('userData'), 'icons');
+const themedShortcuts = process.platform === 'win32' && app.isPackaged && !process.env.KORU_BG_TEST;   // only the installed app touches your shortcuts
+function setPinDetails(icoFile) {
+  if (!themedShortcuts || !win || !icoFile) return;
+  try { win.setAppDetails({ appId: AUMID, appIconPath: icoFile, appIconIndex: 0, relaunchCommand: `"${process.execPath}"`, relaunchDisplayName: 'Koru' }); } catch {}
+}
+function lastIcon() {
+  try {
+    const dir = ICON_DIR();
+    const all = fs.readdirSync(dir).filter(f => /^koru-[0-9a-f]+\.ico$/.test(f)).map(f => path.join(dir, f));
+    all.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+    return all[0] || null;
+  } catch { return null; }
+}
+// every .lnk in a folder (and its subfolders) that opens Koru.exe
+function koruLinksIn(dir, depth = 2, out = []) {
+  let items = [];
+  try { items = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  const exe = process.execPath.toLowerCase();
+  for (const it of items) {
+    const p = path.join(dir, it.name);
+    if (it.isDirectory() && depth > 0) koruLinksIn(p, depth - 1, out);
+    else if (it.isFile() && it.name.toLowerCase().endsWith('.lnk')) {
+      try { if ((shell.readShortcutLink(p).target || '').toLowerCase() === exe) out.push(p); } catch {}
+    }
+  }
+  return out;
+}
 let shortcutTimer = null;
 function themeShortcuts(img) {
-  if (process.platform !== 'win32' || !app.isPackaged || process.env.KORU_BG_TEST) return;   // only the installed app touches your shortcuts
+  if (!themedShortcuts) return;
   clearTimeout(shortcutTimer);
   shortcutTimer = setTimeout(() => {
     try {
-      const images = [256, 64, 48, 32, 16].map(size => ({ size, png: img.resize({ width: size, height: size, quality: 'best' }).toPNG() }));
+      const images = [256, 64, 48, 32, 24, 16].map(size => ({ size, png: img.resize({ width: size, height: size, quality: 'best' }).toPNG() }));
       const ico = pngToIco(images);
       const hash = crypto.createHash('sha1').update(ico).digest('hex').slice(0, 10);
-      const dir = path.join(app.getPath('userData'), 'icons');
+      const dir = ICON_DIR();
       fs.mkdirSync(dir, { recursive: true });
       const file = path.join(dir, `koru-${hash}.ico`);   // a new name per theme, so Windows doesn't show an old cached icon
-      if (!fs.existsSync(file)) fs.writeFileSync(file, ico);
-      for (const f of fs.readdirSync(dir)) if (f.startsWith('koru-') && f.endsWith('.ico') && path.join(dir, f) !== file) { try { fs.unlinkSync(path.join(dir, f)); } catch {} }
+      if (!fs.existsSync(file)) fs.writeFileSync(file, ico); else fs.utimesSync(file, new Date(), new Date());
+      setPinDetails(file);   // a pin made from now on uses the themed icon
       const appData = app.getPath('appData');
-      const links = [
+      const pinned = path.join(appData, 'Microsoft', 'Internet Explorer', 'Quick Launch', 'User Pinned');
+      const links = new Set([
         path.join(app.getPath('desktop'), 'Koru.lnk'),
         path.join(process.env.PUBLIC || 'C:\\Users\\Public', 'Desktop', 'Koru.lnk'),
         path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Koru.lnk'),
-        path.join(appData, 'Microsoft', 'Internet Explorer', 'Quick Launch', 'User Pinned', 'TaskBar', 'Koru.lnk')
-      ];
-      let changed = 0;
+        ...koruLinksIn(path.join(pinned, 'TaskBar'), 0),
+        ...koruLinksIn(path.join(pinned, 'ImplicitAppShortcuts'), 2),
+        ...koruLinksIn(path.join(pinned, 'StartMenu'), 0)
+      ]);
+      let changed = 0, failed = 0;
       for (const l of links) {
         if (!fs.existsSync(l)) continue;
         try {
           const cur = shell.readShortcutLink(l);
           if (cur.icon === file) continue;
-          if (shell.writeShortcutLink(l, 'update', { icon: file, iconIndex: 0 })) changed++;
-        } catch {}
+          if (shell.writeShortcutLink(l, 'update', { icon: file, iconIndex: 0 })) changed++; else failed++;
+        } catch { failed++; }
       }
-      // ask Explorer to redraw shortcut icons
+      // old theme icons go once nothing points at them any more
+      if (!failed) for (const f of fs.readdirSync(dir)) if (f.startsWith('koru-') && f.endsWith('.ico') && path.join(dir, f) !== file) { try { fs.unlinkSync(path.join(dir, f)); } catch {} }
+      // ask Explorer to redraw shortcut and taskbar icons
       if (changed) { try { spawn(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'ie4uinit.exe'), ['-show'], { detached: true, stdio: 'ignore', windowsHide: true }).unref(); } catch {} }
     } catch {}
   }, 1500);
@@ -170,6 +207,7 @@ app.whenReady().then(() => {
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, backgroundThrottling: !process.env.KORU_BG_TEST },
     ...(process.env.KORU_BG_TEST ? { skipTaskbar: true, minimizable: false, focusable: false } : {})
   });
+  setPinDetails(lastIcon());
   // KORU_BG_TEST: a test window that draws normally but sits off-screen and never takes focus
   win.once('ready-to-show', () => { if (process.env.KORU_BG_TEST) { win.setPosition(-5000, 0); win.showInactive(); } else win.show(); });
   // Links never open inside Koru: only app pages load here, anything else goes to the browser (allowed sites only).

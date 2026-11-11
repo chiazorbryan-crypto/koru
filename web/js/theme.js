@@ -6,6 +6,7 @@
   const COLORS = [
     ['bg', 'App background', 'Base colour behind everything'],
     ['bg2', 'Background fade', 'Second colour the background fades into'],
+    ['bg3', 'Background third colour', 'Used when "Three-colour background" is on'],
     ['glow1', 'Glow orb 1', 'Big soft light behind the glass'],
     ['glow2', 'Glow orb 2', ''],
     ['glow3', 'Glow orb 3', ''],
@@ -14,9 +15,11 @@
     ['text', 'Text', ''],
     ['muted', 'Soft text', 'Labels and secondary text'],
     ['glass', 'Glass panels', 'Tint and transparency of glass'],
+    ['glass2', 'Glass fade', 'Glass fades into this when "Gradient glass" is on'],
     ['edge', 'Glass edges', 'Outline around glass'],
     ['shine', 'Glass shine', 'The light streak on glass'],
     ['side', 'Sidebar', 'Sidebar glass tint'],
+    ['side2', 'Sidebar fade', 'Sidebar fades into this when "Gradient sidebar" is on'],
     ['card', 'Cards', 'Cover card caption glass'],
     ['shadow', 'Shadows', ''],
     ['badge', 'New chapter badge', ''],
@@ -34,6 +37,10 @@
     ['accentGlow', 'Accent glow', 0, 60, 1, 'px', 'glow'],
     ['coverGlow', 'Cover glow on hover', 0, 70, 1, 'px', 'glow'],
     ['textGlow', 'Title glow', 0, 24, 1, 'px', 'glow'],
+    ['bgAngle', 'Gradient direction', 0, 360, 5, '°', 'grad'],
+    ['accentAngle', 'Accent direction', 0, 360, 5, '°', 'grad'],
+    ['glassAngle', 'Glass and sidebar direction', 0, 360, 5, '°', 'grad'],
+    ['bgSpeed', 'Background motion (one turn)', 20, 300, 5, 's', 'grad'],
     ['speed', 'Animation speed', 0.25, 3, 0.05, '×', 'motion'],
     ['orbMotion', 'Orb drift', 0, 100, 1, '%', 'motion'],
     ['lift', 'Hover lift', 0, 24, 1, 'px', 'motion'],
@@ -42,7 +49,10 @@
     ['radius', 'Corner roundness', 0, 36, 1, 'px', 'shape'],
     ['coverW', 'Cover size', 110, 240, 2, 'px', 'shape'],
     ['fontScale', 'Text size', 85, 130, 1, '%', 'shape'],
-    ['sideSize', 'Sidebar size', 80, 130, 1, '%', 'side']
+    ['sideSize', 'Sidebar size', 80, 130, 1, '%', 'side'],
+    ['wallDim', 'Wallpaper dim', 0, 90, 1, '%', 'wall'],
+    ['wallBlur', 'Wallpaper blur', 0, 40, 1, 'px', 'wall'],
+    ['wallOrbs', 'Glow orbs over wallpaper', 0, 100, 1, '%', 'wall']
   ];
   const TOGGLES = [
     ['anim', 'Animations', 'Turn all motion on or off', 'motion'],
@@ -51,8 +61,17 @@
     ['spot', 'Pointer light on glass', 'A soft light follows the pointer', 'motion'],
     ['shimmer', 'Shimmer while loading', '', 'motion'],
     ['noise', 'Frosted grain', 'Fine grain on glass, like real frost', 'glass'],
-    ['sideLabels', 'Show labels', 'Names under the sidebar icons', 'side']
+    ['sideLabels', 'Show labels', 'Names under the sidebar icons', 'side'],
+    ['bg3On', 'Three-colour background', 'Adds the third background colour to the fade', 'grad'],
+    ['bgMove', 'Moving background', 'The gradient turns very slowly. Pauses while you scroll or read', 'grad'],
+    ['glassGrad', 'Gradient glass', 'Glass panels fade from Glass panels into Glass fade', 'grad'],
+    ['sideGrad', 'Gradient sidebar', 'Sidebar fades from Sidebar into Sidebar fade', 'grad'],
+    ['titleGrad', 'Gradient titles', 'Page titles are filled with the accent gradient', 'grad'],
+    ['dynLight', 'Dynamic light', 'On a series page the glows take the colours of its cover', 'glow']
   ];
+  const BG_TYPES = [['linear', 'Straight fade'], ['radial', 'Round glow'], ['conic', 'Swirl'], ['solid', 'Solid colour']];
+  const ACCENT_TYPES = [['gradient', 'Gradient'], ['solid', 'Solid']];
+  const FEELS = [['smooth', 'Smooth: glides, no bounce on big moves'], ['springy', 'Springy: bouncy'], ['snappy', 'Snappy: quick']];
   const TRANSITIONS = [['fade', 'Fade'], ['slide', 'Slide'], ['zoom', 'Zoom'], ['blur', 'Blur'], ['rise', 'Rise'], ['none', 'None']];
   const FONTS = [
     ['Segoe UI Variable Display, Segoe UI, system-ui, sans-serif', 'Segoe'],
@@ -67,13 +86,16 @@
 
   const BASE = {
     colors: {
-      bg: ['#07081a', 100], bg2: ['#140a2a', 100], glow1: ['#6a5cff', 70], glow2: ['#00c8ff', 55], glow3: ['#ff4f9a', 50],
+      bg: ['#07081a', 100], bg2: ['#140a2a', 100], bg3: ['#0a2140', 100], glass2: ['#ffffff', 3], side2: ['#ffffff', 3], glow1: ['#6a5cff', 70], glow2: ['#00c8ff', 55], glow3: ['#ff4f9a', 50],
       accent: ['#8f7dff', 100], accent2: ['#38d6ff', 100], text: ['#f3f4ff', 100], muted: ['#c4c7ee', 70],
       glass: ['#ffffff', 8], edge: ['#ffffff', 18], shine: ['#ffffff', 30], side: ['#ffffff', 7], card: ['#0a0b20', 55],
       shadow: ['#000000', 45], badge: ['#ff4f9a', 100], readerBg: ['#050509', 100]
     },
     blur: 24, sat: 170, sideBlur: 28, edgeW: 1, shineAmt: 60, orbSize: 60, orbBlur: 90, accentGlow: 22, coverGlow: 34, textGlow: 0,
     speed: 1, orbMotion: 45, lift: 6, hscale: 103, bounce: 55, radius: 18, coverW: 158, fontScale: 100, sideSize: 100,
+    bgType: 'linear', bgAngle: 135, bg3On: false, bgMove: false, bgSpeed: 90, accentType: 'gradient', accentAngle: 135,
+    glassGrad: false, sideGrad: false, glassAngle: 160, titleGrad: false, dynLight: true, feel: 'smooth',
+    wallDim: 35, wallBlur: 0, wallOrbs: 40,
     anim: true, stagger: true, tilt: true, spot: true, shimmer: true, noise: false, sideLabels: true, glassUi: true,
     transition: 'zoom', font: FONTS[0][0], titleFont: FONTS[0][0],
     side: 'left', sideStyle: 'island', sideMin: false
@@ -102,6 +124,21 @@
   function apply(t = current()) {
     const s = document.documentElement.style;
     for (const [k] of COLORS) s.setProperty('--' + k, rgba(t.colors[k]));
+    // gradients: background, accent, glass, sidebar
+    const C = k => 'var(--' + k + ')';
+    const stops = t.bg3On ? [C('bg'), C('bg3'), C('bg2')] : [C('bg'), C('bg2')];
+    s.setProperty('--bg-fill', t.bgType === 'solid' ? C('bg')
+      : t.bgType === 'radial' ? `radial-gradient(130% 130% at 22% 12%, ${[...stops].reverse().join(', ')})`
+      : t.bgType === 'conic' ? `conic-gradient(from ${t.bgAngle}deg at 50% 50%, ${stops.join(', ')}, ${C('bg')})`
+      : `linear-gradient(${t.bgAngle}deg, ${stops.join(', ')})`);
+    s.setProperty('--bg-dur', t.bgSpeed + 's');
+    s.setProperty('--accent-grad', t.accentType === 'solid' ? C('accent') : `linear-gradient(${t.accentAngle}deg, ${C('accent')}, ${C('accent2')})`);
+    s.setProperty('--accent-line', t.accentType === 'solid' ? C('accent') : `linear-gradient(90deg, ${C('accent')}, ${C('accent2')})`);
+    s.setProperty('--glass-fill', t.glassGrad ? `linear-gradient(${t.glassAngle}deg, ${C('glass')}, ${C('glass2')})` : C('glass'));
+    s.setProperty('--side-fill', t.sideGrad ? `linear-gradient(${t.glassAngle}deg, ${C('side')}, ${C('side2')})` : C('side'));
+    s.setProperty('--wall-dim', String(t.wallDim / 100));
+    s.setProperty('--wall-blur', t.wallBlur + 'px');
+    s.setProperty('--wall-orbs', String(t.wallOrbs / 100));
     // Solid versions for things that must not be see-through.
     s.setProperty('--accent-solid', t.colors.accent[0]);
     s.setProperty('--on-accent', luminance(t.colors.accent[0]) > 0.45 ? '#0b0b14' : '#ffffff');
@@ -121,8 +158,14 @@
     s.setProperty('--orb-play', t.anim && t.orbMotion > 0 ? 'running' : 'paused');
     s.setProperty('--lift', t.lift + 'px');
     s.setProperty('--hscale', String(t.hscale / 100));
+    // Motion feel. Smooth: big moves (pages, drawers, menus) glide in with no overshoot and small things
+    // get only a light spring. Springy: the old bouncy feel. Snappy: quicker, with a small spring.
     const o = (t.bounce / 100) * 0.9; // overshoot
-    s.setProperty('--ease', `cubic-bezier(.2, ${(1 + o * 0.9).toFixed(2)}, .35, 1)`);
+    const feel = FEELS.some(f => f[0] === t.feel) ? t.feel : 'smooth';
+    const spring = { smooth: 0.3, springy: 0.9, snappy: 0.35 }[feel];
+    s.setProperty('--ease', `cubic-bezier(${feel === 'snappy' ? '.3' : '.2'}, ${(1 + o * spring).toFixed(2)}, .35, 1)`);
+    s.setProperty('--ease-move', feel === 'springy' ? 'var(--ease)' : 'cubic-bezier(.16, 1, .3, 1)');
+    s.setProperty('--feel', feel === 'snappy' ? '1.35' : feel === 'smooth' ? '.9' : '1');
     s.setProperty('--radius', t.radius + 'px');
     s.setProperty('--cover-w', t.coverW + 'px');
     s.setProperty('--font-scale', String(t.fontScale / 100));
@@ -138,6 +181,11 @@
     root.classList.toggle('spot', !!t.spot && !plain);
     root.classList.toggle('shimmer', !!t.shimmer && t.anim);
     root.classList.toggle('grain', !!t.noise);
+    root.classList.toggle('bg-move', !!t.bgMove && t.anim && !plain && t.bgType !== 'solid');
+    root.classList.toggle('title-grad', !!t.titleGrad);
+    root.classList.toggle('dyn-light', !!t.dynLight && !plain);
+    if (!t.dynLight || plain) dynLight(null);
+    paintWall(t);
     root.classList.toggle('light', luminance(t.colors.bg[0]) > 0.5);
     root.dataset.transition = !t.anim ? 'none' : plain ? 'fade' : t.transition;
     root.dataset.side = t.side;
@@ -198,7 +246,114 @@
     return next;
   }
 
-  K.theme = { COLORS, SLIDERS, TOGGLES, TRANSITIONS, FONTS, PRESETS, BASE, current, apply, set, rgba, hexRgb,
+  // ---------- custom wallpaper ----------
+  // Kept in this PC's app storage (not in the theme), shrunk to the screen size once when you pick it.
+  const WALL_KEY = 'koru-wallpaper';
+  let wallUrl = null;
+  try { wallUrl = localStorage.getItem(WALL_KEY); } catch {}
+  function paintWall(t = current()) {
+    const fx = document.querySelector('.bgfx');
+    let w = fx?.querySelector('.wall');
+    const on = !!wallUrl && t.glassUi !== false;
+    document.documentElement.classList.toggle('has-wall', on);
+    if (!on) { w?.remove(); return; }
+    if (!w) { w = document.createElement('div'); w.className = 'wall'; fx?.prepend(w); }
+    const css = `url("${wallUrl}")`;
+    if (w.style.backgroundImage !== css) w.style.backgroundImage = css;
+  }
+  async function setWallpaper(file) {
+    if (!file) { wallUrl = null; try { localStorage.removeItem(WALL_KEY); } catch {} paintWall(); return true; }
+    const bmp = await createImageBitmap(file);
+    const max = Math.min(3840, Math.max(1920, Math.round(Math.max(screen.width, screen.height) * devicePixelRatio)));
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+    const cx = cv.getContext('2d'); cx.imageSmoothingQuality = 'high'; cx.drawImage(bmp, 0, 0, cv.width, cv.height); bmp.close();
+    for (const q of [0.9, 0.8, 0.68, 0.55]) {
+      const url = cv.toDataURL('image/webp', q);
+      if (url.length > 4.2e6) continue;
+      try { localStorage.setItem(WALL_KEY, url); } catch { continue; }
+      wallUrl = url; paintWall(); return true;
+    }
+    return false;
+  }
+
+  // ---------- dynamic light: the glows take a series cover's colours ----------
+  // Three colours are picked from the cover and the orbs fade to them. Only the background layer changes.
+  let dynKey = '';
+  async function coverColors(url) {
+    const r = await fetch(/^https:/.test(url) && K.viaKoru ? K.viaKoru(url) : url);
+    if (!r.ok) throw new Error('cover');
+    const bmp = await createImageBitmap(await r.blob(), { resizeWidth: 24, resizeHeight: 32, resizeQuality: 'low' });
+    const cv = document.createElement('canvas'); cv.width = 24; cv.height = 32;
+    const cx = cv.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(bmp, 0, 0); bmp.close();
+    const d = cx.getImageData(0, 0, 24, 32).data, bins = new Map();
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      const sat = mx ? (mx - mn) / mx : 0, val = mx / 255;
+      if (val < 0.12) continue;
+      const key = (r >> 5) << 6 | (g >> 5) << 3 | (b >> 5);
+      const e = bins.get(key) || { n: 0, r: 0, g: 0, b: 0, w: 0 };
+      e.n++; e.r += r; e.g += g; e.b += b; e.w += 0.25 + sat * 1.5 - (val > 0.92 && sat < 0.1 ? 0.2 : 0); bins.set(key, e);
+    }
+    const picks = [];
+    for (const e of [...bins.values()].sort((a, b) => b.w - a.w)) {
+      const c = [e.r / e.n, e.g / e.n, e.b / e.n];
+      if (picks.every(p => Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]) > 70)) picks.push(c);
+      if (picks.length === 3) break;
+    }
+    while (picks.length && picks.length < 3) picks.push(picks[picks.length - 1]);
+    // lift dark or dull colours a little so they glow
+    return picks.map(([r, g, b]) => { const k = Math.max(1, 170 / Math.max(r, g, b, 1)); return [r, g, b].map(v => Math.min(255, Math.round(v * k))); });
+  }
+  async function dynLight(url) {
+    const fx = document.querySelector('.bgfx');
+    if (!fx) return;
+    const t = current();
+    const key = url && t.dynLight && t.glassUi !== false ? url : '';
+    if (key === dynKey) return;
+    dynKey = key;
+    if (!key) { fx.classList.remove('dyn'); return; }
+    try {
+      const cols = await coverColors(url);
+      if (dynKey !== key || !cols.length) return;
+      cols.forEach(([r, g, b], i) => fx.style.setProperty('--dyn' + (i + 1), `rgba(${r},${g},${b},${Math.min(1, t.colors['glow' + (i + 1)][1] / 100 * 1.1).toFixed(3)})`));
+      fx.classList.add('dyn');
+    } catch { if (dynKey === key) fx.classList.remove('dyn'); }
+  }
+  // every series page shows its cover in .hero .bd, so the light follows whatever page is open
+  function watchHero() {
+    const main = document.getElementById('main');
+    if (!main) return;
+    let tm = 0;
+    new MutationObserver(() => {
+      clearTimeout(tm);
+      tm = setTimeout(() => {
+        const bd = main.querySelector('.view:not(.leave) .hero .bd');
+        const m = bd && /url\("?(.*?)"?\)$/.exec(bd.style.backgroundImage || '');
+        dynLight(m ? m[1] : null);
+      }, 150);
+    }).observe(main, { childList: true, subtree: true });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchHero); else watchHero();
+
+  // ---------- your own saved looks ----------
+  const LAYOUT_KEYS = ['side', 'sideStyle', 'sideMin', 'glassUi', 'name'];
+  const myLooks = () => Array.isArray(K.data.settings.looks) ? K.data.settings.looks : [];
+  function saveLook(name) {
+    const th = structuredClone(current());
+    for (const k of LAYOUT_KEYS) delete th[k];
+    const list = myLooks().filter(l => l.name !== name);
+    list.unshift({ name: String(name).slice(0, 40), theme: th, at: Date.now() });
+    K.data.settings.looks = list.slice(0, 30);
+    K.save('settings');
+  }
+  function useLook(l) { const th = structuredClone(l.theme); for (const k of LAYOUT_KEYS) delete th[k]; set(th); }
+  function deleteLook(name) { K.data.settings.looks = myLooks().filter(l => l.name !== name); K.save('settings'); }
+
+  K.theme = { COLORS, SLIDERS, TOGGLES, TRANSITIONS, FONTS, PRESETS, BASE, BG_TYPES, ACCENT_TYPES, FEELS, current, apply, set, rgba, hexRgb,
+    myLooks, saveLook, useLook, deleteLook, setWallpaper, hasWallpaper: () => !!wallUrl, dynLight,
     // Looks only change colours and glows; layout, sidebar, style and everything else stay as you set them.
     reset: () => { const c = current(); set({ ...structuredClone(BASE), side: c.side, sideStyle: c.sideStyle, sideMin: c.sideMin, glassUi: c.glassUi }); },
     usePreset: p => { const t = p.theme; set({ colors: structuredClone(t.colors), accentGlow: t.accentGlow, coverGlow: t.coverGlow, textGlow: t.textGlow }); } };

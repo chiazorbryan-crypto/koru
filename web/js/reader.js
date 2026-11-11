@@ -3,7 +3,7 @@
 'use strict';
 (function () {
   const { el, icon } = K;
-  const DEFAULTS = { mode: 'strip', rtl: false, gap: 0, width: 760, autoNext: true, preload: 4, tapZones: true, ambient: true, ambStrength: 55, ambBlur: 90, fps: false, zen: false, autoSpeed: 90, autoSecs: 8, autoStart: false };
+  const DEFAULTS = { mode: 'strip', rtl: false, gap: 0, width: 760, autoNext: true, preload: 4, tapZones: true, ambient: true, ambStrength: 55, ambBlur: 90, ambMode: 'scroll', ambSat: 170, ambEase: 45, ambCalm: true, fps: false, zen: false, autoSpeed: 90, autoSecs: 8, autoStart: false };
   K.readerSettings = () => ({ ...DEFAULTS, ...(K.data.settings.reader || {}) });
   const setReader = patch => { K.data.settings.reader = { ...K.readerSettings(), ...patch }; K.save('settings'); };
 
@@ -130,32 +130,109 @@
 
   function build(offline, startPage, startOff = 0) {
     const s = state, opt = K.readerSettings();
-    // Ambient light: a tiny pre-blurred picture of the page, stretched up. No live blur filter, so scrolling never redoes it.
-    const AW = 40, AH = 26;
-    const amb = el('div.ambient', el('canvas', { width: AW, height: AH }), el('canvas', { width: AW, height: AH }));
-    let ambFront = 0, ambIdx = -1, ambBmp = null, ambSoft = opt.ambBlur;
-    const ambCache = new Map();   // page -> tiny picture, made once when the page loads
-    const paintAmb = () => {
-      if (!ambBmp) return;
-      const [a, b] = amb.children, next = ambFront ? a : b, cur = ambFront ? b : a;
-      const ctx = next.getContext('2d');
-      ctx.clearRect(0, 0, AW, AH);
-      ctx.filter = `blur(${(ambSoft / 40).toFixed(1)}px) saturate(1.8)`;
-      ctx.drawImage(ambBmp, -2, -2, AW + 4, AH + 4);
-      next.classList.add('on'); cur.classList.remove('on'); ambFront = ambFront ? 0 : 1;
+    // Ambient light. Each page gets a tiny colour strip (16 px wide) once, when it loads, made off the main
+    // thread and kept as plain numbers. Each frame the light is worked out from the part of the pages on
+    // screen: about 1,400 colour values are blended, softened and eased toward the new colours in plain
+    // JavaScript, then shown on a 48×30 canvas stretched over the screen. No picture is drawn or blurred by
+    // the graphics card, and it only runs while something changes (scrolling, a page arriving, a setting).
+    const AW = 48, AH = 30, CW = 16, EDGE = 0.08, N = AW * AH;
+    const amb = el('div.ambient', el('canvas', { width: AW, height: AH }));
+    const ambCv = amb.firstChild, ambCx = ambCv.getContext('2d', { alpha: false, willReadFrequently: true });
+    const ambImg = ambCx.createImageData(AW, AH);
+    const tgtF = new Float32Array(N * 3), curF = new Float32Array(N * 3), tmpF = new Float32Array(N * 3);
+    const ambCache = new Map();   // page -> { w, h, d } colour strip
+    let ambO = opt, ambRaf = 0, ambUntil = 0, ambLast = 0, ambHas = false, calm = 1;
+    const ofs = []; let ofsDirty = true, viewH = 1;   // cached page tops/heights for the light
+    const tau = () => 50 + ambO.ambEase * 9;   // how slowly the light follows: 50 to 950 ms
+    // copy one row of a page's strip (r may fall between two rows) into target row y
+    const putRow = (b, r, y) => {
+      const r0 = Math.max(0, Math.min(b.h - 1, Math.floor(r))), r1 = Math.min(b.h - 1, r0 + 1), f1 = Math.max(0, Math.min(1, r - r0)), f0 = 1 - f1;
+      for (let x = 0; x < AW; x++) {
+        const sx = Math.min(b.w - 1, (x * b.w / AW) | 0), a = (r0 * b.w + sx) * 4, c = (r1 * b.w + sx) * 4, o = (y * AW + x) * 3;
+        tgtF[o] = b.d[a] * f0 + b.d[c] * f1; tgtF[o + 1] = b.d[a + 1] * f0 + b.d[c + 1] * f1; tgtF[o + 2] = b.d[a + 2] * f0 + b.d[c + 2] * f1;
+      }
     };
-    const applyAmb = o => { amb.style.display = o.ambient ? '' : 'none'; amb.style.setProperty('--amb-o', o.ambStrength / 100); if (o.ambBlur !== ambSoft) { ambSoft = o.ambBlur; paintAmb(); } };
+    const fillTarget = () => {
+      if (ambO.ambMode === 'page' || opt.mode === 'paged') {
+        const b = ambCache.get(s.page);
+        if (!b) return false;
+        for (let y = 0; y < AH; y++) putRow(b, (y + 0.5) / AH * b.h - 0.5, y);
+        return true;
+      }
+      // page positions are measured only after a page changes size, never on every scroll frame
+      if (ofsDirty) { ofsDirty = false; ofs.length = 0; viewH = pagesBox.clientHeight || 1; }
+      const H = viewH, top = pagesBox.scrollTop, near = [];
+      for (let i = Math.max(0, s.page - 2); i <= Math.min(s.pages.length - 1, s.page + 2); i++) {
+        const b = ambCache.get(i), p = b && pg(i);
+        if (!p) continue;
+        const o = ofs[i] || (ofs[i] = [p.offsetTop, p.offsetHeight]);
+        if (o[1]) near.push([b, o[0] - top, o[1]]);
+      }
+      let any = false;
+      for (let y = 0; y < AH; y++) {
+        const sy = ((y + 0.5) / AH * (1 + 2 * EDGE) - EDGE) * H;   // the screen height this row of light stands for
+        for (const [b, y0, h] of near) if (sy >= y0 && sy < y0 + h) { putRow(b, (sy - y0) / h * b.h - 0.5, y); any = true; break; }
+        // rows with no loaded page keep their last colour
+      }
+      return any;
+    };
+    // soften: two box-blur passes each way, edges repeat outward
+    const blurPass = (src, dst, r, horiz) => {
+      const len = horiz ? AW : AH, lines = horiz ? AH : AW, n = 2 * r + 1;
+      for (let l = 0; l < lines; l++) for (let ch = 0; ch < 3; ch++) {
+        const at = i => ((horiz ? l * AW + Math.max(0, Math.min(len - 1, i)) : Math.max(0, Math.min(len - 1, i)) * AW + l) * 3 + ch);
+        let acc = 0;
+        for (let i = -r; i <= r; i++) acc += src[at(i)];
+        for (let i = 0; i < len; i++) { dst[at(i)] = acc / n; acc += src[at(i + r + 1)] - src[at(i - r)]; }
+      }
+    };
+    const ambFrame = now => {
+      ambRaf = 0;
+      if (state !== s || !ambO.ambient) return;
+      // the light is soft and slow, so 20 updates a second look the same as 60 and cost a third
+      if (ambLast && now - ambLast < 48) { ambRaf = requestAnimationFrame(ambFrame); return; }
+      const dt = ambLast ? Math.min(150, now - ambLast) : 16; ambLast = now;
+      if (fillTarget()) {
+        const k = ambHas ? 1 - Math.exp(-dt / tau()) : 1;
+        for (let i = 0; i < tgtF.length; i++) curF[i] += (tgtF[i] - curF[i]) * k;
+        const r = Math.max(0, Math.round(ambO.ambBlur / 55));
+        let src = curF;
+        if (r) { blurPass(curF, tmpF, r, true); blurPass(tmpF, tgtF, r, false); blurPass(tgtF, tmpF, r, true); blurPass(tmpF, tgtF, r, false); src = tgtF; }
+        const sat = ambO.ambSat / 100, d = ambImg.data;
+        let lumSum = 0;
+        for (let p = 0, o = 0; p < N; p++, o += 3) {
+          const R = src[o], G = src[o + 1], B = src[o + 2], L = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+          lumSum += L;
+          d[p * 4] = L + (R - L) * sat; d[p * 4 + 1] = L + (G - L) * sat; d[p * 4 + 2] = L + (B - L) * sat; d[p * 4 + 3] = 255;
+        }
+        ambCx.putImageData(ambImg, 0, 0);
+        if (!ambHas) { ambHas = true; amb.classList.add('on'); }
+        // Calm bright pages: a mostly white screen glows less, so it doesn't glare
+        const lum = lumSum / N / 255;
+        const calmT = ambO.ambCalm && lum > 0.5 ? Math.max(0.3, 1 - (lum - 0.5) * 1.5) : 1;
+        calm += (calmT - calm) * (1 - Math.exp(-dt / Math.max(200, tau())));
+        const op = (Math.round(calm * 25) / 25).toFixed(2);
+        if (ambCv.style.opacity !== op) ambCv.style.opacity = op;
+      }
+      if (now < ambUntil) ambRaf = requestAnimationFrame(ambFrame);
+      else ambLast = 0;
+    };
+    const kickAmb = () => {
+      if (!ambO.ambient) return;
+      ambUntil = performance.now() + tau() * 4 + 200;
+      if (!ambRaf) ambRaf = requestAnimationFrame(ambFrame);
+    };
+    const applyAmb = o => { ambO = o; amb.style.display = o.ambient ? '' : 'none'; amb.style.setProperty('--amb-o', o.ambStrength / 100); kickAmb(); };
     applyAmb(opt);
-    const setAmb = K.debounce(i => {
-      if (i === ambIdx || amb.style.display === 'none') return;
-      const bmp = ambCache.get(i);
-      if (!bmp) return;            // painted as soon as that page loads
-      ambIdx = i; ambBmp = bmp; paintAmb();
-    }, 200);
+    const setAmb = i => { if (Math.abs(i - s.page) <= 2) kickAmb(); };
+    const ambSize = (w, h) => [CW, Math.max(1, Math.min(1024, Math.round(CW * h / w)))];
 
     const pagesBox = el('div.pages', { tabIndex: 0 });
     const strip = el('div.strip', { style: { maxWidth: opt.mode === 'strip' ? opt.width + 'px' : 'none', gap: opt.gap + 'px' } });
     pagesBox.append(strip);
+    // a page getting its real size (or the window resizing) moves the pages below it: measure again once
+    const ofsWatch = new ResizeObserver(() => { ofsDirty = true; kickAmb(); });
+    ofsWatch.observe(strip); ofsWatch.observe(pagesBox);
 
     // Long strip: each page is fetched as a file, decoded off the main thread and cut into short slices.
     // The graphics card then only moves ready-made pieces while you scroll, instead of re-decoding giant
@@ -183,9 +260,13 @@
     const ambFrom = (i, src, w, h) => {
       if (ambCache.has(i) || !w) return;
       ambCache.set(i, null);
-      const sh = Math.min(h, Math.round(w * AH / AW)), sy = Math.round((h - sh) / 2);
-      createImageBitmap(src, 0, sy, w, sh, { resizeWidth: AW, resizeHeight: AH, resizeQuality: 'low' })
-        .then(b => { ambCache.set(i, b); if (s.page === i) setAmb(i); }).catch(() => ambCache.delete(i));
+      const [rw, rh] = ambSize(w, h);
+      createImageBitmap(src, { resizeWidth: rw, resizeHeight: rh, resizeQuality: 'medium' }).then(b => {
+        if (state !== s) { b.close(); return; }
+        const c = document.createElement('canvas'); c.width = rw; c.height = rh;
+        const cx = c.getContext('2d', { willReadFrequently: true }); cx.drawImage(b, 0, 0); b.close();
+        ambCache.set(i, { w: rw, h: rh, d: cx.getImageData(0, 0, rw, rh).data }); setAmb(i);
+      }).catch(() => ambCache.delete(i));
     };
     async function loadStrip(i) {
       const wrap = imgs[i].parentElement;
@@ -195,11 +276,11 @@
       try {
         const file = await fileOf(i);
         if (!live()) return;
-        const r = await ask({ type: 'decode', id, blob: file, aw: AW, ah: AH });   // decoded on the worker
-        if (!live()) { r.amb?.close(); freeJob(id); return; }
+        const r = await ask({ type: 'decode', id, blob: file, cw: CW });   // decoded on the worker
+        if (!live()) { freeJob(id); return; }
         wrap.style.minHeight = ''; wrap.style.aspectRatio = `${r.w} / ${r.h}`;
         if (jump && i <= jump.i) requestAnimationFrame(doJump);
-        if (!ambCache.get(i)) { ambCache.set(i, r.amb); if (s.page === i) setAmb(i); } else r.amb?.close();
+        if (!ambCache.get(i) && r.amb) { ambCache.set(i, { w: r.amb.w, h: r.amb.h, d: new Uint8ClampedArray(r.amb.d) }); setAmb(i); }
         const box = el('div.slices'), ocs = [];
         for (let y = 0; y < r.h; y += SLICE) {
           const c = el('canvas', { width: r.w, height: Math.min(SLICE + OV, r.h - y) });
@@ -439,11 +520,12 @@
       atEnd.observe(end); nearEnd.observe(end);
       let lastY = 0, ticking = false;
       pagesBox.addEventListener('scroll', () => {
+        kickAmb();
         if (ticking) return;
         ticking = true;
         requestAnimationFrame(() => { ticking = false; const y = pagesBox.scrollTop; if (Math.abs(y - lastY) > 80) { if (y > lastY && !box?.classList.contains('hide-ui')) box?.classList.add('hide-ui'); lastY = y; } });
       }, { passive: true });
-      s.cleanup = () => { io.disconnect(); line.disconnect(); far.disconnect(); atEnd.disconnect(); nearEnd.disconnect(); for (const b of ambCache.values()) b?.close?.(); files.clear(); st.fill(''); strip.querySelectorAll('.pg').forEach(w => { if (job[Number(w.dataset.i)]) freeSlices(w); }); };
+      s.cleanup = () => { io.disconnect(); line.disconnect(); far.disconnect(); atEnd.disconnect(); nearEnd.disconnect(); files.clear(); st.fill(''); strip.querySelectorAll('.pg').forEach(w => { if (job[Number(w.dataset.i)]) freeSlices(w); }); };
     }
 
     // Auto-scroll: the strip glides down by itself (in page mode, pages turn by themselves).
@@ -594,7 +676,7 @@
     };
     document.addEventListener('keydown', onKey);
     const oldCleanup = s.cleanup;
-    s.cleanup = () => { oldCleanup?.(); document.removeEventListener('keydown', onKey); clearTimeout(hideT); clearTimeout(idleT); cancelAnimationFrame(fpsRaf); cancelAnimationFrame(autoRaf); clearInterval(statT); window.removeEventListener('resize', placePop); document.removeEventListener('keydown', act); };
+    s.cleanup = () => { oldCleanup?.(); ofsWatch.disconnect(); cancelAnimationFrame(ambRaf); ambRaf = 0; ambCache.clear(); document.removeEventListener('keydown', onKey); clearTimeout(hideT); clearTimeout(idleT); cancelAnimationFrame(fpsRaf); cancelAnimationFrame(autoRaf); clearInterval(statT); window.removeEventListener('resize', placePop); document.removeEventListener('keydown', act); };
 
     // reader settings popover
     function toggleSettings() {
@@ -629,9 +711,14 @@
         el('div.ctl', el('div.lab', 'Auto-scroll', el('small', { text: 'Hands-free reading with a speed pop-up. Key: S' })),
           el('button.btn.small', { onclick: () => { box.querySelector('.rset')?.remove(); K.toggleAuto(); } }, icon('auto'), 'Start')),
         tog('Start auto-scroll on every chapter', 'autoStart', ''),
-        tog('Ambient light', 'ambient', 'A soft glow from the page around it', true),
+        tog('Ambient light', 'ambient', 'The colours on screen glow around the pages', true),
+        opt.mode === 'strip' && o.ambient ? el('div.ctl', el('div.lab', { text: 'Follows' }),
+          K.segmented([['scroll', 'On screen'], ['page', 'Whole page']], o.ambMode, v => { setReader({ ambMode: v }); applyAmb(K.readerSettings()); })) : null,
         ambRange('Ambient strength', 'ambStrength', 0, 100, 1, '%'),
         ambRange('Ambient softness', 'ambBlur', 20, 220, 5, 'px'),
+        ambRange('Ambient colour', 'ambSat', 60, 250, 5, '%'),
+        ambRange('Ambient smoothness', 'ambEase', 0, 100, 1, '%'),
+        (() => { const n = tog('Calm bright pages', 'ambCalm', 'White pages glow less'); n.querySelector('.toggle').addEventListener('click', () => setTimeout(() => applyAmb(K.readerSettings()))); return n; })(),
         tog('Right to left', 'rtl', 'For manga in page mode', true),
         tog('Keep reading into the next chapter', 'autoNext', 'Long strip: the next chapter joins underneath. Pages: goes on after the last page', true),
         tog('Tap sides to turn', 'tapZones', ''),

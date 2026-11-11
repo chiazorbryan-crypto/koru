@@ -7,10 +7,13 @@ onmessage = async ({ data: m }) => {
     if (m.type === 'decode') {
       const b = await createImageBitmap(m.blob);
       pics.set(m.id, b);
-      // tiny picture for the ambient light
-      const sh = Math.min(b.height, Math.round(b.width * m.ah / m.aw)), sy = Math.round((b.height - sh) / 2);
-      const amb = await createImageBitmap(b, 0, sy, b.width, sh, { resizeWidth: m.aw, resizeHeight: m.ah, resizeQuality: 'low' });
-      postMessage({ type: 'size', id: m.id, w: b.width, h: b.height, amb }, [amb]);
+      // tiny colour strip of the whole page for the ambient light (16 px wide, keeps the page's shape)
+      const ch = Math.max(1, Math.min(1024, Math.round(m.cw * b.height / b.width)));
+      const small = await createImageBitmap(b, { resizeWidth: m.cw, resizeHeight: ch, resizeQuality: 'medium' });
+      const oc = new OffscreenCanvas(m.cw, ch), cx = oc.getContext('2d', { willReadFrequently: true });
+      cx.drawImage(small, 0, 0); small.close();
+      const d = cx.getImageData(0, 0, m.cw, ch).data.buffer;
+      postMessage({ type: 'size', id: m.id, w: b.width, h: b.height, amb: { w: m.cw, h: ch, d } }, [d]);
     } else if (m.type === 'draw') {
       const b = pics.get(m.id);
       if (!b) { postMessage({ type: 'drawn', id: m.id }); return; }
