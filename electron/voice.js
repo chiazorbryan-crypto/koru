@@ -25,6 +25,7 @@ async function healthy() {
 }
 async function ensure() {
   if (await healthy()) return true;
+  if (!fs.existsSync(path.join(VOICE_DIR, 'setup.ps1'))) throw Object.assign(new Error('The voice reader is coming in the next update.'), { status: 409 });
   if (!installed()) throw Object.assign(new Error('Voices aren\'t set up yet. Open Settings → Voice reader → Set up voices.'), { status: 409 });
   if (!starting) {
     starting = (async () => {
