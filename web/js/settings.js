@@ -210,8 +210,8 @@
             return;
           }
           if (!st.installed) {
-            vstat.replaceChildren(el('b', { text: 'Voices aren\'t set up on this PC yet' }), st.log ? el('pre', { text: st.log }) : null,
-              el('div.row', el('button.btn.small.primary', { onclick: async () => { await K.api.post('/k/voice/setup'); paintStatus(); } }, icon('download'), 'Set up voices')));
+            vstat.replaceChildren(...[el('b', { text: 'Voices aren\'t set up on this PC yet' }), st.log ? el('pre', { text: st.log }) : null,
+              el('div.row', el('button.btn.small.primary', { onclick: async () => { await K.api.post('/k/voice/setup'); paintStatus(); } }, icon('download'), 'Set up voices'))].filter(Boolean));
             return;
           }
           vstat.replaceChildren(el('b', { text: st.running ? 'Voice engine is on' + (st.health?.device ? ' (' + st.health.device + ')' : '') : 'Voices are set up. The engine starts when you use them.' }));
