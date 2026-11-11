@@ -209,6 +209,7 @@
             setTimeout(() => { if (vstat.isConnected) paintStatus(); }, 2000);
             return;
           }
+          if (!st.installed && !st.available) { vstat.replaceChildren(el('b', { text: 'The voice reader is coming in the next update.' })); return; }
           if (!st.installed) {
             vstat.replaceChildren(...[el('b', { text: 'Voices aren\'t set up on this PC yet' }), st.log ? el('pre', { text: st.log }) : null,
               el('div.row', el('button.btn.small.primary', { onclick: async () => { await K.api.post('/k/voice/setup'); paintStatus(); } }, icon('download'), 'Set up voices'))].filter(Boolean));

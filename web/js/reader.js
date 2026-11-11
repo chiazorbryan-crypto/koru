@@ -521,8 +521,33 @@
       [...strip.querySelectorAll('.pg')].forEach(observe);
       atEnd.observe(end); nearEnd.observe(end);
       let lastY = 0, ticking = false;
+      // Smooth guard: frame times are watched while you scroll. If this PC stutters in two checks in a row,
+      // the ambient light steps down by itself (per page, then off) and this PC remembers it.
+      const guard = { gaps: [], last: 0, raf: 0, until: 0, bad: 0 };
+      const judge = () => {
+        const g = guard.gaps.sort((a, b) => a - b); guard.gaps = [];
+        const base = g[Math.floor(g.length * 0.1)] || 16.7;
+        const share = g.filter(x => x > Math.max(base * 2.2, 25)).length / g.length;
+        guard.bad = share > 0.15 ? guard.bad + 1 : 0;
+        if (guard.bad < 2) return;
+        guard.bad = 0;
+        const o = K.readerSettings();
+        if (!o.ambient) return;
+        if (o.ambMode !== 'page') { setReader({ ambMode: 'page' }); applyAmb(K.readerSettings()); K.toast('Scrolling stuttered, so the ambient light now changes once per page. You can switch it back in reader settings.'); }
+        else { setReader({ ambient: false }); applyAmb(K.readerSettings()); K.toast('Scrolling still stuttered, so ambient light is off on this PC. Turn it back on in reader settings.'); }
+      };
+      const guardTick = t => {
+        guard.raf = 0;
+        if (state !== s) return;
+        if (guard.last && t - guard.last < 1000) guard.gaps.push(t - guard.last);
+        guard.last = t;
+        if (guard.gaps.length >= 240) judge();
+        if (t < guard.until) guard.raf = requestAnimationFrame(guardTick); else guard.last = 0;
+      };
       pagesBox.addEventListener('scroll', () => {
         kickAmb();
+        guard.until = performance.now() + 250;
+        if (!guard.raf) guard.raf = requestAnimationFrame(guardTick);
         if (ticking) return;
         ticking = true;
         requestAnimationFrame(() => { ticking = false; const y = pagesBox.scrollTop; if (Math.abs(y - lastY) > 80) { if (y > lastY && !box?.classList.contains('hide-ui')) box?.classList.add('hide-ui'); lastY = y; } });

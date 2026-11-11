@@ -47,7 +47,7 @@ export async function voiceRoute(request, url) {
   try {
     if (sub === '/status') {
       const h = await healthy();
-      return json(200, { installed: installed(), running: !!h, health: h, setup: setup ? 'running' : null, log: setupLog.slice(-1500) });
+      return json(200, { available: fs.existsSync(path.join(VOICE_DIR, 'setup.ps1')), installed: installed(), running: !!h, health: h, setup: setup ? 'running' : null, log: setupLog.slice(-1500) });
     }
     if (sub === '/setup' && request.method === 'POST') {
       if (!setup) {

@@ -1,6 +1,6 @@
 {
   "name": "koru",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Koru — a personal manga and manhwa reader",
   "type": "module",
   "main": "electron/main.js",
@@ -30,8 +30,7 @@
       "electron/**/*",
       "web/**/*",
       "build/icon.ico",
-      "package.json",
-      "voice/**/*"
+      "package.json"
     ],
     "win": {
       "target": "nsis",
@@ -46,9 +45,6 @@
       "artifactName": "Koru-Setup-${version}.${ext}"
     },
     "publish": null,
-    "electronDist": "node_modules/electron/dist",
-    "asarUnpack": [
-      "voice/**/*"
-    ]
+    "electronDist": "node_modules/electron/dist"
   }
 }
