@@ -23,7 +23,7 @@ export const USER_AGENT = 'Koru/0.1 (personal reader)';
 // Image servers that only serve pictures to their own site get that site as Referer (what its own pages send).
 export const REFERERS = [   // [hostSuffix, referer]
   ['pstatic.net', 'https://www.webtoons.com/'], ['tnlycdn.com', 'https://toonily.com/'],
-  ['cmzcdn.org', 'https://comizy.io/']
+  ['cmzcdn.org', 'https://comizy.io/'], ['readdetectiveconan.com', 'https://mangapill.com/']
 ];
 const refererFor = u => { try { const h = new URL(u).hostname; return REFERERS.find(([d]) => h === d || h.endsWith('.' + d))?.[1]; } catch { return undefined; } };
 // "/k/fetch?u=<url>" (images routed through Koru) back to the real url
@@ -33,7 +33,9 @@ const ALLOWED = ['omegascans.org', 'vortexscans.org', 'asurascans.com', 'flameco
   'webtoons.com', 'pstatic.net', 'toonily.com', 'tnlycdn.com',
   'weebcentral.com', 'compsci88.com', 'planeptune.us', 'lastation.us', 'lowee.us', 'leanbox.us',
   'comizy.io', 'cmzcdn.org', 'hivetoons.org', 'hivetoon.com',
-  'en-thunderscans.com', 'madarascans.net', 'wp.com', 'kingofshojo.com', 'violetmanga.com', 'drakecomic.net', 'ibb.co'];
+  'en-thunderscans.com', 'madarascans.net', 'wp.com', 'kingofshojo.com', 'violetmanga.com', 'drakecomic.net', 'ibb.co',
+  'qimanga.com', 'qiscans.org', 'nyxscans.com', 'magustoon.org', 'rokaricomics.com', 'elftoon.net', 'elftoon.com',
+  'mangapill.com', 'readdetectiveconan.com'];
 export const allowedUrl = u => {
   try {
     const url = new URL(u);

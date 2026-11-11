@@ -166,6 +166,8 @@
       return { provider: 'flame', slug, id: s.series_id, title: s.title, cover: flameCover(s.series_id, s.cover), description: K.plainText(s.description), status: s.status,
         author: [s.author, s.artist].flat().filter(Boolean).join(' · '), tags: Array.isArray(s.tags) ? s.tags : [], url: `${FLAME}/series/${slug}`, _chapters: pp.chapters || [] };
     },
+    forget: slug => K.forget('flame:s:' + slug), // fresh chapter checks re-read the series page
+
     async chapters(series) {
       let list = series._chapters;
       if (!list) list = nextData(await K.api.siteText(`${FLAME}/series/${enc(series.slug)}`)).chapters || [];
@@ -227,20 +229,35 @@
   K.addProvider = p => { if (!p?.id || K.providers[p.id]) return; K.providers[p.id] = p; K.providerList.push(p); };
 
   // Short-lived memory cache so moving between pages doesn't refetch everything.
-  const cache = new Map();
+  // Two callers asking for the same thing at once share one request.
+  const cache = new Map(), pending = new Map();
   K.cached = async function cached(key, ttlMs, fn) {
     const hit = cache.get(key);
     if (hit && Date.now() - hit.at < ttlMs) return hit.value;
-    const value = await fn();
-    cache.set(key, { at: Date.now(), value });
-    return value;
+    if (pending.has(key)) return pending.get(key);
+    const p = (async () => {
+      await null; // so `p` exists before fn runs
+      try { const value = await fn(); if (pending.get(key) === p) cache.set(key, { at: Date.now(), value }); return value; }
+      finally { if (pending.get(key) === p) pending.delete(key); }
+    })();
+    pending.set(key, p);
+    return p;
   };
-  K.forget = key => cache.delete(key);
+  K.forget = key => { cache.delete(key); pending.delete(key); };
   K.getSeries = (provider, slug) => K.cached(`s:${provider}:${slug}`, 10 * 60e3, () => K.providers[provider].series(slug));
+  // fresh: skip the cache (the new-chapter checker). Sources that read the chapter list off the series page
+  // keep it on the series object (_chapters), so that page is fetched again too; a source can also drop its
+  // own page cache through forget(slug).
   K.getChapters = async (provider, slug, fresh) => {
-    const key = `c:${provider}:${slug}`;
-    if (fresh) K.forget(key);
+    const p = K.providers[provider];
+    if (!p) throw new Error('That source isn\'t in Koru any more.');
+    const key = `c:${provider}:${slug}`, skey = `s:${provider}:${slug}`;
+    if (fresh) {
+      K.forget(key);
+      if (cache.get(skey)?.value?._chapters) K.forget(skey);
+      p.forget?.(slug);
+    }
     const s = await K.getSeries(provider, slug);
-    return K.cached(key, 5 * 60e3, () => K.providers[provider].chapters(s));
+    return K.cached(key, 5 * 60e3, () => p.chapters(s));
   };
 })();

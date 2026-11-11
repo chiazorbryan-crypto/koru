@@ -630,3 +630,18 @@ html.plain .nav-btn .dotb, html.plain .card .newb { box-shadow: none; }
   .hero .wrap { flex-direction: column; align-items: flex-start; }
   .grid { grid-template-columns: repeat(auto-fill, minmax(min(var(--cover-w), 130px), 1fr)); gap: 12px 10px; }
 }
+
+/* voice reader */
+.reader .voicepop { position: absolute; left: max(14px, calc(50% - 520px)); bottom: 86px; z-index: 5; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px;
+  border-radius: 99px; max-width: calc(100% - 28px); animation: rise-in var(--t) var(--ease-move); }
+.reader .voicepop > .ic { color: var(--accent-solid); }
+.reader .voicepop .vcol { display: grid; min-width: 0; max-width: 260px; line-height: 1.15; }
+.reader .voicepop .vcol b { font-size: .85em; }
+.reader .voicepop .vstat { font-size: .72em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reader .voicepop select.sel-in { height: 30px; max-width: 150px; font-size: .82em; }
+.reader .voiceb.on { color: var(--accent-solid); border-color: var(--accent); }
+.reader .vmark { position: absolute; z-index: 2; pointer-events: none; border-radius: 14px; outline: 3px solid var(--accent-solid);
+  box-shadow: 0 0 0 9999px rgba(0,0,0,.18), 0 0 24px var(--accent); animation: fade-in var(--t) both; }
+.reader.zen .voicepop { display: flex !important; }
+.vsetup { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); margin-bottom: 10px; font-size: 13px; }
+.vsetup pre { margin: 0; max-height: 120px; overflow: auto; font: 11px/1.35 ui-monospace, Consolas, monospace; color: var(--muted); white-space: pre-wrap; user-select: text; }

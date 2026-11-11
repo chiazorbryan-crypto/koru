@@ -1,5 +1,5 @@
-// Koru sources: WordPress "MangaThemesia" scan sites (Thunder, Madara, King of Shojo, Violet)
-// plus Drake Scans (its own Next.js site with a small JSON API).
+// Koru sources: WordPress "MangaThemesia" scan sites (Thunder, Madara, King of Shojo, Violet, Rokari)
+// plus Drake Scans and Elf Toon (the same Next.js platform with a small JSON API).
 // Shapes are the same as providers.js. Locked (coin) chapters are shown as locked and never opened.
 'use strict';
 (function () {
@@ -139,12 +139,11 @@
   const madarascans = themesia({ id: 'madarascans', name: 'Madara Scans', short: 'Madara', site: 'https://madarascans.net', hue: '#ff3b4f', listPath: '/series/' });
   const kingofshojo = themesia({ id: 'kingofshojo', name: 'King of Shojo', short: 'KoShojo', site: 'https://kingofshojo.com', hue: '#2ec4b6', listPath: '/manga/' });
   const violet = themesia({ id: 'violet', name: 'Violet Scans', short: 'Violet', site: 'https://violetmanga.com', hue: '#e05cff', listPath: '/comics/' });
+  const rokari = themesia({ id: 'rokari', name: 'Rokari Comics', short: 'Rokari', site: 'https://rokaricomics.com', hue: '#c7a46b', listPath: '/manga/' });
 
-  // ---- Drake Scans: drakecomic.net (Next.js). List/search via /api/series, series + chapter list from the
-  // series page's embedded data, pages via /api/chapters/next (plain GET JSON). ----
-  const DRAKE = 'https://drakecomic.net';
-  const drakeAbs = u => (typeof u === 'string' && u ? (u.startsWith('/') ? DRAKE + u : https(u)) : null);
-  const drakeIds = new Map(); // series slug -> internal id (needed for the pages call)
+  // ---- Drake Scans platform (Next.js): drakecomic.net, and Elf Toon (elftoon.net) which runs the same software.
+  // List/search via /api/series, series + chapter list from the series page's embedded data,
+  // pages via /api/chapters/next (plain GET JSON). ----
   // Next.js streams page data as self.__next_f.push([1,"..."]) string chunks; join them back up.
   const rscText = html => {
     let out = '';
@@ -152,7 +151,7 @@
     return out;
   };
   // Parse the JSON object/array that starts at s[i] ('{' or '[').
-  const balanced = (s, i) => {
+  const balanced = (s, i, name) => {
     let depth = 0, inStr = false;
     for (let j = i; j < s.length; j++) {
       const c = s[j];
@@ -161,13 +160,7 @@
       else if (c === '{' || c === '[') depth++;
       else if (c === '}' || c === ']') { if (--depth === 0) return JSON.parse(s.slice(i, j + 1)); }
     }
-    throw new Error('Drake Scans page data was cut short.');
-  };
-  const drakeProps = html => {
-    const s = rscText(html);
-    const i = s.indexOf('{"series":{"id"');
-    if (i < 0) throw new Error('Drake Scans didn\'t return this series.');
-    return balanced(s, i);
+    throw new Error(name + ' page data was cut short.');
   };
   const drakeName = c => {
     const n = Number(c.number), t = String(c.title || '').trim();
@@ -179,58 +172,70 @@
     return { slug: String(c.number), name: drakeName(c), number: Number(c.number), date: c.publishedAt || null, locked,
       freeAt: locked ? (c.freeAt || c.becomesFreeAt || (early ? c.earlyAccessUntil : null)) : null };
   };
-  const drake = {
-    id: 'drake', name: 'Drake Scans', short: 'Drake', site: DRAKE, hue: '#8bd450',
-    async list({ sort = 'latest', page = 1, q = '' } = {}) {
-      const j = await K.api.site(`${DRAKE}/api/series?page=${page}${q ? '&q=' + enc(q) : sort === 'popular' ? '&sort=popular' : ''}`);
-      const items = (j?.data || []).filter(d => String(d.type).toUpperCase() !== 'NOVEL').map(d => {
-        const slug = d.urlSlug || d.slug;
-        if (d.id) drakeIds.set(slug, d.id);
-        return { provider: 'drake', slug, title: d.title, cover: drakeAbs(d.coverImage), status: cap(d.status),
-          latest: d.chapters?.[0]?.number != null ? 'Chapter ' + d.chapters[0].number : '' };
-      });
-      return { items, hasMore: !!j?.meta?.hasMore };
-    },
-    async series(slug) {
-      const p = drakeProps(await K.api.siteText(`${DRAKE}/series/comic/${enc(slug)}?sort=desc`));
-      const s = p.series || {};
-      if (s.id) drakeIds.set(slug, s.id);
-      return {
-        provider: 'drake', slug, id: s.id, title: s.title, cover: drakeAbs(s.coverImage), description: K.plainText(s.description || ''),
-        status: cap(s.status), author: s.team?.name || '', tags: [...(s.genres || []), ...(s.tags || [])].map(g => g?.name).filter(Boolean),
-        alt: s.altTitle || '', url: `${DRAKE}/series/comic/${slug}`, nsfw: !!s.nsfw,
-        _chapters: (p.chapters || []).map(drakeChapter), _pages: Number(p.totalPages) || 1, _desc: p.sortOrder === 'desc'
-      };
-    },
-    async chapters(series) {
-      let first = series._chapters, total = series._pages, desc = series._desc;
-      if (!first) { const s = await this.series(series.slug); first = s._chapters; total = s._pages; desc = s._desc; }
-      const out = [...first];
-      for (let page = 2; page <= Math.min(total, 40); page++) {
-        const p = drakeProps(await K.api.siteText(`${DRAKE}/series/comic/${enc(series.slug)}?sort=desc&page=${page}`));
-        out.push(...(p.chapters || []).map(drakeChapter));
-      }
-      const seen = new Set();
-      const list = out.filter(c => !seen.has(c.slug) && seen.add(c.slug));
-      return desc ? list : list.sort((a, b) => b.number - a.number);
-    },
-    async pages(slug, chapterSlug) {
-      const n = Number(chapterSlug);
-      if (!Number.isFinite(n)) throw new Error('Chapter not found.');
-      const sid = drakeIds.get(slug) || (await this.series(slug)).id;
-      const j = await K.api.site(`${DRAKE}/api/chapters/next?seriesId=${enc(sid)}&afterNumber=${(n - 0.001).toFixed(4)}&limit=1`);
-      const c = j?.chapters?.[0];
-      if (!c || Math.abs(Number(c.number) - n) > 1e-6) throw new Error('Chapter not found.');
-      if (!c.hasAccess || c.earlyAccessLocked || (c.isLocked && Number(c.effectivePrice ?? c.coinPrice) > 0)) throw lockedError();
-      const pages = (c.pages || []).filter(pg => pg.kind !== 'AD');
-      if (pages.some(pg => pg.isRedacted)) throw lockedError();
-      // Some free chapters are served as encrypted/scrambled tiles. Koru doesn't undo that protection.
-      if (c.protection?.isProtected || pages.some(pg => pg.isEncrypted || pg.hasFragments || pg.hasStrips || (pg.tiles || []).length))
-        throw new Error('Drake Scans protects this chapter\'s images (scrambled tiles), so Koru can\'t show it. Read it on drakecomic.net.');
-      return pages.map(pg => ({ url: drakeAbs(pg.imageUrl), w: pg.width || null, h: pg.height || null })).filter(pg => pg.url);
-    },
-    chapterUrl: (slug, ch) => `${DRAKE}/series/comic/${slug}/chapter/${ch}`
-  };
+  function drakePlatform({ id, name, short, site, hue }) {
+    const abs = u => (typeof u === 'string' && u ? (u.startsWith('/') ? site + u : https(u)) : null);
+    const ids = new Map(); // series slug -> internal id (needed for the pages call)
+    const props = html => {
+      const s = rscText(html);
+      const i = s.indexOf('{"series":{"id"');
+      if (i < 0) throw new Error(name + ' didn\'t return this series.');
+      return balanced(s, i, name);
+    };
+    return {
+      id, name, short, site, hue,
+      async list({ sort = 'latest', page = 1, q = '' } = {}) {
+        const j = await K.api.site(`${site}/api/series?page=${page}${q ? '&q=' + enc(q) : sort === 'popular' ? '&sort=popular' : ''}`);
+        const items = (j?.data || []).filter(d => String(d.type).toUpperCase() !== 'NOVEL').map(d => {
+          const slug = d.urlSlug || d.slug;
+          if (d.id) ids.set(slug, d.id);
+          return { provider: id, slug, title: d.title, cover: abs(d.coverImage), status: cap(d.status),
+            latest: d.chapters?.[0]?.number != null ? 'Chapter ' + d.chapters[0].number : '' };
+        });
+        return { items, hasMore: !!j?.meta?.hasMore };
+      },
+      async series(slug) {
+        const p = props(await K.api.siteText(`${site}/series/comic/${enc(slug)}?sort=desc`));
+        const s = p.series || {};
+        if (s.id) ids.set(slug, s.id);
+        return {
+          provider: id, slug, id: s.id, title: s.title, cover: abs(s.coverImage), description: K.plainText(s.description || ''),
+          status: cap(s.status), author: s.team?.name || '', tags: [...(s.genres || []), ...(s.tags || [])].map(g => g?.name).filter(Boolean),
+          alt: s.altTitle || '', url: `${site}/series/comic/${slug}`, nsfw: !!s.nsfw,
+          _chapters: (p.chapters || []).map(drakeChapter), _pages: Number(p.totalPages) || 1, _desc: p.sortOrder === 'desc'
+        };
+      },
+      async chapters(series) {
+        let first = series._chapters, total = series._pages, desc = series._desc;
+        if (!first) { const s = await this.series(series.slug); first = s._chapters; total = s._pages; desc = s._desc; }
+        const out = [...first];
+        for (let page = 2; page <= Math.min(total, 40); page++) {
+          const p = props(await K.api.siteText(`${site}/series/comic/${enc(series.slug)}?sort=desc&page=${page}`));
+          out.push(...(p.chapters || []).map(drakeChapter));
+        }
+        const seen = new Set();
+        const list = out.filter(c => !seen.has(c.slug) && seen.add(c.slug));
+        return desc ? list : list.sort((a, b) => b.number - a.number);
+      },
+      async pages(slug, chapterSlug) {
+        const n = Number(chapterSlug);
+        if (!Number.isFinite(n)) throw new Error('Chapter not found.');
+        const sid = ids.get(slug) || (await this.series(slug)).id;
+        const j = await K.api.site(`${site}/api/chapters/next?seriesId=${enc(sid)}&afterNumber=${(n - 0.001).toFixed(4)}&limit=1`);
+        const c = j?.chapters?.[0];
+        if (!c || Math.abs(Number(c.number) - n) > 1e-6) throw new Error('Chapter not found.');
+        if (!c.hasAccess || c.earlyAccessLocked || (c.isLocked && Number(c.effectivePrice ?? c.coinPrice) > 0)) throw lockedError();
+        const pages = (c.pages || []).filter(pg => pg.kind !== 'AD');
+        if (pages.some(pg => pg.isRedacted)) throw lockedError();
+        // Some free chapters are served as encrypted/scrambled tiles. Koru doesn't undo that protection.
+        if (c.protection?.isProtected || pages.some(pg => pg.isEncrypted || pg.hasFragments || pg.hasStrips || (pg.tiles || []).length))
+          throw new Error(`${name} protects this chapter's images (scrambled tiles), so Koru can't show it. Read it on ${new URL(site).hostname}.`);
+        return pages.map(pg => ({ url: abs(pg.imageUrl), w: pg.width || null, h: pg.height || null })).filter(pg => pg.url);
+      },
+      chapterUrl: (slug, ch) => `${site}/series/comic/${slug}/chapter/${ch}`
+    };
+  }
+  const drake = drakePlatform({ id: 'drake', name: 'Drake Scans', short: 'Drake', site: 'https://drakecomic.net', hue: '#8bd450' });
+  const elftoon = drakePlatform({ id: 'elftoon', name: 'Elf Toon', short: 'Elf', site: 'https://elftoon.net', hue: '#d7f75b' });
 
-  for (const p of [thunder, madarascans, kingofshojo, violet, drake]) K.addProvider(p);
+  for (const p of [thunder, madarascans, kingofshojo, violet, rokari, drake, elftoon]) K.addProvider(p);
 })();

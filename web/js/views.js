@@ -184,34 +184,123 @@
   };
 
   // ---------- new chapter checks for your library ----------
-  let checking = false;
-  K.checkUpdates = async function (force) {
-    if (checking) return;
-    checking = true;
-    let found = 0;
+  // Each favourite keeps a baseline: baseNum, the highest free chapter number you had already seen.
+  // newCount is worked out again on every check: free chapters numbered above baseNum that you haven't read.
+  // So it never adds up twice, ignores locked chapters (until they become free), doesn't care how a site orders
+  // its list, and goes down as you read. Opening the series page (which sets newCount = 0 and known = the top
+  // chapter) moves the baseline up to what you saw there. A source that fails or answers with nothing leaves
+  // the entry exactly as it was. Chapter lists are always fetched fresh, never from the 5-minute cache.
+  const AUTO_EVERY = 30 * 60e3, AUTO_SKIP = 25 * 60e3, FOCUS_AFTER = 15 * 60e3;
+  let running = null, lastRun = 0;
+  const finiteNums = list => list.map(c => c.number).filter(n => typeof n === 'number' && Number.isFinite(n));
+  function updateEntry(key, item, chs) {
+    const free = chs.filter(c => !c.locked);
+    const freeNums = finiteNums(free);
+    const knownIdx = item.known ? chs.findIndex(c => c.slug === item.known) : -1;
+    // You opened the series page since the last check: it moves `known` to its top chapter and zeroes newCount.
+    const acked = item.ackSlug !== item.known || (item.lastNew > 0 && !item.newCount);
+    let base = typeof item.baseNum === 'number' && Number.isFinite(item.baseNum) ? item.baseNum : null;
+    if (item.ackSlug === undefined && item.newCount > 0 && freeNums.length) {
+      // saved by an older Koru (known = latest, newCount = pending): keep that many as new
+      const distinct = [...new Set(freeNums)].sort((a, b) => b - a);
+      base = distinct[item.newCount] ?? distinct[distinct.length - 1] - 1;
+    } else if (base == null || acked) {
+      // first check, or after opening the series page: the top chapter you saw and everything below it is "seen"
+      const seenNums = knownIdx >= 0 ? finiteNums(chs.slice(knownIdx).filter(c => !c.locked)) : freeNums;
+      base = seenNums.length ? Math.max(...seenNums) : knownIdx >= 0 ? Math.min(...finiteNums(chs)) - 1 : null;
+      if (!Number.isFinite(base)) base = null;
+    }
+    const read = K.data.read[key] || {};
+    const fresh = base == null ? new Set()
+      : new Set(free.filter(c => Number.isFinite(c.number) && c.number > base && !read[c.slug]).map(c => c.number));
+    const before = item.newCount || 0;
+    Object.assign(item, { baseNum: base, newCount: fresh.size, lastNew: fresh.size, total: chs.length, checkedAt: Date.now() });
+    if (chs[0]) item.known = chs[0].slug;
+    item.ackSlug = item.known ?? null;
+    return { now: fresh.size, gained: Math.max(0, fresh.size - before) };
+  }
+  function notify(gainedSeries, total) {
+    if (K.data.settings.notifyNew === false || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    if (document.hasFocus()) return; // you're looking at Koru: the toast is enough
     try {
-      for (const [k, item] of Object.entries(K.data.library)) {
-        if (!force && item.checkedAt && Date.now() - item.checkedAt < 30 * 60e3) continue;
-        try {
-          const chs = await K.getChapters(item.provider, item.slug, true);
-          const latest = chs[0]?.slug;
-          if (item.known && latest && latest !== item.known) {
-            const idx = chs.findIndex(c => c.slug === item.known);
-            const n = idx > 0 ? idx : 0;
-            if (n) { item.newCount = (item.newCount || 0) + n; found += n; }
+      const one = gainedSeries.length === 1 ? gainedSeries[0] : null;
+      const n = new Notification(one ? one.title : `New chapters in ${gainedSeries.length} series`, {
+        body: one ? `${one.gained} new chapter${one.gained > 1 ? 's' : ''}` : gainedSeries.slice(0, 4).map(s => s.title).join(', ') + (gainedSeries.length > 4 ? '…' : '') + ` · ${total} chapters`,
+        icon: 'img/icon.svg', tag: 'koru-new', silent: false
+      });
+      n.onclick = () => {
+        window.focus(); n.close();
+        if (one) K.go(`/series/${one.provider}/${encodeURIComponent(one.slug)}`);
+        else { sessionStorage.setItem('koru-libfilter', 'new'); sessionStorage.setItem('koru-libtab', 'fav'); K.go('/library'); }
+      };
+    } catch { /* notifications not available here */ }
+  }
+  // force: check everything now and always say how it went (the Library button). Otherwise only entries not
+  // checked in the last 25 minutes, and only speak up when something is new.
+  let runningForced = false;
+  K.checkUpdates = function (force) {
+    // a click while a background check runs waits for it, then checks everything (and reports)
+    if (running) return force && !runningForced ? running.then(() => K.checkUpdates(true)) : running;
+    runningForced = !!force;
+    running = (async () => {
+      const entries = Object.entries(K.data.library).filter(([, it]) => it && K.providers[it.provider]
+        && (force || !it.checkedAt || Date.now() - it.checkedAt >= AUTO_SKIP));
+      const failed = new Map(), gainedSeries = [];
+      let withNew = 0, chapters = 0, gained = 0;
+      // One queue per source (gentle on each site), a few sources at a time.
+      const bySource = new Map();
+      for (const e of entries) { const q = bySource.get(e[1].provider) || []; q.push(e); bySource.set(e[1].provider, q); }
+      const queues = [...bySource.values()];
+      const worker = async () => {
+        while (queues.length) {
+          const q = queues.shift();
+          for (const [key, item] of q) {
+            try {
+              const chs = await K.getChapters(item.provider, item.slug, true);
+              if (K.data.library[key] !== item) continue; // removed while we were checking
+              if (!Array.isArray(chs) || !chs.length) throw new Error('empty chapter list');
+              // A list that suddenly lost the chapter we knew and most of its length is a broken answer, not news.
+              if (item.known && item.total && chs.length < item.total / 2 && !chs.some(c => c.slug === item.known)) throw new Error('chapter list looks incomplete');
+              const r = updateEntry(key, item, chs);
+              if (r.gained) { gained += r.gained; gainedSeries.push({ provider: item.provider, slug: item.slug, title: item.title || item.slug, gained: r.gained }); }
+            } catch (e) {
+              const name = K.providers[item.provider]?.short || item.provider;
+              failed.set(name, (failed.get(name) || 0) + 1);
+            }
+            await new Promise(r => setTimeout(r, 300));
           }
-          if (latest) item.known = latest;
-          item.total = chs.length;
-          item.checkedAt = Date.now();
-        } catch {}
-        await new Promise(r => setTimeout(r, 400));
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(4, queues.length) }, worker));
+      for (const it of Object.values(K.data.library)) if (it?.newCount && K.providers[it.provider]) { withNew++; chapters += it.newCount; }
+      lastRun = Date.now();
+      if (entries.length) K.save('library');
+      const s = n => (n === 1 ? '' : 's');
+      if (gainedSeries.length) {
+        K.toast(`New chapters in ${gainedSeries.length} series (${gained} chapter${s(gained)})`, 'ok');
+        if (!/^#\/?(library)?$/.test(location.hash)) K.setNavBadge('library', true);
+        notify(gainedSeries, gained);
+      } else if (force) {
+        if (!entries.length) K.toast('Add series to your favourites to get new chapter checks.');
+        else if (withNew) K.toast(`No newer chapters. ${withNew} series still ha${withNew === 1 ? 's' : 've'} unread new chapters.`);
+        else if (failed.size < entries.length) K.toast('No new chapters yet');
       }
-      K.save('library');
-      if (found) { K.toast(`${found} new chapter${found > 1 ? 's' : ''} in your library`, 'ok'); K.setNavBadge('library', true); }
+      if (failed.size && (force || failed.size === bySource.size)) {
+        const list = [...failed.keys()];
+        K.toast(`Couldn't check ${list.slice(0, 3).join(', ')}${list.length > 3 ? ' and ' + (list.length - 3) + ' more' : ''}. Their counts were kept; trying again later.`, 'error');
+      }
       document.dispatchEvent(new CustomEvent('koru-library'));
-    } finally { checking = false; }
-    return found;
+      return { checked: entries.length, gained, seriesWithNew: withNew, newChapters: chapters, failed: [...failed.keys()] };
+    })();
+    const done = () => { running = null; };
+    running.then(done, done);
+    return running;
   };
+  // While Koru stays open: every 30 minutes, and when you come back to the window after a while.
+  setInterval(() => { if (Object.keys(K.data.library || {}).length) K.checkUpdates(); }, AUTO_EVERY);
+  const onBack = () => { if (lastRun && Date.now() - lastRun > FOCUS_AFTER && document.visibilityState !== 'hidden') K.checkUpdates(); };
+  window.addEventListener('focus', onBack);
+  document.addEventListener('visibilitychange', onBack);
 
   // Which books a Library filter shows. Hidden and trashed books only show under their own filter.
   K.flagPass = (x, filter) => {
@@ -233,9 +322,10 @@
     const hello = hour < 5 ? 'Late night reading' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
     const refresh = el('button.btn', { title: 'Check for new chapters', onclick: async () => {
       refresh.disabled = true; refresh.querySelector('.ic').style.animation = 'spin 1s linear infinite';
-      const n = await K.checkUpdates(true);
-      if (!n) K.toast('No new chapters yet');
-      refresh.disabled = false; refresh.querySelector('.ic').style.animation = '';
+      // A first manual check is a good moment to ask for desktop notifications (only matters in a browser;
+      // the Koru app allows them already). checkUpdates shows its own result.
+      try { if (typeof Notification !== 'undefined' && Notification.permission === 'default' && K.data.settings.notifyNew !== false) Notification.requestPermission().catch(() => {}); } catch {}
+      try { await K.checkUpdates(true); } finally { refresh.disabled = false; refresh.querySelector('.ic').style.animation = ''; }
     } }, icon('refresh'), 'Check updates');
     root.append(el('div.head', el('div', el('h1', { text: 'Library' }), el('div.sub', { text: hello })), el('div.sp'), refresh));
     const body = el('div');

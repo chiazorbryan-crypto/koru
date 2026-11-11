@@ -170,6 +170,56 @@
         toggle('Zen mode', ro.zen, v => setR({ zen: v }), 'Chapters open full screen with just the pages. Press Z while reading to switch'),
         toggle('Show frame rate', ro.fps, v => setR({ fps: v }), 'A small meter while reading, to check for lag')));
 
+      if (K.info?.platform === 'desktop' && K.voiceSettings) {
+        const vbox = el('div'), vstat = el('div.vsetup', el('span', { text: 'Checking the voice engine…' }));
+        grid.append(panel('voice', 'Voice reader', 'Reads the speech bubbles aloud while you read (V or the wave button in the reader). Free voices that run on this PC, including your own.', vstat, vbox));
+        const vo = K.voiceSettings();
+        const setVo = patch => { K.data.settings.voice = { ...K.voiceSettings(), ...patch }; K.save('settings'); };
+        const showControls = async () => {
+          let list = [];
+          try { list = await K.voiceList(true); } catch (e) { vbox.replaceChildren(el('p.muted', { text: e.message })); return; }
+          const pick = select('Voice', list.map(v => [v.id, v.name + (v.kind === 'clone' ? ' (you)' : '')]), vo.voice || list[0]?.id, v => setVo({ voice: v }));
+          const speed = select('Speed', [0.8, 0.9, 1, 1.1, 1.25, 1.4, 1.6].map(v => [String(v), v + '×']), String(vo.speed || 1), v => setVo({ speed: Number(v) }));
+          const rec = el('input', { type: 'file', accept: 'audio/*,.wav,.mp3,.m4a,.ogg', style: { display: 'none' } });
+          const mineBtn = el('button.btn.small.primary', { onclick: () => rec.click() }, icon('mic'), list.some(v => v.kind === 'clone') ? 'Remake my voice' : 'Make my voice');
+          rec.onchange = async () => {
+            const f = rec.files[0]; rec.value = '';
+            if (!f) return;
+            mineBtn.disabled = true; K.toast('Learning your voice… this can take a few minutes', 'info');
+            try {
+              const ext = (f.name.split('.').pop() || 'wav').toLowerCase();
+              const r = await fetch('/k/voice/clone-upload?ext=' + encodeURIComponent(ext) + '&name=My%20voice', { method: 'POST', body: f });
+              const j = await r.json().catch(() => ({}));
+              if (!r.ok || j.ok === false) throw new Error(j.error || 'Couldn\'t learn that voice');
+              if (j.id) setVo({ voice: j.id });
+              K.toast('Your voice is ready', 'ok'); draw();
+            } catch (e) { K.toast(e.message, 'error'); mineBtn.disabled = false; }
+          };
+          vbox.replaceChildren(pick, speed,
+            el('div.row', { style: { marginTop: '8px' } },
+              el('button.btn.small', { onclick: () => K.voicePreview(K.voiceSettings().voice || list[0]?.id, K.voiceSettings().speed).catch(e => K.toast(e.message, 'error')) }, icon('play'), 'Preview'),
+              mineBtn, rec),
+            el('p.muted', { style: { fontSize: '.8em', margin: '8px 0 0' }, text: 'For your voice, pick a clear recording of you talking, 20 to 60 seconds, with no music behind it. It stays on this PC.' }));
+        };
+        const paintStatus = async () => {
+          let st;
+          try { st = await K.voiceStatus(); } catch { vstat.replaceChildren(el('span', { text: 'Couldn\'t reach the voice engine.' })); return; }
+          if (st.setup) {
+            vstat.replaceChildren(el('b', { text: 'Setting up voices… (downloads a few GB the first time)' }), el('pre', { text: st.log || '' }));
+            setTimeout(() => { if (vstat.isConnected) paintStatus(); }, 2000);
+            return;
+          }
+          if (!st.installed) {
+            vstat.replaceChildren(el('b', { text: 'Voices aren\'t set up on this PC yet' }), st.log ? el('pre', { text: st.log }) : null,
+              el('div.row', el('button.btn.small.primary', { onclick: async () => { await K.api.post('/k/voice/setup'); paintStatus(); } }, icon('download'), 'Set up voices')));
+            return;
+          }
+          vstat.replaceChildren(el('b', { text: st.running ? 'Voice engine is on' + (st.health?.device ? ' (' + st.health.device + ')' : '') : 'Voices are set up. The engine starts when you use them.' }));
+          showControls();
+        };
+        paintStatus();
+      }
+
       if (K.info?.platform === 'desktop') {
         const stat = el('div.gpustat', el('span', { text: 'Checking your graphics card…' }));
         const body = el('div');

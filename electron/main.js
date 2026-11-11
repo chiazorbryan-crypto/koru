@@ -7,6 +7,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { createBackend } from './backend.js';
+import { voiceRoute, stopVoice } from './voice.js';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 
@@ -180,6 +181,7 @@ app.whenReady().then(() => {
       setTimeout(() => { app.relaunch(); app.exit(0); }, 200);
       return reply(200, { ok: true });
     }
+    if (url.pathname.startsWith('/k/voice/')) return voiceRoute(request, url);
     if (url.pathname.startsWith('/k/')) {
       const body = request.method === 'GET' || request.method === 'HEAD' ? '' : await request.text();
       const r = await handle({ method: request.method, path: url.pathname, query: url.searchParams, body });
@@ -221,3 +223,4 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => app.quit());
+app.on('will-quit', stopVoice);
