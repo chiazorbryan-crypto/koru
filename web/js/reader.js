@@ -124,7 +124,6 @@
       el('div.tt', el('b', { text: s.series?.title || s.slug }), el('small', { text: s.chapter?.name || '' })),
       K.incognito() ? el('span.tag', { title: 'Nothing is saved while incognito' }, 'Incognito') : null,
       s.pages?.length ? mark : null,
-      el('button.btn.icon.voiceb', { title: 'Read aloud (V)', onclick: () => K.toggleVoice?.() }, icon('voice')),
       el('button.btn.icon.autob', { title: 'Auto-scroll (S)', onclick: () => K.toggleAuto?.() }, icon('auto')),
       el('button.btn.icon', { title: 'Zen mode (Z)', onclick: () => K.toggleZen?.() }, icon('zen')),
       el('button.btn.icon', { title: 'Chapters', onclick: () => box.querySelector('.drawer')?.classList.toggle('open') }, icon('list')));
@@ -256,7 +255,6 @@
     const SLICE = 1536, OV = 2;
     const st = s.pages.map(() => '');   // '', 'loading', 'ready'
     const files = new Map();            // page -> downloaded file, kept for this chapter so scrolling back is instant
-    const nat = [];                     // page -> [width, height] of the picture itself (voice reader)
     const job = s.pages.map(() => '');  // current worker job per page
     const freeSlices = wrap => {
       const i = Number(wrap.dataset.i);
@@ -295,7 +293,7 @@
         if (!live()) return;
         const r = await ask({ type: 'decode', id, blob: file, cw: CW });   // decoded on the worker
         if (!live()) { freeJob(id); return; }
-        wrap.style.minHeight = ''; wrap.style.aspectRatio = `${r.w} / ${r.h}`; nat[i] = [r.w, r.h];
+        wrap.style.minHeight = ''; wrap.style.aspectRatio = `${r.w} / ${r.h}`;
         if (jump && i <= jump.i) requestAnimationFrame(doJump);
         if (!ambCache.get(i) && r.amb) { ambCache.set(i, { w: r.amb.w, h: r.amb.h, d: new Uint8ClampedArray(r.amb.d) }); setAmb(i); }
         const box = el('div.slices'), ocs = [];
@@ -318,7 +316,7 @@
       im.addEventListener('load', () => {
         if (st[i] !== 'loading') return;
         wrap.style.minHeight = ''; wrap.style.aspectRatio = '';
-        ambFrom(i, im, im.naturalWidth, im.naturalHeight); nat[i] = [im.naturalWidth, im.naturalHeight];
+        ambFrom(i, im, im.naturalWidth, im.naturalHeight);
         im.classList.add('ready'); st[i] = 'ready';
       });
       im.addEventListener('error', () => { if (!im.getAttribute('src') || st[i] !== 'loading') return; st[i] = ''; failed(i); });
@@ -665,14 +663,6 @@
       paintAuto();
     }
     K.toggleAuto = () => { if (!autoShown) showAuto(true); else setAuto(!autoOn); };
-    // Read aloud: the voice reader reads the bubbles on screen (see voice.js)
-    let voice = null;
-    K.toggleVoice = () => {
-      if (!K.voiceReader) return;
-      if (!voice) voice = K.voiceReader({ s, box, pagesBox, pg, fileOf, size: i => nat[i], paged: opt.mode === 'paged', rtl: opt.rtl && opt.mode === 'paged', step: d => step(d), state: () => state });
-      if (autoOn) setAuto(false);
-      voice.toggle();
-    };
     // your own scrolling, dragging or keys hold it briefly instead of fighting you
     const hold = () => { autoHold = performance.now() + 1400; autoAcc = 0; };
     for (const ev of ['wheel', 'touchstart', 'pointerdown']) pagesBox.addEventListener(ev, hold, { passive: true });
@@ -714,7 +704,6 @@
       if (!box || e.target.matches?.('input, select, textarea')) return;
       if (e.key === 'z' || e.key === 'Z') K.toggleZen();
       else if (e.key === 's' || e.key === 'S') K.toggleAuto();
-      else if (e.key === 'v' || e.key === 'V') K.toggleVoice();
       else if (e.key === 'Escape' && box.classList.contains('zen')) K.toggleZen();
       else if (e.key === 'Escape') { if (drawer.classList.contains('open')) drawer.classList.remove('open'); else K.closeReader(); }
       else if (e.key === 'ArrowRight' || e.key === 'd') step(opt.rtl && opt.mode === 'paged' ? -1 : 1);
@@ -726,7 +715,7 @@
     };
     document.addEventListener('keydown', onKey);
     const oldCleanup = s.cleanup;
-    s.cleanup = () => { oldCleanup?.(); voice?.stop(); ofsWatch.disconnect(); cancelAnimationFrame(ambRaf); ambRaf = 0; ambCache.clear(); document.removeEventListener('keydown', onKey); clearTimeout(hideT); clearTimeout(idleT); cancelAnimationFrame(fpsRaf); cancelAnimationFrame(autoRaf); clearInterval(statT); window.removeEventListener('resize', placePop); document.removeEventListener('keydown', act); };
+    s.cleanup = () => { oldCleanup?.(); ofsWatch.disconnect(); cancelAnimationFrame(ambRaf); ambRaf = 0; ambCache.clear(); document.removeEventListener('keydown', onKey); clearTimeout(hideT); clearTimeout(idleT); cancelAnimationFrame(fpsRaf); cancelAnimationFrame(autoRaf); clearInterval(statT); window.removeEventListener('resize', placePop); document.removeEventListener('keydown', act); };
 
     // reader settings popover
     function toggleSettings() {
