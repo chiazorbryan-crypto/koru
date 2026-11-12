@@ -251,7 +251,7 @@
     if (running) return force && !runningForced ? running.then(() => K.checkUpdates(true)) : running;
     runningForced = !!force;
     running = (async () => {
-      const entries = Object.entries(K.data.library).filter(([, it]) => it && K.providers[it.provider]
+      const entries = Object.entries(K.data.library).filter(([, it]) => it && K.providers[it.provider] && !K.providers[it.provider].hidden
         && (force || !it.checkedAt || Date.now() - it.checkedAt >= AUTO_SKIP));
       const failed = new Map(), gainedSeries = [];
       let withNew = 0, chapters = 0, gained = 0;
@@ -417,6 +417,7 @@
   // ---------- Explore ----------
   K.views.explore = async function (root, r, alive) {
     let src = sessionStorage.getItem('koru-src') || 'omega';
+    if (!K.providerList.some(p => p.id === src)) src = 'omega';
     let sort = sessionStorage.getItem('koru-sort') || 'latest';
     root.append(el('div.head', el('div', el('h1', { text: 'Explore' }), el('div.sub', { text: 'Browse your sources' }))));
     if (!K.providers[src]) src = 'omega';

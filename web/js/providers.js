@@ -226,7 +226,8 @@
   K.providers = { omega, vortex, asura, flame, mangadex };
   K.providerList = [omega, vortex, asura, flame, mangadex];
   // More sources live in src-*.js and register themselves here.
-  K.addProvider = p => { if (!p?.id || K.providers[p.id]) return; K.providers[p.id] = p; K.providerList.push(p); };
+  // A hidden source (e.g. a site that currently blocks Koru) still opens old favourites, but isn't listed anywhere.
+  K.addProvider = p => { if (!p?.id || K.providers[p.id]) return; K.providers[p.id] = p; if (!p.hidden) K.providerList.push(p); };
 
   // Short-lived memory cache so moving between pages doesn't refetch everything.
   // Two callers asking for the same thing at once share one request.

@@ -134,7 +134,8 @@
     return { items: out, hasMore: !!doc.querySelector('a.nextpostslink') };
   };
   const toonily = {
-    id: 'toonily', name: 'Toonily', short: 'Toonily', site: TL, hue: '#2fd1c5',
+    // hidden for now: toonily.com sits behind a Cloudflare bot check that blocks Koru (Nov 2026)
+    id: 'toonily', name: 'Toonily', short: 'Toonily', site: TL, hue: '#2fd1c5', hidden: true,
     async list({ sort = 'latest', page = 1, q = '' } = {}) {
       const pg = page > 1 ? `page/${page}/` : '';
       if (q) return tlCards(await K.api.siteText(`${TL}/search/${q.trim().split(/\s+/).map(enc).join('-')}/${pg}`)); // the site joins words with "-"

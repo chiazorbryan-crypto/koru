@@ -2,7 +2,7 @@
 
 A personal manga and manhwa reader for Windows, with a liquid glass look you can fully customize.
 
-- **Sources (21):** Omega, Vortex, Asura, Flame, MangaDex, Thunder, Madara Scans, King of Shojo, Violet, Rokari, Drake, Elf Toon, Weeb Central, MangaBuddy (Comizy), Hive Toons, Webtoons, Toonily, Qi Scans, Nyx Scans, Magus Manga and MangaPill, read through each site's public pages and APIs. Free chapters only.
+- **Sources (20):** Omega, Vortex, Asura, Flame, MangaDex, Thunder, Madara Scans, King of Shojo, Violet, Rokari, Drake, Elf Toon, Weeb Central, MangaBuddy (Comizy), Hive Toons, Webtoons, Qi Scans, Nyx Scans, Magus Manga and MangaPill, read through each site's public pages and APIs. Free chapters only. (Toonily is hidden for now: its site blocks Koru.)
 - **Library:** favourites, continue reading, history, and new chapter checks every 30 minutes while Koru is open (plus when you come back to it), with a desktop notification
 - **Reader:** long strip or page by page, right-to-left, ambient light, auto next chapter, keyboard controls
 - **Downloads:** save chapters and read them offline
