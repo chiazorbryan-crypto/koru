@@ -30,9 +30,7 @@
       "electron/**/*",
       "web/**/*",
       "build/icon.ico",
-      "package.json",
-      "voice/**/*",
-      "!voice/**/__pycache__/**"
+      "package.json"
     ],
     "win": {
       "target": "nsis",
@@ -47,9 +45,6 @@
       "artifactName": "Koru-Setup-${version}.${ext}"
     },
     "publish": null,
-    "electronDist": "node_modules/electron/dist",
-    "asarUnpack": [
-      "voice/**/*"
-    ]
+    "electronDist": "node_modules/electron/dist"
   }
 }
