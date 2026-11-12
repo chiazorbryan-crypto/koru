@@ -238,6 +238,14 @@
   // force: check everything now and always say how it went (the Library button). Otherwise only entries not
   // checked in the last 25 minutes, and only speak up when something is new.
   let runningForced = false;
+  // Background checks stay out of the way: they wait while you read or scroll and use idle moments only,
+  // so a slow PC never stutters because of them. A check you start yourself runs right away.
+  let lastBusy = 0;
+  document.addEventListener('scroll', () => { lastBusy = performance.now(); }, { capture: true, passive: true });
+  const calm = async () => {
+    while (document.documentElement.classList.contains('reading') || performance.now() - lastBusy < 2000) await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => (window.requestIdleCallback ? requestIdleCallback(r, { timeout: 3000 }) : setTimeout(r, 200)));
+  };
   K.checkUpdates = function (force) {
     // a click while a background check runs waits for it, then checks everything (and reports)
     if (running) return force && !runningForced ? running.then(() => K.checkUpdates(true)) : running;
@@ -255,6 +263,7 @@
         while (queues.length) {
           const q = queues.shift();
           for (const [key, item] of q) {
+            if (!runningForced) await calm();
             try {
               const chs = await K.getChapters(item.provider, item.slug, true);
               if (K.data.library[key] !== item) continue; // removed while we were checking
@@ -271,7 +280,7 @@
           }
         }
       };
-      await Promise.all(Array.from({ length: Math.min(4, queues.length) }, worker));
+      await Promise.all(Array.from({ length: Math.min(runningForced ? 4 : 1, queues.length) }, worker));
       for (const it of Object.values(K.data.library)) if (it?.newCount && K.providers[it.provider]) { withNew++; chapters += it.newCount; }
       lastRun = Date.now();
       if (entries.length) K.save('library');

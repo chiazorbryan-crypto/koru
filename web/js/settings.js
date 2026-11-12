@@ -234,7 +234,7 @@
           stat.classList.toggle('bad', soft);
           stat.replaceChildren(...[
             el('b', { text: !g.now.accel ? 'Hardware acceleration is off' : soft ? 'Drawing without the graphics card (slow)' : 'Drawing with ' + (act ? (act.name || act.vendor) : 'the graphics card') }),
-            soft ? el('span', { text: 'Turn on "Use the card even if it\'s blocked" below and restart, or update your graphics driver.' }) : null,
+            soft ? el('span', { text: 'Your graphics card is on Chromium\'s blocklist. Try "Use the card even if it\'s blocked" below and restart. If pages flicker or go black, turn it back off. Light mode keeps things smooth either way.' }) : null,
             act?.driver ? el('span', { text: 'Driver ' + act.driver }) : null,
             others.length ? el('span', { text: 'Also in this PC: ' + others.map(d => d.name || d.vendor).join(', ') }) : null,
             el('span', { text: `Screen ${Math.round(screen.width * devicePixelRatio)}×${Math.round(screen.height * devicePixelRatio)}` }, hz)].filter(Boolean));
@@ -249,6 +249,8 @@
             K.toast('Saved. Restart Koru to use it.');
           });
           body.replaceChildren(
+            select('Light mode', [['auto', 'Auto: on when drawing without the graphics card'], ['on', 'On'], ['off', 'Off']], K.liteSetting(), v => { K.setLite(v); K.toast(v === 'off' ? 'Light mode off: every effect is back' : v === 'on' ? 'Light mode on' : 'Light mode set to auto'); }),
+            el('p.muted', { style: { fontSize: '.8em', margin: '-2px 0 6px' }, text: 'Light mode keeps your colours and features, and skips the glass blur and moving background that a PC without a working graphics card has to redraw on every frame.' }),
             select('Graphics card', [['high', 'Fastest card (NVIDIA / AMD)'], ['auto', 'Let Windows choose'], ['low', 'Power saving (built-in)']], saved.gpu, v => put({ gpu: v })),
             toggle('Hardware acceleration', saved.accel, v => put({ accel: v }), 'Draw with the graphics card. Only turn off if pages flicker or go black.'),
             select('Drawing mode', [['default', 'Default'], ['d3d11', 'DirectX 11'], ['d3d9', 'DirectX 9 (try this if NVIDIA stutters)'], ['gl', 'OpenGL'], ['vulkan', 'Vulkan']], saved.angle, v => put({ angle: v })),

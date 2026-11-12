@@ -645,3 +645,25 @@ html.plain .nav-btn .dotb, html.plain .card .newb { box-shadow: none; }
 .reader.zen .voicepop { display: flex !important; }
 .vsetup { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); margin-bottom: 10px; font-size: 13px; }
 .vsetup pre { margin: 0; max-height: 120px; overflow: auto; font: 11px/1.35 ui-monospace, Consolas, monospace; color: var(--muted); white-space: pre-wrap; user-select: text; }
+
+/* ---------- Light mode: for PCs drawing without the graphics card ----------
+   Same colours, layout and features. What goes is what the CPU would have to redo every frame:
+   blurring what's behind the glass, blurred backdrops and glows that move, and animations of the background. */
+html.lite .glass, html.lite .sidebar, html.lite .btn, html.lite .seg, html.lite .chip, html.lite .searchbox, html.lite .menu, html.lite .toast {
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+html.lite .glass, html.lite .spot .glass.lit { background: color-mix(in srgb, var(--bg) 84%, var(--text) 8%); }
+html.lite .sidebar { background: color-mix(in srgb, var(--bg) 80%, var(--text) 9%); }
+html.lite .glass::after, html.lite .sidebar::after { display: none; }
+html.lite .orb, html.lite .bgfx::before { animation: none !important; }
+html.lite .bgfx { transition: none; }
+html.lite .hero .bd { display: none; }
+html.lite .empty .fox { filter: none; animation: none; }
+html.lite .grid > .card, html.lite .rail > .card, html.lite .list > .item { animation: none !important; }
+html.lite .skel::after { animation: none !important; }
+html.lite .card .cv { transition: transform var(--t) var(--ease), border-color var(--t); }
+html.lite .card:hover .cv { box-shadow: 0 8px 24px -10px var(--shadow); }
+html.lite .card .cv::after { display: none; }
+html.lite[data-transition=blur] .view.enter { animation-name: fade-in; }
+html.lite[data-transition=blur] .view.leave { animation-name: fade-out; }
+html.lite .head h1, html.lite .hero h1 { text-shadow: none; }
+html.lite.title-grad .head h1, html.lite.title-grad .hero h1, html.lite.title-grad .section h2, html.lite.title-grad .tile b { filter: none; }

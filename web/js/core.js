@@ -172,6 +172,20 @@ K.ago = function ago(date) {
   return new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 };
 K.bytes = n => n < 1048576 ? (n / 1024).toFixed(0) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
+// 'gpu': the graphics card does everything. 'softraster': it combines the picture but pages are painted on the
+// CPU (fine). 'soft': no graphics card at all, every frame is drawn by the CPU (needs light mode).
+K.gpuMode = g => !g.now?.accel ? 'soft' : !/^enabled/.test(g.status?.gpu_compositing || '') ? 'soft' : !/^enabled/.test(g.status?.rasterization || '') ? 'softraster' : 'gpu';
+// Light mode: same colours and layout, without the effects that are costly when the CPU draws every frame.
+// Auto turns it on when there's no graphics card to draw with; you can force it on or off in Settings → Graphics.
+K.liteSetting = () => K.data?.settings?.lite || 'auto';
+K.applyLite = mode => {
+  if (mode) { try { localStorage.setItem('koru-gpu-mode', mode); } catch {} }
+  let m = mode; if (!m) { try { m = localStorage.getItem('koru-gpu-mode'); } catch {} }
+  const set = K.liteSetting();
+  document.documentElement.classList.toggle('lite', set === 'on' || (set === 'auto' && m === 'soft'));
+};
+K.setLite = v => { K.data.settings.lite = v; K.save('settings'); K.applyLite(); };
+K.applyLite();
 K.gpuSoftware = g => !g.now?.accel ? false : !/^enabled/.test(g.status?.gpu_compositing || '') || !/^enabled/.test(g.status?.rasterization || '');
 K.debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 // An image whose server wants the site's own Referer: Koru's backend fetches it (and adds that Referer).

@@ -29,6 +29,7 @@
     let on = false, paused = false, busy = false, audio = null, mark = null, cur = null;
     const queue = [], doneUntil = {};   // page -> how far down (in the page's own pixels) has been read
     let next = null;                    // the next bubble's audio, made while the current one plays
+    let ahead = null, wantAhead = false; // the next screen's bubbles, found while this screen is read
     const vs = K.voiceSettings;
 
     const sel = el('select.sel-in', { title: 'Voice' });
@@ -50,9 +51,10 @@
     const paint = () => { playB.replaceChildren(icon(on && !paused ? 'pause' : 'play')); ctx.box.querySelector('.voiceb')?.classList.toggle('on', on); };
     const say = t => { stat.textContent = t; };
 
-    // the part of each page that's on screen, cropped from the page file and sent to the engine to find bubbles
-    async function scan() {
-      const H = pagesBox.clientHeight, top = pagesBox.scrollTop, found = [];
+    // the part of each page that's on screen (or, with off > 0, the screen below it), cropped from the page
+    // file and sent to the engine to find the bubbles
+    async function scan(off = 0) {
+      const H = pagesBox.clientHeight, top = pagesBox.scrollTop + off * H, found = [];
       const range = ctx.paged ? [s.page] : [s.page - 1, s.page, s.page + 1, s.page + 2];
       for (const i of range) {
         const w = ctx.pg(i), nat = ctx.size(i);
@@ -107,9 +109,11 @@
           if (paused) { busy = false; return; }
           if (!queue.length) {
             say('Finding speech bubbles…');
-            const f = await scan();
+            let f = ahead ? await ahead : null; ahead = null;
+            f = (f || []).filter(q => (q.y0 + q.y1) / 2 > (doneUntil[q.i] || 0));
+            if (!f.length) f = await scan();
             if (!on) break;
-            if (f.length) { queue.push(...f); continue; }
+            if (f.length) { queue.push(...f); wantAhead = !ctx.paged; continue; }
             // nothing new on this screen: move on
             if (ctx.paged) { if (s.page >= s.pages.length - 1) { say('End of chapter'); stop(true); break; } ctx.step(1); await wait(700); continue; }
             const before = pagesBox.scrollTop;
@@ -123,6 +127,8 @@
           say(cur.text.length > 60 ? cur.text.slice(0, 58) + '…' : cur.text);
           const url = await (next && next.q === cur ? next.p : speak(cur));
           next = queue[0] ? { q: queue[0], p: speak(queue[0]).catch(() => null) } : null;
+          // once this screen is under way, look for the next screen's bubbles (after the next line's audio, so speech never waits)
+          if (wantAhead) { wantAhead = false; ahead = scan(0.9).catch(() => null); }
           if (!on) { URL.revokeObjectURL(url); break; }
           if (url) {
             audio = new Audio(url);
@@ -148,14 +154,14 @@
       paint();
     }
     function stop(keepPop) {
-      on = false; paused = false; queue.length = 0; next = null;
+      on = false; paused = false; queue.length = 0; next = null; ahead = null; wantAhead = false;
       try { audio?.pause(); } catch {}
       mark?.remove(); mark = null;
       if (!keepPop) pop.remove();
       paint();
     }
     // scrolling yourself skips ahead: anything above the new spot counts as read
-    pagesBox.addEventListener('wheel', () => { if (on && !ctx.paged) { queue.length = 0; next = null; } }, { passive: true });
+    pagesBox.addEventListener('wheel', () => { if (on && !ctx.paged) { queue.length = 0; next = null; ahead = null; } }, { passive: true });
     return { toggle, stop, start };
   };
 })();

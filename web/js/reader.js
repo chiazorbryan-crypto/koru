@@ -3,7 +3,7 @@
 'use strict';
 (function () {
   const { el, icon } = K;
-  const DEFAULTS = { mode: 'strip', rtl: false, gap: 0, width: 760, autoNext: true, preload: 4, tapZones: true, ambient: true, ambStrength: 55, ambBlur: 90, ambMode: 'scroll', ambSat: 170, ambEase: 45, ambCalm: true, fps: false, zen: false, autoSpeed: 90, autoSecs: 8, autoStart: false };
+  const DEFAULTS = { mode: 'strip', rtl: false, gap: 0, width: 760, autoNext: true, preload: 4, tapZones: true, ambient: true, ambStrength: 55, ambBlur: 90, ambMode: 'page', ambSat: 170, ambEase: 45, ambCalm: true, fps: false, zen: false, autoSpeed: 90, autoSecs: 8, autoStart: false };
   K.readerSettings = () => ({ ...DEFAULTS, ...(K.data.settings.reader || {}) });
   const setReader = patch => { K.data.settings.reader = { ...K.readerSettings(), ...patch }; K.save('settings'); };
 
@@ -48,6 +48,7 @@
   }
 
   K.openReader = async function (provider, slug, chapterSlug) {
+    if (K.data.settings.reader && !K.data.settings.reader.v3) setReader({ ambMode: 'page', v3: true });
     const opt = K.readerSettings();
     const first = !box;
     if (first) {
@@ -194,7 +195,9 @@
       if (ambLast && now - ambLast < 48) { ambRaf = requestAnimationFrame(ambFrame); return; }
       const dt = ambLast ? Math.min(150, now - ambLast) : 16; ambLast = now;
       if (fillTarget()) {
-        const k = ambHas ? 1 - Math.exp(-dt / tau()) : 1;
+        // light mode: one plain gradient per page, painted once (no picture to rescale every frame)
+        const lite = document.documentElement.classList.contains('lite');
+        const k = ambHas && !lite ? 1 - Math.exp(-dt / tau()) : 1;
         for (let i = 0; i < tgtF.length; i++) curF[i] += (tgtF[i] - curF[i]) * k;
         const r = Math.max(0, Math.round(ambO.ambBlur / 55));
         let src = curF;
@@ -206,7 +209,18 @@
           lumSum += L;
           d[p * 4] = L + (R - L) * sat; d[p * 4 + 1] = L + (G - L) * sat; d[p * 4 + 2] = L + (B - L) * sat; d[p * 4 + 3] = 255;
         }
-        ambCx.putImageData(ambImg, 0, 0);
+        if (lite) {
+          const stops = [];
+          for (let y = 0; y < AH; y += 5) {
+            let r = 0, g = 0, b = 0;
+            for (let yy = y; yy < y + 5; yy++) for (let x = 0; x < AW; x += 4) { const p = (yy * AW + x) * 4; r += d[p]; g += d[p + 1]; b += d[p + 2]; }
+            const n = 5 * AW / 4;
+            stops.push(`rgb(${Math.round(r / n)},${Math.round(g / n)},${Math.round(b / n)})`);
+          }
+          amb.style.backgroundImage = `linear-gradient(to bottom, ${stops.join(', ')})`;
+          ambCv.style.display = 'none';
+          ambUntil = 0;
+        } else { ambCv.style.display = ''; amb.style.backgroundImage = ''; ambCx.putImageData(ambImg, 0, 0); }
         if (!ambHas) { ambHas = true; amb.classList.add('on'); }
         // Calm bright pages: a mostly white screen glows less, so it doesn't glare
         const lum = lumSum / N / 255;
@@ -225,14 +239,15 @@
     };
     const applyAmb = o => { ambO = o; amb.style.display = o.ambient ? '' : 'none'; amb.style.setProperty('--amb-o', o.ambStrength / 100); kickAmb(); };
     applyAmb(opt);
-    const setAmb = i => { if (Math.abs(i - s.page) <= 2) kickAmb(); };
+    const follows = () => ambO.ambMode === 'scroll' && opt.mode === 'strip';
+    const setAmb = i => { if (follows() ? Math.abs(i - s.page) <= 2 : i === s.page) kickAmb(); };
     const ambSize = (w, h) => [CW, Math.max(1, Math.min(1024, Math.round(CW * h / w)))];
 
     const pagesBox = el('div.pages', { tabIndex: 0 });
     const strip = el('div.strip', { style: { maxWidth: opt.mode === 'strip' ? opt.width + 'px' : 'none', gap: opt.gap + 'px' } });
     pagesBox.append(strip);
     // a page getting its real size (or the window resizing) moves the pages below it: measure again once
-    const ofsWatch = new ResizeObserver(() => { ofsDirty = true; kickAmb(); });
+    const ofsWatch = new ResizeObserver(() => { ofsDirty = true; if (follows()) kickAmb(); });
     ofsWatch.observe(strip); ofsWatch.observe(pagesBox);
 
     // Long strip: each page is fetched as a file, decoded off the main thread and cut into short slices.
@@ -526,13 +541,12 @@
       const guard = { gaps: [], last: 0, raf: 0, until: 0, bad: 0 };
       const judge = () => {
         const g = guard.gaps.sort((a, b) => a - b); guard.gaps = [];
-        const base = g[Math.floor(g.length * 0.1)] || 16.7;
-        const share = g.filter(x => x > Math.max(base * 2.2, 25)).length / g.length;
-        guard.bad = share > 0.15 ? guard.bad + 1 : 0;
-        if (guard.bad < 2) return;
+        const share = g.filter(x => x > 25).length / g.length;   // frames slower than 40 fps
+        guard.bad = share > 0.2 ? guard.bad + 1 : 0;
+        if (guard.bad < 1) return;
         guard.bad = 0;
         const o = K.readerSettings();
-        if (!o.ambient) return;
+        if (!o.ambient) { if (!document.documentElement.classList.contains('lite') && K.setLite) { K.setLite('on'); K.toast('Scrolling stuttered, so Koru switched to light mode on this PC. Change it in Settings → Graphics.'); } return; }
         if (o.ambMode !== 'page') { setReader({ ambMode: 'page' }); applyAmb(K.readerSettings()); K.toast('Scrolling stuttered, so the ambient light now changes once per page. You can switch it back in reader settings.'); }
         else { setReader({ ambient: false }); applyAmb(K.readerSettings()); K.toast('Scrolling still stuttered, so ambient light is off on this PC. Turn it back on in reader settings.'); }
       };
@@ -541,11 +555,11 @@
         if (state !== s) return;
         if (guard.last && t - guard.last < 1000) guard.gaps.push(t - guard.last);
         guard.last = t;
-        if (guard.gaps.length >= 240) judge();
+        if (guard.gaps.length >= 150) judge();
         if (t < guard.until) guard.raf = requestAnimationFrame(guardTick); else guard.last = 0;
       };
       pagesBox.addEventListener('scroll', () => {
-        kickAmb();
+        if (follows()) kickAmb();
         guard.until = performance.now() + 250;
         if (!guard.raf) guard.raf = requestAnimationFrame(guardTick);
         if (ticking) return;

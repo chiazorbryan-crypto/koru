@@ -176,14 +176,15 @@
     try { const info = await K.api.get('/k/info'); K.info = info; if (info.platform === 'desktop') document.documentElement.classList.add('desktop'); }
     catch { K.info = { platform: 'web' }; }
     await K.loadData();
-    K.theme.apply();
+    K.theme.apply(); K.applyLite();
     buildSidebar();
     window.addEventListener('hashchange', route);
     await route();
     K.refreshDownloads?.();
-    setTimeout(() => K.checkUpdates?.(), 1500);
+    setTimeout(() => K.checkUpdates?.(), 8000);
     if (K.info.platform === 'desktop') setTimeout(() => K.api.get('/k/gpu').then(g => {
-      if (K.gpuSoftware(g)) K.toast('Koru is drawing without your graphics card, so reading may lag. Fix it in Settings → Graphics.', 'error');
+      const mode = K.gpuMode(g); K.applyLite(mode);
+      if (mode === 'soft' && K.liteSetting() !== 'off' && !sessionStorage.getItem('koru-lite-told')) { sessionStorage.setItem('koru-lite-told', '1'); K.toast('Koru is drawing without your graphics card, so light mode is on to keep it smooth. See Settings → Graphics.'); }
     }).catch(() => {}), 2500);
   }
   start();
