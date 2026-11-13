@@ -3,7 +3,7 @@
 'use strict';
 (function () {
   const { el, icon } = K;
-  const DEFAULTS = { mode: 'strip', rtl: false, gap: 0, width: 760, autoNext: true, preload: 4, tapZones: true, ambient: true, ambStrength: 55, ambBlur: 90, ambMode: 'page', ambSat: 170, ambEase: 45, ambCalm: true, fps: false, zen: false, autoSpeed: 90, autoSecs: 8, autoStart: false };
+  const DEFAULTS = { mode: 'strip', rtl: false, gap: 0, width: 760, autoNext: true, preload: 4, tapZones: true, ambient: true, ambStrength: 55, ambBlur: 90, ambMode: 'page', ambSat: 170, ambEase: 45, ambCalm: true, fps: false, zen: false, autoSpeed: 90, autoSecs: 8, autoStart: false, autoDl: 1, autoDlClean: true };
   K.readerSettings = () => ({ ...DEFAULTS, ...(K.data.settings.reader || {}) });
   const setReader = patch => { K.data.settings.reader = { ...K.readerSettings(), ...patch }; K.save('settings'); };
 
@@ -22,8 +22,10 @@
   };
   const freeJob = id => { if (id && slicer) slicer.postMessage({ type: 'free', id }); };
 
+  K.readingSeries = () => (box && state ? state.provider + ':' + state.slug : null);
   K.closeReader = function (fromRoute) {
     if (!box) return;
+    setTimeout(() => K.cleanAutoDownloads?.(), 4000);
     saveProgress();
     state?.cleanup?.();
     const b = box; box = null; state = null;
@@ -62,7 +64,12 @@
 
     // Series + chapter list (falls back to downloads when offline).
     let series = null, chapters = [];
-    try { series = await K.getSeries(provider, slug); chapters = await K.getChapters(provider, slug); }
+    try {
+      series = await K.getSeries(provider, slug);
+      // the series moved to a new address on the site: read it there, so history is saved under the right key
+      if (series?.slug && series.slug !== slug && my === state) { K.go(`/read/${provider}/${encodeURIComponent(series.slug)}/${encodeURIComponent(chapterSlug)}`, true); return; }
+      chapters = await K.getChapters(provider, slug);
+    }
     catch {
       const d = K.dl.series?.find(x => x.provider === provider && x.seriesSlug === slug);
       if (d) { series = { title: d.title, cover: d.cover }; chapters = d.chapters.map(c => ({ slug: c.chapterSlug, name: c.chapterName, number: c.number, locked: false })).sort((a, b) => (b.number ?? 0) - (a.number ?? 0)); }
@@ -470,6 +477,7 @@
       const g = segOf(i);
       if (g.chapter !== s.chapter) switchTo(g);
       const li = i - g.start;
+      if (li >= g.count / 2) autoDownload(g.chapter);
       slider.max = g.count;
       slider.value = li + 1;
       slider.style.setProperty('--p', (g.count > 1 ? (li / (g.count - 1)) * 100 : 100) + '%');
@@ -487,6 +495,17 @@
       saveSoon();
     }
     const saveSoon = K.debounce(saveProgress, 800);
+    // Halfway through a chapter, the next free chapter(s) are saved quietly in the background, so they open
+    // instantly and work offline. Koru removes these once you've read them (Settings → Reader).
+    const autoDone = new Set();
+    function autoDownload(ch) {
+      const n = Math.max(0, Math.min(3, Number(K.readerSettings().autoDl) || 0));
+      if (!n || autoDone.has(ch.slug) || K.info?.platform !== 'desktop' || !s.series) return;
+      autoDone.add(ch.slug);
+      const list = []; let c = ch;
+      while (list.length < n && (c = nextAfter(c))) if (!K.dl.index.has(`${s.provider}:${s.slug}:${c.slug}`)) list.push(c);
+      if (list.length) setTimeout(() => { if (state === s) K.downloadChapters({ ...s.series, provider: s.provider, slug: s.slug }, list, { auto: true }); }, 3000);
+    }
     // Resume spot: page + how far down it. Pages get their real height as they load, so the jump is redone
     // until that page has its size, unless you start scrolling yourself first.
     let jump = opt.mode === 'strip' && (startPage > 0 || startOff > 0) ? { i: startPage, off: startOff } : null;

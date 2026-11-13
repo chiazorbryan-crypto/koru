@@ -653,3 +653,10 @@ html.lite[data-transition=blur] .view.enter { animation-name: fade-in; }
 html.lite[data-transition=blur] .view.leave { animation-name: fade-out; }
 html.lite .head h1, html.lite .hero h1 { text-shadow: none; }
 html.lite.title-grad .head h1, html.lite.title-grad .hero h1, html.lite.title-grad .section h2, html.lite.title-grad .tile b { filter: none; }
+
+/* updates + sync */
+.updbox { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); font-size: .9em; }
+.vsync { display: grid; gap: 3px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); font-size: .88em; word-break: break-all; }
+.keybox { display: grid; gap: 8px; width: 100%; }
+.keybox ol { margin: 0; padding-left: 18px; font-size: .86em; display: grid; gap: 3px; }
+.keybox .lookbar { margin-top: 0; }

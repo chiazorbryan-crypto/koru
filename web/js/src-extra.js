@@ -1,5 +1,6 @@
 // Koru sources: Qi Scans (its own JSON API), Nyx Scans and Magus Manga (the same JSON platform as
-// Vortex Scans / Hive Toons) and MangaPill (a big manga library, plain HTML pages).
+// Vortex Scans / Hive Toons), MangaPill (a big manga library, plain HTML pages) and the WordPress "Madara"
+// libraries MangaRead and ManhuaPlus.
 // Same shapes as providers.js:
 //   card    { provider, slug, title, cover, status, latest }
 //   series  { provider, slug, id, title, cover, description, status, author, tags, url }
@@ -13,7 +14,8 @@
   const https = u => (typeof u === 'string' && /^https:\/\//.test(u) ? u : null);
   const cap = s => String(s || '').trim().toLowerCase().replace(/^\w/, c => c.toUpperCase());
   const txt = el => (el ? String(el.textContent || '').replace(/\s+/g, ' ').trim() : '');
-  const parse = html => new DOMParser().parseFromString(String(html || ''), 'text/html');
+  // site HTML is only read, never run; inline handlers (onload=…) are dropped first so Chromium doesn't flag them
+  const parse = html => new DOMParser().parseFromString(String(html || '').replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, ''), 'text/html');
   const uniq = a => a.filter((v, i) => v && a.indexOf(v) === i);
   const lockedError = () => Object.assign(new Error('This chapter is locked on the site.'), { locked: true });
   const future = t => !!t && Date.parse(t) > Date.now();
@@ -199,5 +201,101 @@
     chapterUrl: (slug, ch) => { const [a, b = 'x'] = String(ch).split('~'); return `${MP}/chapters/${a}/${b}`; }
   };
 
-  for (const p of [qiscans, nyx, magus, mangapill]) K.addProvider(p);
+  // ---- WordPress "Madara" sites whose series page lists every chapter in the plain HTML (no POST needed):
+  // MangaRead (mangaread.org) and ManhuaPlus (manhuaplus.com). Lists: <listPath>page/N/?m_orderby=latest|views,
+  // search /page/N/?s=..&post_type=wp-manga, series <listPath><slug>/, chapter <listPath><slug>/<chapter>/. ----
+  const MON = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+  const mdDate = s => {
+    s = String(s || '').trim();
+    let m = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/); // 02.11.2026 (day first)
+    if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).toISOString();
+    m = s.match(/^([A-Za-z]{3})[a-z]*\.? (\d{1,2}),? (\d{2}|\d{4})$/);
+    if (m && MON[m[1].toLowerCase()] != null) { const y = Number(m[3]) < 100 ? 2000 + Number(m[3]) : Number(m[3]); return new Date(y, MON[m[1].toLowerCase()], Number(m[2])).toISOString(); }
+    m = s.match(/(\d+)\s*(sec|min|hour|day|week|month|year)[a-z]*\s*ago/i);
+    if (m) return new Date(Date.now() - Number(m[1]) * { sec: 1e3, min: 6e4, hour: 36e5, day: 864e5, week: 6048e5, month: 2592e6, year: 31536e6 }[m[2].toLowerCase()]).toISOString();
+    return null;
+  };
+  function madara({ id, name, short, site, hue, listPath = '/manga/' }) {
+    const base = site + listPath;
+    const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const slugRe = new RegExp('^' + esc(base) + '([^/?#]+)/?$'), chRe = new RegExp('^' + esc(base) + '[^/?#]+/([^/?#]+)/?$');
+    const abs = u => { u = String(u || '').trim(); if (!u) return null; try { return https(new URL(u, site).href); } catch { return null; } };
+    const imgOf = el => {
+      if (!el) return null;
+      const set = el.getAttribute('data-srcset') || el.getAttribute('srcset');
+      const big = set ? set.split(',').map(s => s.trim().split(/\s+/)).sort((a, b) => parseInt(b[1]) - parseInt(a[1]))[0]?.[0] : null;
+      return abs(big || el.getAttribute('data-src') || el.getAttribute('data-lazy-src') || el.getAttribute('src'));
+    };
+    const titleOf = a => { if (!a) return ''; const c = a.cloneNode(true); c.querySelectorAll('span').forEach(s => s.remove()); return txt(c); };
+    const cards = html => {
+      const doc = parse(html), out = [], seen = new Set();
+      for (const it of doc.querySelectorAll('.page-item-detail, .c-tabs-item__content')) {
+        const a = it.querySelector('.post-title a') || it.querySelector('.item-thumb a, .tab-thumb a');
+        const slug = (String(a?.getAttribute('href') || '').match(slugRe) || [])[1];
+        if (!slug || seen.has(slug) || /novel/i.test(it.className)) continue;
+        const title = titleOf(a) || a.getAttribute('title') || '';
+        if (!title) continue;
+        seen.add(slug);
+        const status = txt(it.querySelector('.mg_status .summary-content')) || (/end|complete/i.test(txt(it.querySelector('.manga-title-badges'))) ? 'Completed' : '');
+        out.push({ provider: id, slug, title, cover: imgOf(it.querySelector('.item-thumb img, .tab-thumb img')), status: cap(status),
+          latest: txt(it.querySelector('.chapter-item .chapter a, .latest-chap .chapter a')) });
+      }
+      const more = !!doc.querySelector('a.nextpostslink, .nav-previous a, a.next.page-numbers, #navigation-ajax');
+      return { items: out, hasMore: more && out.length > 0 };
+    };
+    return {
+      id, name, short, site, hue,
+      async list({ sort = 'latest', page = 1, q = '' } = {}) {
+        const pg = page > 1 ? `page/${page}/` : '';
+        if (q) return cards(await K.api.siteText(`${site}/${pg}?s=${enc(q)}&post_type=wp-manga`));
+        return cards(await K.api.siteText(`${base}${pg}?m_orderby=${sort === 'popular' ? 'views' : 'latest'}`));
+      },
+      async series(slug) {
+        const url = `${base}${enc(slug)}/`;
+        const doc = parse(await K.api.siteText(url));
+        const field = label => {
+          for (const el of doc.querySelectorAll('.post-content_item, .post-status .post-content_item')) if (txt(el.querySelector('.summary-heading')).toLowerCase().startsWith(label)) return el.querySelector('.summary-content');
+          return null;
+        };
+        const chapters = [...doc.querySelectorAll('li.wp-manga-chapter')].map(li => {
+          const a = li.querySelector('a[href]');
+          const ch = (String(a?.getAttribute('href') || '').match(chRe) || [])[1];
+          const label = txt(a);
+          const locked = /premium|coin|lock/i.test(li.className) || !!li.querySelector('.coin, .premium-block, .fa-lock, .ion-locked');
+          if (!ch && !locked) return null;
+          const dateEl = li.querySelector('.chapter-release-date');
+          const rel = dateEl?.querySelector('a[title]')?.getAttribute('title');
+          return { slug: ch && !locked ? ch : 'locked-' + (num(label) ?? label), name: /^chapter/i.test(label) ? label.replace(/^chapter/i, 'Chapter') : label,
+            number: num(label), date: mdDate(rel || txt(dateEl)), locked, freeAt: null };
+        }).filter(Boolean);
+        if (!doc.querySelector('.post-title h1, .post-title h3') && !chapters.length) throw new Error(`${name} doesn't have this series.`);
+        const people = [...doc.querySelectorAll('.author-content a, .artist-content a')].map(txt).filter(Boolean);
+        return {
+          provider: id, slug, id: slug, title: titleOf(doc.querySelector('.post-title h1, .post-title h3')) || slug,
+          cover: imgOf(doc.querySelector('.summary_image img')) || abs(doc.querySelector('meta[property="og:image"]')?.getAttribute('content')),
+          description: txt(doc.querySelector('.summary__content, .description-summary .summary__content, .manga-excerpt')),
+          status: cap(txt(field('status'))), author: uniq(people).join(' · '),
+          tags: uniq([...doc.querySelectorAll('.genres-content a')].map(txt)), alt: txt(field('alt')), url, _chapters: chapters
+        };
+      },
+      async chapters(series) {
+        return series._chapters || (await this.series(series.slug))._chapters; // the site lists newest first
+      },
+      async pages(slug, ch) {
+        if (String(ch).startsWith('locked-')) throw lockedError();
+        const doc = parse(await K.api.siteText(`${base}${enc(slug)}/${enc(ch)}/`));
+        const box = doc.querySelector('.reading-content');
+        if (!box) throw lockedError();
+        const pages = [...box.querySelectorAll('img')].map(imgOf).filter(u => u && !/\/wp-content\/(assets|themes|plugins)\//.test(u))
+          .map(url => ({ url, w: null, h: null }));
+        if (!pages.length) throw lockedError();
+        return pages;
+      },
+      chapterUrl: (slug, ch) => `${base}${slug}/${ch}/`
+    };
+  }
+  const mangaread = madara({ id: 'mangaread', name: 'MangaRead', short: 'MangaRead', site: 'https://www.mangaread.org', hue: '#7d4cdb' });
+  const manhuaplus = madara({ id: 'manhuaplus', name: 'ManhuaPlus', short: 'ManhuaPlus', site: 'https://manhuaplus.com', hue: '#9c6b30' });
+
+  for (const p of [qiscans, nyx, magus, mangapill, mangaread, manhuaplus]) K.addProvider(p);
 })();

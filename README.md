@@ -2,11 +2,13 @@
 
 A personal manga and manhwa reader for Windows, with a liquid glass look you can fully customize.
 
-- **Sources (20):** Omega, Vortex, Asura, Flame, MangaDex, Thunder, Madara Scans, King of Shojo, Violet, Rokari, Drake, Elf Toon, Weeb Central, MangaBuddy (Comizy), Hive Toons, Webtoons, Qi Scans, Nyx Scans, Magus Manga and MangaPill, read through each site's public pages and APIs. Free chapters only. (Toonily is hidden for now: its site blocks Koru.)
+- **Sources (23):** Omega, Vortex, Asura, Flame, MangaDex, Thunder, Madara Scans, King of Shojo, Violet, Rokari, Lagoon, Drake, Elf Toon, Weeb Central, MangaBuddy (Comizy), Hive Toons, Webtoons, Qi Scans, Nyx Scans, Magus Manga, MangaPill, MangaRead and ManhuaPlus, read through each site's public pages and APIs. Free chapters only. (Toonily is hidden for now: its site blocks Koru.)
 - **Library:** favourites, continue reading, history, and new chapter checks every 30 minutes while Koru is open (plus when you come back to it), with a desktop notification
 - **Reader:** long strip or page by page, right-to-left, ambient light, auto next chapter, keyboard controls
-- **Downloads:** save chapters and read them offline
-- **Appearance:** every colour with its own transparency, glass blur, glow, animations, fonts, sidebar on any edge (minimizable)
+- **Downloads:** save chapters and read them offline; the next chapter(s) can save themselves while you read and clear away once read
+- **Sync between PCs:** favourites, likes, bookmarks, history and read marks stay the same on your PCs through a folder both can see (OneDrive, Google Drive, Dropbox or a USB stick)
+- **Updates:** Settings → About checks GitHub and installs new versions in one click (the repo is private, so it needs a read-only GitHub key once per PC)
+- **Appearance:** every colour with its own transparency, gradients, your own wallpaper, saved looks, glass blur, glow, animations, fonts, sidebar on any edge (minimizable), and a light mode for PCs without a working graphics card
 
 Paid or locked chapters stay locked. Please support the scan groups on their sites.
 

@@ -168,7 +168,9 @@
         toggle('Keep reading into the next chapter', ro.autoNext, v => setR({ autoNext: v }), 'Long strip: the next chapter joins underneath as you reach the end, like Kotatsu'),
         toggle('Tap sides to turn', ro.tapZones, v => setR({ tapZones: v })),
         toggle('Zen mode', ro.zen, v => setR({ zen: v }), 'Chapters open full screen with just the pages. Press Z while reading to switch'),
-        toggle('Show frame rate', ro.fps, v => setR({ fps: v }), 'A small meter while reading, to check for lag')));
+        toggle('Show frame rate', ro.fps, v => setR({ fps: v }), 'A small meter while reading, to check for lag'),
+        select('Download next chapters while reading', [['0', 'Off'], ['1', 'Next chapter'], ['2', 'Next 2 chapters'], ['3', 'Next 3 chapters']], String(ro.autoDl), v => setR({ autoDl: Number(v) })),
+        toggle('Remove those after reading', ro.autoDlClean, v => setR({ autoDlClean: v }), 'Chapters Koru saved by itself are deleted once read. Ones you download yourself always stay')));
 
       if (K.info?.platform === 'desktop') {
         const stat = el('div.gpustat', el('span', { text: 'Checking your graphics card…' }));
@@ -259,7 +261,29 @@
 
       grid.append(panel('incognito', 'Privacy', '',
         toggle('Incognito', K.incognito(), v => { K.data.settings.incognito = v; K.save('settings'); K.paintInc?.(); }, 'Reading history, progress and read marks aren\'t saved. Also in the sidebar.')));
+      if (K.info?.platform === 'desktop' && K.sync) {
+        const sbox = el('div');
+        grid.append(panel('refresh', 'Sync between PCs', 'Keep favourites, likes, bookmarks, history and read marks the same on your PCs. Pick a folder both PCs can see, like a OneDrive, Google Drive or Dropbox folder, or a USB stick, and pick the same folder on the other PC.', sbox));
+        const paintSync = async () => {
+          const i = await K.sync.info();
+          if (!i?.dir) {
+            sbox.replaceChildren(el('div.row', el('button.btn.small.primary', { onclick: async () => { try { const r = await K.sync.pick(); if (r.dir) K.toast('Sync is on', 'ok'); } catch (e) { K.toast(e.message, 'error'); } paintSync(); } }, icon('folder'), 'Pick sync folder')));
+            return;
+          }
+          const last = K.sync.last();
+          sbox.replaceChildren(
+            el('div.vsync', el('b', { text: i.reachable ? 'Syncing with ' + i.dir : 'Sync folder not reachable: ' + i.dir }),
+              el('span.muted', { text: (last ? 'Last synced ' + K.ago(last) : 'Not synced yet') + ' · ' + (i.others.length ? 'Other PCs: ' + i.others.map(o => o.name).join(', ') : 'No other PC has synced to this folder yet') })),
+            el('div.row', { style: { marginTop: '8px' } },
+              el('button.btn.small.primary', { onclick: async () => { try { const r = await K.sync.now(true); K.toast(r.changed?.length ? 'Synced: ' + r.changed.join(', ') + ' updated' : 'Synced, nothing new', 'ok'); } catch (e) { K.toast(e.message, 'error'); } paintSync(); } }, icon('refresh'), 'Sync now'),
+              el('button.btn.small', { onclick: async () => { await K.sync.pick(); paintSync(); } }, icon('folder'), 'Change folder'),
+              el('button.btn.small', { onclick: async () => { await K.sync.off(); K.toast('Sync is off'); paintSync(); } }, icon('x'), 'Turn off')));
+        };
+        paintSync();
+      }
+
       grid.append(panel('folder', 'Library and data', 'Back up your library, likes, bookmarks, reading history and read marks.',
+        toggle('New chapter notifications', K.data.settings.notifyNew !== false, v => { K.data.settings.notifyNew = v; K.save('settings'); }, 'A Windows notification when favourites get new chapters while Koru is in the background'),
         el('div.row',
           el('button.btn.small', { onclick: () => {
             const blob = new Blob([JSON.stringify({ app: 'koru', at: new Date().toISOString(), library: K.data.library, liked: K.data.liked, bookmarks: K.data.bookmarks, flags: K.data.flags, history: K.data.history, read: K.data.read, stats: K.data.stats }, null, 1)], { type: 'application/json' });
@@ -269,9 +293,39 @@
           el('button.btn.small', { onclick: () => fileIn.click() }, icon('upload'), 'Import backup'), fileIn,
           el('button.btn.small', { onclick: () => { if (!confirm('Clear your reading history? Your library and downloads stay.')) return; K.data.history = {}; K.data.read = {}; K.save('history'); K.save('read'); K.toast('History cleared'); } }, icon('trash'), 'Clear history'))));
 
+      const upd = el('div.updbox');
+      const paintUpd = async (force) => {
+        if (K.info?.platform !== 'desktop') { upd.replaceChildren(); return; }
+        upd.replaceChildren(el('span.muted', { text: 'Checking for updates…' }));
+        try {
+          const u = await K.api.get('/k/app-update/check' + (force ? '?force=1' : ''));
+          if (u.needKey) {
+            // private repo: a read-only key lets Koru see new versions
+            const keyIn = el('input.txt', { type: 'password', placeholder: 'Paste the key (starts with github_pat_)', autocomplete: 'off' });
+            const saveKey = async () => {
+              try { await K.api.post('/k/app-update/key', { key: keyIn.value.trim() }); keyIn.value = ''; K.toast('Key saved', 'ok'); paintUpd(true); }
+              catch (e) { K.toast(e.message, 'error'); }
+            };
+            upd.replaceChildren(el('div.keybox',
+              el('b', { text: u.error }),
+              el('ol.muted', el('li', { text: 'On GitHub, make a fine-grained token: Repository access → Only select repositories → koru; Permissions → Contents → Read-only.' }),
+                el('li', { text: 'Copy it and paste it here. Koru keeps it encrypted on this PC and only sends it to GitHub.' })),
+              el('div.row', el('button.btn.small', { onclick: () => K.api.post('/k/open-external', { url: 'https://github.com/settings/personal-access-tokens/new' }) }, icon('upload'), 'Make a key on GitHub')),
+              el('div.lookbar', keyIn, el('button.btn.small.primary', { onclick: saveKey }, 'Save key')),
+              u.hasKey ? el('button.btn.small', { onclick: async () => { await K.api.post('/k/app-update/key', { key: '' }); paintUpd(true); } }, icon('trash'), 'Remove key') : null));
+            return;
+          }
+          if (!u.newer) { upd.replaceChildren(el('span.muted', { text: 'You have the newest Koru (' + u.current + ').' }), el('button.btn.small', { onclick: () => paintUpd(true) }, icon('refresh'), 'Check again')); return; }
+          const go = el('button.btn.small.primary', { onclick: () => K.installUpdate(go) }, icon('download'), 'Update now');
+          upd.replaceChildren(el('div', el('b', { text: u.name + ' is out' }), el('div.muted', { style: { fontSize: '.82em' }, text: 'About ' + Math.round(u.size / 1048576) + ' MB. Koru restarts by itself; your library and settings stay.' })),
+            u.canInstall ? go : el('span.muted', { text: 'Install it from the Releases page.' }));
+        } catch (e) { upd.replaceChildren(el('span.muted', { text: e.message }), el('button.btn.small', { onclick: () => paintUpd(true) }, icon('refresh'), 'Try again')); }
+      };
+      paintUpd();
       grid.append(panel('sparkle', 'About', '',
         el('div.row', { style: { gap: '14px' } }, el('div.side-logo', { style: { margin: 0 } }, K.fox()),
-          el('div', el('b', { text: 'Koru ' + (K.info?.version || '') }), el('div.muted', { text: 'A personal reader for Omega Scans and Vortex Scans.' }))),
+          el('div', el('b', { text: 'Koru ' + (K.info?.version || '') }), el('div.muted', { text: 'A personal manga and manhwa reader: ' + K.providerList.length + ' sources, downloads, sync between your PCs.' }))),
+        upd,
         el('p.muted', { style: { fontSize: '.85em', marginTop: '12px' }, text: 'Koru reads each site\'s public pages. Paid or locked chapters stay locked. Please support the scan groups on their sites.' })));
       return grid;
     }

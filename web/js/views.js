@@ -152,29 +152,47 @@
         K.dl.jobs = jobs;
         const active = jobs.some(j => j.state === 'downloading' || j.state === 'queued');
         if (jobs.some(j => j.state === 'done' && before.has(j.id))) await K.refreshDownloads();
-        for (const j of jobs) if (j.state === 'failed' && before.has(j.id)) K.toast(`${j.chapterName}: ${j.error || 'download failed'}`, 'error');
+        for (const j of jobs) if (j.state === 'failed' && before.has(j.id) && !j.auto) K.toast(`${j.chapterName}: ${j.error || 'download failed'}`, 'error');
         document.dispatchEvent(new CustomEvent('koru-queue'));
         K.setNavBadge('downloads', active);
-        if (!active) { if (wasActive) K.toast('Downloads finished', 'ok'); break; }
+        if (!active) { if (wasActive && jobs.some(j => !j.auto)) K.toast('Downloads finished', 'ok'); break; }
         wasActive = true;
         await new Promise(r => setTimeout(r, 1200));
       }
     } catch {} finally { polling = false; }
   }
   K.pollQueue = pollQueue;
-  K.downloadChapters = async function (series, chapters) {
+  // opts.auto: Koru saved it by itself (next chapters while reading); those are quiet and can be cleaned up
+  K.downloadChapters = async function (series, chapters, opts = {}) {
     let queued = 0;
     for (const c of chapters) {
       if (c.locked || K.dl.index.has(`${series.provider}:${series.slug}:${c.slug}`)) continue;
       try {
         const pages = await P(series.provider).pages(series.slug, c.slug);
         await K.api.post('/k/dl/start', { provider: series.provider, seriesSlug: series.slug, seriesTitle: series.title, cover: series.cover,
-          chapterSlug: c.slug, chapterName: c.name, number: c.number, pages: pages.map(p => p.url) });
+          chapterSlug: c.slug, chapterName: c.name, number: c.number, pages: pages.map(p => p.url), auto: !!opts.auto });
         queued++;
         pollQueue();
-      } catch (e) { K.toast(`${c.name}: ${e.message}`, 'error'); }
+      } catch (e) { if (!opts.auto) K.toast(`${c.name}: ${e.message}`, 'error'); }
     }
-    if (queued) K.toast(queued === 1 ? 'Download started' : `${queued} chapters queued`, 'ok');
+    if (queued && !opts.auto) K.toast(queued === 1 ? 'Download started' : `${queued} chapters queued`, 'ok');
+    return queued;
+  };
+  // Chapters Koru saved by itself are removed once you've read them (if that's on); yours always stay.
+  let cleaning = false;
+  K.cleanAutoDownloads = async function () {
+    if (cleaning || K.readerSettings?.().autoDlClean === false) return;
+    cleaning = true;
+    try {
+      if (!K.dl.series) await K.refreshDownloads();
+      let n = 0;
+      for (const s of K.dl.series || []) for (const c of s.chapters) {
+        if (!c.auto || !K.isRead(s.provider, s.seriesSlug, c.chapterSlug)) continue;
+        if (K.readingSeries?.() === s.provider + ':' + s.seriesSlug) continue;   // never under the series you have open
+        try { await K.api.post('/k/dl/delete', { id: c.id }); n++; } catch {}
+      }
+      if (n) await K.refreshDownloads();
+    } finally { cleaning = false; }
   };
   K.localPages = id => {
     const c = K.dl.index.get(id);
@@ -504,6 +522,8 @@
     let s, chapters = [], offline = false;
     try {
       s = await K.getSeries(provider, slug);
+      // the site moved this series to a new address: open it there, so favourites and progress line up
+      if (s?.slug && s.slug !== slug) { K.go(`/series/${provider}/${encodeURIComponent(s.slug)}`, true); return; }
       chapters = await K.getChapters(provider, slug);
     } catch (e) {
       // No connection: show what's downloaded.

@@ -172,6 +172,32 @@
   window.addEventListener('focus', () => { away = false; still(150); });
   if (away) bgfx?.classList.add('still');
 
+  // ---------- app updates ----------
+  K.checkAppUpdate = async function () {
+    if (K.info?.platform !== 'desktop') return;
+    try {
+      const u = await K.api.get('/k/app-update/check');
+      if (u.newer && u.canInstall && sessionStorage.getItem('koru-upd-told') !== u.latest) {
+        sessionStorage.setItem('koru-upd-told', u.latest);
+        K.toast(u.name + ' is out. Update in Settings → About.', 'ok');
+        K.setNavBadge('settings', true);
+      }
+    } catch {}
+  };
+  K.installUpdate = async function (btn) {
+    if (btn) btn.disabled = true;
+    try { await K.api.post('/k/app-update/install'); }
+    catch (e) { K.toast(e.message, 'error'); if (btn) btn.disabled = false; return; }
+    const tick = async () => {
+      const s = await K.api.get('/k/app-update/status').catch(() => ({}));
+      if (s.state === 'downloading') { if (btn) btn.textContent = 'Downloading ' + Math.round(s.done / Math.max(1, s.total) * 100) + '%'; setTimeout(tick, 700); }
+      else if (s.state === 'installing') { if (btn) btn.textContent = 'Installing…'; K.toast('Installing. Koru closes and opens again by itself.', 'ok'); }
+      else if (s.state === 'failed') { K.toast(s.error || 'Update failed', 'error'); if (btn) { btn.disabled = false; btn.textContent = 'Try again'; } }
+      else setTimeout(tick, 700);
+    };
+    tick();
+  };
+
   async function start() {
     try { const info = await K.api.get('/k/info'); K.info = info; if (info.platform === 'desktop') document.documentElement.classList.add('desktop'); }
     catch { K.info = { platform: 'web' }; }
@@ -181,6 +207,9 @@
     window.addEventListener('hashchange', route);
     await route();
     K.refreshDownloads?.();
+    K.sync?.start();
+    setTimeout(() => K.checkAppUpdate?.(), 20000);
+    setTimeout(() => K.cleanAutoDownloads?.(), 30000);
     setTimeout(() => K.checkUpdates?.(), 8000);
     if (K.info.platform === 'desktop') setTimeout(() => K.api.get('/k/gpu').then(g => {
       const mode = K.gpuMode(g); K.applyLite(mode);

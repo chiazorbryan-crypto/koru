@@ -1,4 +1,4 @@
-// Koru sources: WordPress "MangaThemesia" scan sites (Thunder, Madara, King of Shojo, Violet, Rokari)
+// Koru sources: WordPress "MangaThemesia" scan sites (Thunder, Madara, King of Shojo, Violet, Rokari, Lagoon)
 // plus Drake Scans and Elf Toon (the same Next.js platform with a small JSON API).
 // Shapes are the same as providers.js. Locked (coin) chapters are shown as locked and never opened.
 'use strict';
@@ -95,6 +95,38 @@
       return [...doc.querySelectorAll('#readerarea img')].map(imgSrc).filter(Boolean);
     }
 
+    // A series that moved to a new slug (Thunder puts a renumberable id in front, e.g. "0086250808-title"):
+    // search the site for the title part and take the one clear match. Only runs after the old page is gone.
+    const bare = s => { let d = String(s || ''); try { d = decodeURIComponent(d); } catch { /* keep */ } return d.toLowerCase().replace(/^\d{8,}-(?=.)/, ''); };
+    const words = s => String(s || '').toLowerCase().normalize('NFKD').replace(/['’`]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    async function findMoved(p, slug) {
+      const b = bare(slug), q = words(b);
+      if (!q) return null;
+      const tries = [q];
+      const short = q.split(' ').slice(0, 4).join(' ');
+      if (short !== q) tries.push(short);
+      for (const t of tries) {
+        let items;
+        try { items = (await p.list({ q: t })).items; } catch { continue; }
+        const hits = items.filter(i => i.slug !== slug && (bare(i.slug) === b || words(i.title) === q));
+        if (hits.length === 1) return hits[0].slug;
+        if (hits.length > 1) return null; // not a clear match
+      }
+      return null;
+    }
+    const gone = doc => !doc.querySelector('h1.entry-title') && !doc.querySelector('#chapterlist li');
+    const dec = s => { try { return decodeURIComponent(s).toLowerCase(); } catch { return String(s).toLowerCase(); } };
+    // The series slug from <link rel="canonical"> (only a plain `${listPath}<slug>/` address on this site counts).
+    const canonSlug = doc => {
+      const href = doc.querySelector('link[rel="canonical"]')?.getAttribute('href') || doc.querySelector('meta[property="og:url"]')?.getAttribute('content');
+      try {
+        const u = new URL(href, site);
+        if (u.hostname !== new URL(site).hostname) return null;
+        const m = u.pathname.match(/^(\/[^/]+\/)([^/]+)\/?$/);
+        return m && m[1] === listPath ? m[2] : null;
+      } catch { return null; }
+    };
+
     return {
       id, name, short, site, hue,
       async list({ sort = 'latest', page = 1, q = '' } = {}) {
@@ -104,8 +136,19 @@
         const doc = parse(await K.api.siteText(url));
         return { items: cards(doc), hasMore: !!doc.querySelector('.pagination .next, .hpage .r, a.next.page-numbers') };
       },
+      // If the slug moved, the returned series has the new slug (K.getSeries then updates saved entries).
       async series(slug) {
-        const doc = parse(await K.api.siteText(`${seriesBase}${seg(slug)}/`));
+        let doc = null, err = null;
+        try { doc = parse(await K.api.siteText(`${seriesBase}${seg(slug)}/`)); } catch (e) { if (!/\b(404|410)\b/.test(e.message)) throw e; err = e; }
+        if (!doc || gone(doc)) {
+          const moved = await findMoved(this, slug);
+          if (moved) { slug = moved; doc = parse(await K.api.siteText(`${seriesBase}${seg(slug)}/`)); }
+          else if (err) throw Object.assign(new Error(`${name} doesn't have this series any more.`), { status: 404 });
+        } else {
+          // The old address can still answer (WordPress follows renamed slugs); the page's canonical link has the current one.
+          const c = canonSlug(doc);
+          if (c && dec(c) !== dec(slug)) slug = c;
+        }
         const m = info(doc);
         const desc = doc.querySelector('.entry-content[itemprop="description"], [itemprop="description"]');
         const tags = [...doc.querySelectorAll('.mgen a, .seriestugenre a, .genxed a')].map(text).filter(Boolean);
@@ -118,7 +161,7 @@
         };
       },
       async chapters(series) {
-        return series._chapters || chapterList(parse(await K.api.siteText(`${seriesBase}${seg(series.slug)}/`)));
+        return series._chapters || (await this.series(series.slug))._chapters; // series() also follows a moved slug
       },
       async pages(slug, chapterSlug) {
         if (String(chapterSlug).startsWith('locked-')) throw lockedError();
@@ -140,6 +183,7 @@
   const kingofshojo = themesia({ id: 'kingofshojo', name: 'King of Shojo', short: 'KoShojo', site: 'https://kingofshojo.com', hue: '#2ec4b6', listPath: '/manga/' });
   const violet = themesia({ id: 'violet', name: 'Violet Scans', short: 'Violet', site: 'https://violetmanga.com', hue: '#e05cff', listPath: '/comics/' });
   const rokari = themesia({ id: 'rokari', name: 'Rokari Comics', short: 'Rokari', site: 'https://rokaricomics.com', hue: '#c7a46b', listPath: '/manga/' });
+  const lagoon = themesia({ id: 'lagoon', name: 'Lagoon Scans', short: 'Lagoon', site: 'https://lagoonscans.com', hue: '#0f7bbf', listPath: '/manga/' });
 
   // ---- Drake Scans platform (Next.js): drakecomic.net, and Elf Toon (elftoon.net) which runs the same software.
   // List/search via /api/series, series + chapter list from the series page's embedded data,
@@ -237,5 +281,5 @@
   const drake = drakePlatform({ id: 'drake', name: 'Drake Scans', short: 'Drake', site: 'https://drakecomic.net', hue: '#8bd450' });
   const elftoon = drakePlatform({ id: 'elftoon', name: 'Elf Toon', short: 'Elf', site: 'https://elftoon.net', hue: '#d7f75b' });
 
-  for (const p of [thunder, madarascans, kingofshojo, violet, rokari, drake, elftoon]) K.addProvider(p);
+  for (const p of [thunder, madarascans, kingofshojo, violet, rokari, lagoon, drake, elftoon]) K.addProvider(p);
 })();

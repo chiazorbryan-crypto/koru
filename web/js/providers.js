@@ -245,7 +245,67 @@
     return p;
   };
   K.forget = key => { cache.delete(key); pending.delete(key); };
-  K.getSeries = (provider, slug) => K.cached(`s:${provider}:${slug}`, 10 * 60e3, () => K.providers[provider].series(slug));
+  // A source can answer with a different slug than asked for (the site moved the series, e.g. Thunder renumbering
+  // "0086250808-title"). Saved entries are then moved over to the new slug, and later asks for the old one go
+  // straight to the new one for the rest of this run.
+  const movedTo = new Map(); // "provider:oldSlug" -> newSlug
+  K.getSeries = async (provider, slug) => {
+    const real = movedTo.get(K.key(provider, slug)) || slug;
+    const s = await K.cached(`s:${provider}:${real}`, 10 * 60e3, () => K.providers[provider].series(real));
+    if (s && typeof s.slug === 'string' && s.slug && s.slug !== slug) K.fixSlug(provider, slug, s.slug);
+    return s;
+  };
+  // Rewrites `${provider}:${oldSlug}` keys (and the slug inside each entry) in the saved library, liked, history,
+  // read, bookmarks, flags and stats to the new slug, and saves what changed. Returns true if anything moved.
+  K.fixSlug = function fixSlug(provider, oldSlug, newSlug) {
+    if (!provider || !oldSlug || !newSlug || oldSlug === newSlug || !K.data) return false;
+    const from = K.key(provider, oldSlug), to = K.key(provider, newSlug);
+    movedTo.set(from, newSlug);
+    movedTo.forEach((v, k) => { if (v === oldSlug && k.startsWith(provider + ':')) movedTo.set(k, newSlug); }); // moved twice
+    const hit = cache.get(`s:${provider}:${oldSlug}`);
+    if (hit?.value?.slug === newSlug && !cache.has(`s:${provider}:${newSlug}`)) cache.set(`s:${provider}:${newSlug}`, hit);
+    const reslug = v => { if (v && typeof v === 'object' && v.slug === oldSlug) v.slug = newSlug; return v; };
+    // When both keys exist (the new one was saved too), keep the newer/merged entry.
+    const merge = {
+      read: (a, b) => ({ ...a, ...b }),
+      flags: (a, b) => ({ ...a, ...b }),
+      history: (a, b) => ((a?.at || 0) > (b?.at || 0) ? reslug(a) : b),
+      library: (a, b) => ({ ...b, newCount: Math.max(a?.newCount || 0, b?.newCount || 0), addedAt: Math.min(a?.addedAt || Date.now(), b?.addedAt || Date.now()) }),
+      liked: (a, b) => b
+    };
+    let any = false;
+    for (const name of Object.keys(merge)) {
+      const store = K.data[name];
+      if (!store || !Object.prototype.hasOwnProperty.call(store, from)) continue;
+      const old = reslug(store[from]);
+      store[to] = Object.prototype.hasOwnProperty.call(store, to) ? merge[name](old, store[to]) : old;
+      delete store[from];
+      K.save(name); any = true;
+    }
+    const marks = K.data.bookmarks || {};
+    let movedMarks = false;
+    for (const id of Object.keys(marks)) {
+      if (!id.startsWith(from + ':')) continue;
+      const nid = to + id.slice(from.length), b = reslug(marks[id]);
+      if (b && typeof b === 'object') b.id = nid;
+      if (!(nid in marks)) marks[nid] = b;
+      delete marks[id]; movedMarks = true;
+    }
+    if (movedMarks) { K.save('bookmarks'); any = true; }
+    const st = K.data.stats;
+    if (st && typeof st === 'object') {
+      let movedStats = false;
+      const moveNum = (obj, k1, k2) => { if (!obj || !(k1 in obj)) return; obj[k2] = (obj[k2] || 0) + (obj[k1] || 0); delete obj[k1]; movedStats = true; };
+      if (st.series?.[from]) {
+        const a = reslug(st.series[from]), b = st.series[to];
+        st.series[to] = b ? { ...a, ...b, ms: (a.ms || 0) + (b.ms || 0), ch: (a.ch || 0) + (b.ch || 0), last: Math.max(a.last || 0, b.last || 0) } : a;
+        delete st.series[from]; movedStats = true;
+      }
+      for (const d of Object.values(st.days || {})) { moveNum(d?.s, from, to); moveNum(d?.c, from, to); }
+      if (movedStats) { K.save('stats'); any = true; }
+    }
+    return any;
+  };
   // fresh: skip the cache (the new-chapter checker). Sources that read the chapter list off the series page
   // keep it on the series object (_chapters), so that page is fetched again too; a source can also drop its
   // own page cache through forget(slug).

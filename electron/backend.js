@@ -35,7 +35,7 @@ const ALLOWED = ['omegascans.org', 'vortexscans.org', 'asurascans.com', 'flameco
   'comizy.io', 'cmzcdn.org', 'hivetoons.org', 'hivetoon.com',
   'en-thunderscans.com', 'madarascans.net', 'wp.com', 'kingofshojo.com', 'violetmanga.com', 'drakecomic.net', 'ibb.co',
   'qimanga.com', 'qiscans.org', 'nyxscans.com', 'magustoon.org', 'rokaricomics.com', 'elftoon.net', 'elftoon.com',
-  'mangapill.com', 'readdetectiveconan.com'];
+  'mangapill.com', 'readdetectiveconan.com', 'lagoonscans.com', 'mangaread.org', 'manhuaplus.com'];
 export const allowedUrl = u => {
   try {
     const url = new URL(u);
@@ -90,7 +90,7 @@ export function createBackend({ dataDir, downloadsDir, version = '0.0.0', platfo
 
   function jobView(j) {
     return { id: j.id, seriesTitle: j.seriesTitle, chapterName: j.chapterName, provider: j.provider, seriesSlug: j.seriesSlug,
-      chapterSlug: j.chapterSlug, done: j.done, total: j.pages.length, state: j.state, error: j.error || null };
+      chapterSlug: j.chapterSlug, done: j.done, total: j.pages.length, state: j.state, error: j.error || null, auto: !!j.auto };
   }
 
   async function saveCover(job) {
@@ -145,7 +145,7 @@ export function createBackend({ dataDir, downloadsDir, version = '0.0.0', platfo
       await writeAtomic(path.join(part, 'chapter.json'), JSON.stringify({
         id: job.id, provider: job.provider, seriesSlug: job.seriesSlug, seriesTitle: job.seriesTitle,
         chapterSlug: job.chapterSlug, chapterName: job.chapterName, number: job.number ?? null,
-        files, bytes, savedAt: new Date().toISOString()
+        files, bytes, savedAt: new Date().toISOString(), auto: !!job.auto
       }));
       await fsp.rm(dir, { recursive: true, force: true });
       await fsp.rename(part, dir);
@@ -232,7 +232,7 @@ export function createBackend({ dataDir, downloadsDir, version = '0.0.0', platfo
         if (!queue.some(j => j.id === id && (j.state === 'queued' || j.state === 'downloading'))) {
           queue.push({ id, provider: String(b.provider), seriesSlug: String(b.seriesSlug), seriesTitle: String(b.seriesTitle || b.seriesSlug),
             cover: b.cover || null, chapterSlug: String(b.chapterSlug), chapterName: String(b.chapterName || b.chapterSlug),
-            number: b.number ?? null, pages, done: 0, state: 'queued' });
+            number: b.number ?? null, pages, done: 0, state: 'queued', auto: !!b.auto });
           pump();
         }
         return json(200, { ok: true, id });
