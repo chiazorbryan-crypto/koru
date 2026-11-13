@@ -19,6 +19,20 @@ function save(c) { try { fs.writeFileSync(CONF(), JSON.stringify(c)); } catch {}
 const folder = c => c.dir ? path.join(c.dir, 'Koru-sync') : null;
 const safeName = s => String(s || 'PC').replace(/[^a-z0-9 _-]/gi, '').trim().slice(0, 30) || 'PC';
 
+// OneDrive, Dropbox and the like briefly lock a file while they upload it, so replacing it can fail with
+// EPERM/EBUSY for a moment. Try again a few times, then write it in place rather than fail the sync.
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function writeShared(file, body) {
+  const tmp = file + '.tmp';
+  fs.writeFileSync(tmp, body);
+  for (let i = 0; i < 8; i++) {
+    try { fs.renameSync(tmp, file); return; }
+    catch (e) { if (!['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) { try { fs.unlinkSync(tmp); } catch {} throw e; } }
+    await sleep(150 + i * 150);
+  }
+  try { fs.writeFileSync(file, body); } finally { try { fs.unlinkSync(tmp); } catch {} }
+}
+
 export async function syncRoute(request, url) {
   const sub = url.pathname.slice('/k/sync'.length) || '/';
   try {
@@ -58,8 +72,7 @@ export async function syncRoute(request, url) {
       const body = await request.text();
       JSON.parse(body);
       const file = path.join(dir, `${safeName(os.hostname())}-${c.device}.json`);
-      fs.writeFileSync(file + '.tmp', body);
-      fs.renameSync(file + '.tmp', file);
+      await writeShared(file, body);
       return json(200, { ok: true });
     }
     return json(404, { error: 'Not found' });
