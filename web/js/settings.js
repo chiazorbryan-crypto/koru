@@ -326,7 +326,8 @@
         el('div.row', { style: { gap: '14px' } }, el('div.side-logo', { style: { margin: 0 } }, K.fox()),
           el('div', el('b', { text: 'Koru ' + (K.info?.version || '') }), el('div.muted', { text: 'A personal manga and manhwa reader: ' + K.providerList.length + ' sources, downloads, sync between your PCs.' }))),
         upd,
-        el('p.muted', { style: { fontSize: '.85em', marginTop: '12px' }, text: 'Koru reads each site\'s public pages. Paid or locked chapters stay locked. Please support the scan groups on their sites.' })));
+        el('p.muted', { style: { fontSize: '.85em', marginTop: '12px' }, text: 'Koru reads each site\'s public pages. Paid or locked chapters stay locked. Please support the scan groups on their sites.' }),
+        el('p', { style: { fontSize: '.85em', marginTop: '10px', fontWeight: 600, opacity: .8 }, text: 'Made by B0nX' })));
       return grid;
     }
   };
