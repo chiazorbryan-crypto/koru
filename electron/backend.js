@@ -35,7 +35,7 @@ const ALLOWED = ['omegascans.org', 'vortexscans.org', 'asurascans.com', 'flameco
   'comizy.io', 'cmzcdn.org', 'hivetoons.org', 'hivetoon.com',
   'en-thunderscans.com', 'madarascans.net', 'wp.com', 'kingofshojo.com', 'violetmanga.com', 'drakecomic.net', 'ibb.co',
   'qimanga.com', 'qiscans.org', 'nyxscans.com', 'magustoon.org', 'rokaricomics.com', 'elftoon.net', 'elftoon.com',
-  'mangapill.com', 'readdetectiveconan.com', 'lagoonscans.com', 'mangaread.org', 'manhuaplus.com'];
+  'mangapill.com', 'readdetectiveconan.com', 'lagoonscans.com', 'mangaread.org', 'manhuaplus.com', 'files.wordpress.com'];
 export const allowedUrl = u => {
   try {
     const url = new URL(u);
