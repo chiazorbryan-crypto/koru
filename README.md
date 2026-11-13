@@ -7,7 +7,7 @@ A personal manga and manhwa reader for Windows, with a liquid glass look you can
 - **Reader:** long strip or page by page, right-to-left, ambient light, auto next chapter, keyboard controls
 - **Downloads:** save chapters and read them offline; the next chapter(s) can save themselves while you read and clear away once read
 - **Sync between PCs:** favourites, likes, bookmarks, history and read marks stay the same on your PCs through a folder both can see (OneDrive, Google Drive, Dropbox or a USB stick)
-- **Updates:** Settings → About checks GitHub and installs new versions in one click (the repo is private, so it needs a read-only GitHub key once per PC)
+- **Updates:** Settings → About checks GitHub and installs new versions in one click, no account or key needed
 - **Appearance:** every colour with its own transparency, gradients, your own wallpaper, saved looks, glass blur, glow, animations, fonts, sidebar on any edge (minimizable), and a light mode for PCs without a working graphics card
 
 Paid or locked chapters stay locked. Please support the scan groups on their sites.
