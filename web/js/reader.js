@@ -351,10 +351,10 @@
 
     // Chapters in this strip. With "Keep reading into the next chapter" on, the next free chapter is added
     // underneath as you near the end, so you just keep scrolling; the title, page count and history follow along.
-    // With the next-chapter countdown on, a chapter ends on the "Up next" card (3, 2, 1, then the next chapter)
-    // instead of the next one joining underneath.
-    const seamless = opt.mode === 'strip' && opt.autoNext && !opt.countdown;
-    const cdOn = () => !!opt.countdown;
+    // "Keep reading into the next chapter" always wins in the long strip: the next chapter joins underneath.
+    // The Up next countdown (3, 2, 1, then the next chapter) is for when that's off, and for page mode.
+    const seamless = opt.mode === 'strip' && opt.autoNext;
+    const cdOn = () => !!opt.countdown && !seamless;
     const segs = [{ chapter: s.chapter, start: 0, count: s.pages.length }];
     const segOf = i => { for (let k = segs.length - 1; k >= 0; k--) if (i >= segs[k].start) return segs[k]; return segs[0]; };
     const nextAfter = ch => { const i = s.chapters.findIndex(c => c.slug === ch.slug); return i > 0 ? s.chapters.slice(0, i).reverse().find(c => !c.locked) : null; };
@@ -1095,7 +1095,7 @@
         nightRange('Night brightness', 'nightDim', 30, 100, 1, '%'),
         live(tog('Turn on by itself at night', 'nightAuto', 'Between the hours below'), () => { nightOverride = null; paintNight(); }),
         el('div.ctl', el('div.lab', { text: 'Night hours' }), hourSel('nightFrom'), el('span.muted', { text: 'to' }), hourSel('nightTo')),
-        tog('Next-chapter countdown', 'countdown', 'At the end: the next chapter with 3, 2, 1. Click to stay', true),
+        tog('Next-chapter countdown', 'countdown', 'Page mode, or with Keep reading off: the next chapter with 3, 2, 1. Click to stay', true),
         tog('Keep reading into the next chapter', 'autoNext', 'Long strip: the next chapter joins underneath. Pages: goes on after the last page', true),
         tog('Tap sides to turn', 'tapZones', ''),
         el('div.ctl', el('div.lab', 'Zen mode', el('small', { text: 'Full screen, just the pages. Z or Esc to leave' })),

@@ -166,7 +166,7 @@
         slider('Ambient smoothness', ro.ambEase, 0, 100, 1, '%', v => setR({ ambEase: v }), 'Higher: the light changes more slowly and gently'),
         toggle('Calm bright pages', ro.ambCalm, v => setR({ ambCalm: v }), 'White or very bright pages glow less, so they don\'t glare at night'),
         toggle('Right to left', ro.rtl, v => setR({ rtl: v }), 'For manga in page mode'),
-        toggle('Next-chapter countdown', ro.countdown, v => setR({ countdown: v }), 'At the end of a chapter, shows the next one and opens it after 3, 2, 1. Click, scroll up or press a key to stay; Enter opens it now. When off, “Keep reading into the next chapter” decides'),
+        toggle('Next-chapter countdown', ro.countdown, v => setR({ countdown: v }), 'In page mode, or in the long strip with “Keep reading into the next chapter” off: the end of a chapter shows the next one and opens it after 3, 2, 1. Click, scroll up or press a key to stay; Enter opens it now'),
         toggle('Keep reading into the next chapter', ro.autoNext, v => setR({ autoNext: v }), 'Long strip: the next chapter joins underneath as you reach the end, like Kotatsu'),
         toggle('Tap sides to turn', ro.tapZones, v => setR({ tapZones: v })),
         toggle('Zen mode', ro.zen, v => setR({ zen: v }), 'Chapters open full screen with just the pages. Press Z while reading to switch'),
