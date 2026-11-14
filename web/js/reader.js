@@ -697,8 +697,9 @@
       const step = t => {
         if (!glide || !pagesBox.isConnected) { glide = null; return; }
         const dt = Math.min(64, t - glide.last); glide.last = t;
-        const ahead = Math.min(t - glide.at, 450);
-        const want = glide.target + glide.v * ahead;
+        // keep moving at their speed for a moment; if no new spot comes (they stopped), settle exactly on the last one
+        const ahead = t - glide.at;
+        const want = glide.target + glide.v * Math.min(ahead, 200) * Math.max(0, Math.min(1, (400 - ahead) / 200));
         const d = want - pagesBox.scrollTop;
         if (Math.abs(d) < 0.5 && t - glide.at > 1500) { glide = null; return; }
         pagesBox.scrollTop += d * Math.min(1, dt / 110);
