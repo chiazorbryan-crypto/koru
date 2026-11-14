@@ -13,7 +13,7 @@ K.el = function el(spec, props, ...kids) {
   if (props && (typeof props !== 'object' || props instanceof Node || Array.isArray(props))) { kids.unshift(props); props = null; }
   for (const [k, v] of Object.entries(props || {})) {
     if (v == null || v === false) continue;
-    if (k === 'style' && typeof v === 'object') Object.assign(node.style, v);
+    if (k === 'style' && typeof v === 'object') { for (const [p, x] of Object.entries(v)) { if (p.startsWith('--')) node.style.setProperty(p, x); else node.style[p] = x; } }   // --vars need setProperty
     else if (k === 'dataset') Object.assign(node.dataset, v);
     else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
     else if (k === 'text') node.textContent = v;
@@ -181,6 +181,7 @@ K.applyLite = mode => {
   let m = mode; if (!m) { try { m = localStorage.getItem('koru-gpu-mode'); } catch {} }
   const set = K.liteSetting();
   document.documentElement.classList.toggle('lite', set === 'on' || (set === 'auto' && m === 'soft'));
+  document.documentElement.classList.toggle('nogpu', m === 'soft');   // no graphics card: looping and many-piece animations stay off even with light mode off
 };
 K.setLite = v => { K.data.settings.lite = v; K.save('settings'); K.applyLite(); };
 K.applyLite();

@@ -1,0 +1,117 @@
+/* Koru liveliness: the fox's moods, streaks, badges and celebrations.
+   Smoothness rules: only transform and opacity move, nothing that moves has a blur or filter,
+   nothing loops except the sleeping fox (and that stops in light mode). */
+
+/* ---------- the fox in the sidebar ---------- */
+.side-logo { position: relative; }
+.side-logo .fox { transform-origin: 50% 80%; transition: transform .6s var(--ease-move, cubic-bezier(.2, .8, .2, 1)); }
+.side-logo .zz { position: absolute; right: -2px; top: -6px; width: 18px; height: 22px; pointer-events: none; opacity: 0; transition: opacity .4s; }
+.side-logo .zz i { position: absolute; left: 0; bottom: 0; font: 700 9px/1 system-ui, sans-serif; font-style: normal; color: var(--text, #fff); opacity: 0; }
+.side-logo.sleep .zz { opacity: 1; }
+.side-logo.sleep .fox { transform: rotate(-9deg) scale(.9) translateY(2px); animation: foxBreathe 4.2s ease-in-out 0.6s infinite; }
+.side-logo.sleep .zz i { animation: foxZ 3.6s ease-out infinite; }
+.side-logo.sleep .zz i:nth-child(2) { animation-delay: 1.2s; font-size: 11px; }
+.side-logo.sleep .zz i:nth-child(3) { animation-delay: 2.4s; font-size: 13px; }
+.side-logo.wake .fox { animation: foxWake .7s var(--ease-move, ease-out); }
+.side-logo.perk .fox { animation: foxPerk 1.1s var(--ease-move, ease-out); }
+.side-logo.cheer .fox { animation: foxCheer 1s var(--ease-move, ease-out); }
+.side-logo .spark { position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: var(--accent2, #38d6ff); pointer-events: none; opacity: 0; animation: foxSpark .8s ease-out forwards; }
+
+@keyframes foxBreathe { 0%, 100% { transform: rotate(-9deg) scale(.9) translateY(2px); } 50% { transform: rotate(-9deg) scale(.94) translateY(1px); } }
+@keyframes foxZ { 0% { transform: translate(0, 0) scale(.6); opacity: 0; } 20% { opacity: .9; } 100% { transform: translate(10px, -16px) scale(1); opacity: 0; } }
+@keyframes foxWake { 0% { transform: rotate(-9deg) scale(.9); } 45% { transform: rotate(4deg) scale(1.08, .94); } 75% { transform: rotate(-2deg) scale(.97, 1.04); } 100% { transform: none; } }
+@keyframes foxPerk { 0% { transform: none; } 18% { transform: translateY(-7px) scale(1.08); } 34% { transform: translateY(0) scale(.96, 1.04); } 52% { transform: translateY(-4px) rotate(6deg); } 70% { transform: translateY(0) rotate(-4deg); } 100% { transform: none; } }
+@keyframes foxCheer { 0% { transform: none; } 25% { transform: translateY(-8px) rotate(-12deg) scale(1.1); } 50% { transform: translateY(-8px) rotate(12deg) scale(1.1); } 75% { transform: translateY(0) scale(.95, 1.05); } 100% { transform: none; } }
+@keyframes foxSpark { 0% { transform: translate(0, 0) scale(.4); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) scale(1); opacity: 0; } }
+
+/* ---------- the fox popping up while you read ---------- */
+.foxpop { position: fixed; right: 22px; bottom: 84px; z-index: 60; display: flex; align-items: center; gap: 10px; padding: 9px 16px 9px 10px; border-radius: 999px;
+  background: rgba(14, 14, 32, .9); border: 1px solid var(--edge, rgba(255, 255, 255, .18)); color: var(--text, #fff); font-size: 13px; pointer-events: none;
+  animation: popIn .45s var(--ease-move, ease-out) both; }
+.foxpop.out { animation: popOut .35s ease-in forwards; }
+.foxpop .fx { width: 30px; height: 30px; border-radius: 30%; display: grid; place-items: center; background: var(--accent-grad, linear-gradient(135deg, #8f7dff, #38d6ff)); color: #fff; }
+.foxpop .fx .fox { width: 72%; height: 72%; animation: foxCheer 1s .25s var(--ease-move, ease-out); }
+.foxpop b { font-weight: 650; }
+.foxpop small { opacity: .75; }
+@keyframes popIn { from { transform: translateY(18px) scale(.92); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes popOut { to { transform: translateY(10px) scale(.96); opacity: 0; } }
+
+/* ---------- badge celebration ---------- */
+.cele { position: fixed; left: 50%; top: 26px; z-index: 70; width: min(360px, calc(100vw - 32px)); margin-left: calc(min(360px, calc(100vw - 32px)) / -2);
+  display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 18px; background: rgba(14, 14, 32, .94); border: 1px solid var(--edge, rgba(255, 255, 255, .18));
+  color: var(--text, #fff); pointer-events: none; animation: celeIn .55s var(--ease-move, ease-out) both; }
+.cele.out { animation: popOut .4s ease-in forwards; }
+.cele .em { position: relative; flex: none; width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; background: var(--accent-grad, linear-gradient(135deg, #8f7dff, #38d6ff)); }
+.cele small { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .7; }
+.cele b { display: block; font-size: 16px; }
+.cele span.d { font-size: 12.5px; opacity: .8; }
+.cele .conf { position: absolute; left: 50%; top: 50%; width: 7px; height: 11px; margin: -5px -3px; border-radius: 2px; opacity: 0; animation: conf 1.1s cubic-bezier(.15, .7, .3, 1) forwards; }
+@keyframes celeIn { 0% { transform: translateY(-24px) scale(.9); opacity: 0; } 60% { transform: translateY(3px) scale(1.02); opacity: 1; } 100% { transform: none; opacity: 1; } }
+@keyframes conf { 0% { transform: translate(0, 0) rotate(0) scale(.6); opacity: 1; } 75% { opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) rotate(var(--r)) scale(1); opacity: 0; } }
+
+/* ---------- streak chip (Library) ---------- */
+.streak { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; padding: 3px 10px 3px 8px; border-radius: 999px; font-size: 12.5px; font-weight: 600; vertical-align: middle;
+  background: linear-gradient(90deg, rgba(255, 140, 50, .22), rgba(255, 70, 120, .18)); border: 1px solid rgba(255, 150, 80, .35); color: var(--text, #fff); }
+.streak .fl { display: inline-block; animation: flick .9s var(--ease-move, ease-out) .3s both; }
+.streak.cold { background: rgba(255, 255, 255, .06); border-color: var(--edge, rgba(255, 255, 255, .18)); font-weight: 500; }
+@keyframes flick { 0% { transform: scale(.4) rotate(-20deg); opacity: 0; } 55% { transform: scale(1.3) rotate(8deg); opacity: 1; } 100% { transform: none; opacity: 1; } }
+
+/* ---------- badges (Stats) ---------- */
+.badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+.badge { position: relative; display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 14px; background: rgba(255, 255, 255, .05); border: 1px solid var(--edge, rgba(255, 255, 255, .12)); }
+.badge .em { flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-size: 19px; background: rgba(255, 255, 255, .07); }
+.badge.got .em { background: var(--accent-grad, linear-gradient(135deg, #8f7dff, #38d6ff)); box-shadow: 0 0 14px -2px var(--accent, #8f7dff); }
+.badge:not(.got) .em { filter: grayscale(1); opacity: .45; }
+.badge b { display: block; font-size: 13px; }
+.badge small { display: block; font-size: 11.5px; color: var(--muted, #aaa); line-height: 1.3; }
+.badge .prog { height: 3px; margin-top: 5px; border-radius: 3px; background: rgba(255, 255, 255, .1); overflow: hidden; }
+.badge .prog i { display: block; height: 100%; width: 100%; background: var(--accent-grad, #8f7dff); transform-origin: left; }
+.badgehead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+/* ---------- Up next card (reader) ---------- */
+.endcard.upnext { padding: 26px 26px 22px; }
+.endcard .endcover { width: 118px; aspect-ratio: 3 / 4.2; margin: 0 auto 14px; border-radius: 14px; overflow: hidden; box-shadow: 0 10px 40px -8px var(--accent, #8f7dff), 0 0 0 1px rgba(255, 255, 255, .12); animation: popIn .5s var(--ease-move, ease-out) both; }
+.endcard .endcover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.endcard .upk { display: block; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent2, #38d6ff); margin-bottom: 2px; }
+.endcard .cdbox { margin: 14px auto 16px; width: min(260px, 100%); }
+.endcard .cdtext { font-size: 13px; color: var(--muted, #bbb); margin-bottom: 7px; }
+.endcard .cdnum { display: inline-block; min-width: 1ch; color: var(--text, #fff); font-size: 15px; }
+.endcard .cdnum.pop { animation: cdPop .45s var(--ease-move, ease-out); }
+.endcard .cdbar { height: 4px; border-radius: 4px; background: rgba(255, 255, 255, .1); overflow: hidden; }
+.endcard .cdbar i { display: block; height: 100%; width: 100%; background: var(--accent-grad, #8f7dff); transform: scaleX(0); transform-origin: left; }
+.endcard.counting .cdbar i { animation: cdFill 3s linear forwards; }
+.endcard.stopped .cdbar { opacity: .35; }
+@keyframes cdPop { 0% { transform: scale(1.8); opacity: 0; } 100% { transform: none; opacity: 1; } }
+@keyframes cdFill { to { transform: scaleX(1); } }
+
+/* ---------- light mode: still lively, but nothing loops and fewer moving bits ---------- */
+html.lite .side-logo.sleep .fox, html.nogpu .side-logo.sleep .fox { animation: none; }
+html.lite .side-logo.sleep .zz i, html.nogpu .side-logo.sleep .zz i { animation: none; opacity: .85; }
+html.lite .side-logo.sleep .zz i:nth-child(2), html.nogpu .side-logo.sleep .zz i:nth-child(2) { transform: translate(5px, -8px); }
+html.lite .side-logo.sleep .zz i:nth-child(3), html.nogpu .side-logo.sleep .zz i:nth-child(3) { transform: translate(10px, -16px); }
+html.lite .cele .conf, html.lite .side-logo .spark, html.nogpu .cele .conf, html.nogpu .side-logo .spark { display: none; }
+html.lite .badge.got .em { box-shadow: none; }
+html.lite .endcard .endcover { box-shadow: 0 0 0 1px rgba(255, 255, 255, .15); }
+html.no-lively .side-logo .zz, html.no-lively .foxpop, html.no-lively .cele .conf { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .side-logo .fox, .foxpop, .foxpop .fx .fox, .cele, .cele .conf, .streak .fl, .endcard .endcover, .endcard .cdnum.pop { animation: none !important; }
+}
+
+/* ---------- series badges ---------- */
+.sbchip { position: relative; display: inline-flex; align-items: center; gap: 8px; margin: 10px 0 2px; padding: 6px 14px 8px 8px; border-radius: 999px; font-size: 13px; overflow: hidden;
+  background: rgba(255, 255, 255, .06); border: 1px solid var(--edge, rgba(255, 255, 255, .16)); }
+.sbchip .em { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; background: rgba(255, 255, 255, .08); }
+.sbchip:not(.got) .em { filter: grayscale(.85); opacity: .7; }
+.sbchip.got .em { background: var(--accent-grad, linear-gradient(135deg, #8f7dff, #38d6ff)); }
+.sbchip.gold { border-color: rgba(255, 205, 90, .55); background: linear-gradient(90deg, rgba(255, 200, 70, .2), rgba(255, 150, 60, .1)); }
+.sbchip.gold .em { background: linear-gradient(135deg, #ffe08a, #f5a623); }
+.sbchip small { color: var(--muted, #bbb); }
+.sbchip .sbp { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, .08); }
+.sbchip .sbp i { display: block; height: 100%; background: var(--accent-grad, #8f7dff); transform-origin: left; }
+a.badge { color: inherit; text-decoration: none; }
+.badge.gold { border-color: rgba(255, 205, 90, .5); }
+.badge.gold .em { background: linear-gradient(135deg, #ffe08a, #f5a623); box-shadow: 0 0 14px -2px #f5a623; }
+html.lite .badge.gold .em { box-shadow: none; }
+/* no graphics card and light mode switched off: pop-ups appear at once instead of sliding over the glass */
+html.nogpu:not(.lite) .cele, html.nogpu:not(.lite) .foxpop, html.nogpu:not(.lite) .foxpop .fx .fox { animation: none; }
+html.nogpu:not(.lite) .cele.out, html.nogpu:not(.lite) .foxpop.out { animation: none; opacity: 0; }

@@ -3,7 +3,7 @@
 'use strict';
 (function () {
   const { el, icon } = K;
-  const DEFAULTS = { mode: 'strip', rtl: false, gap: 0, width: 760, autoNext: true, preload: 4, tapZones: true, ambient: true, ambStrength: 55, ambBlur: 90, ambMode: 'page', ambSat: 170, ambEase: 45, ambCalm: true, fps: false, zen: false, autoSpeed: 90, autoSecs: 8, autoStart: false, autoDl: 1, autoDlClean: true };
+  const DEFAULTS = { mode: 'strip', rtl: false, gap: 0, width: 760, autoNext: true, preload: 4, tapZones: true, ambient: true, ambStrength: 55, ambBlur: 90, ambMode: 'page', ambSat: 170, ambEase: 45, ambCalm: true, fps: false, zen: false, autoSpeed: 90, autoSecs: 8, autoStart: false, autoDl: 1, autoDlClean: true, countdown: true };
   K.readerSettings = () => ({ ...DEFAULTS, ...(K.data.settings.reader || {}) });
   const setReader = patch => { K.data.settings.reader = { ...K.readerSettings(), ...patch }; K.save('settings'); };
 
@@ -352,7 +352,10 @@
 
     // Chapters in this strip. With "Keep reading into the next chapter" on, the next free chapter is added
     // underneath as you near the end, so you just keep scrolling; the title, page count and history follow along.
-    const seamless = opt.mode === 'strip' && opt.autoNext;
+    // With the next-chapter countdown on, a chapter ends on the "Up next" card (3, 2, 1, then the next chapter)
+    // instead of the next one joining underneath.
+    const seamless = opt.mode === 'strip' && opt.autoNext && !opt.countdown;
+    const cdOn = () => !!opt.countdown;
     const segs = [{ chapter: s.chapter, start: 0, count: s.pages.length }];
     const segOf = i => { for (let k = segs.length - 1; k >= 0; k--) if (i >= segs[k].start) return segs[k]; return segs[0]; };
     const nextAfter = ch => { const i = s.chapters.findIndex(c => c.slug === ch.slug); return i > 0 ? s.chapters.slice(0, i).reverse().find(c => !c.locked) : null; };
@@ -368,13 +371,51 @@
     const end = el('div.endcard.glass');
     function paintEnd() {
       const last = segs[segs.length - 1].chapter, nx = nextAfter(last);
-      end.replaceChildren(
-        el('h3', { text: nx ? (appending ? 'Loading ' + short(nx.name) + '…' : 'End of ' + short(last.name)) : 'You\'re all caught up' }),
-        el('p.muted', { text: appendErr ? appendErr.message : nx ? 'Up next: ' + nx.name : 'No newer free chapter yet.' }),
+      const cd = cdOn() && nx && !appending && !appendErr;
+      end.classList.toggle('upnext', !!cd);
+      end.replaceChildren(...[
+        cd && s.series?.cover ? el('div.endcover', K.img(s.series.cover, '', '', 150)) : null,
+        cd ? el('small.upk', { text: 'Up next' }) : null,
+        cd ? el('h3', { text: short(nx.name) }) : null,
+        cd ? el('p.muted', { text: 'You finished ' + short(last.name) }) : null,
+        cd ? el('div.cdbox', el('div.cdtext', 'Opening in ', el('b.cdnum', { text: '3' })), el('div.cdbar', el('i'))) : null,
+        cd ? null : el('h3', { text: nx ? (appending ? 'Loading ' + short(nx.name) + '…' : 'End of ' + short(last.name)) : 'You\'re all caught up' }),
+        cd ? null : el('p.muted', { text: appendErr ? appendErr.message : nx ? 'Up next: ' + nx.name : 'No newer free chapter yet.' }),
         appending ? el('div.spinner', { style: { margin: '6px auto' } }) : el('div.row', { style: { justifyContent: 'center' } },
           nx ? el('button.btn.primary', { onclick: () => (seamless ? appendNext() : goChapter(nx)) }, appendErr ? 'Try again' : 'Next chapter', icon('next')) : null,
-          el('button.btn', { onclick: () => K.closeReader() }, 'Back to series')));
+          el('button.btn', { onclick: () => K.closeReader() }, 'Back to series'))].filter(Boolean));
     }
+    // Next-chapter countdown: 3, 2, 1, then the next chapter. A click, a key or scrolling up stops it.
+    // Only transform and opacity move, so it stays smooth on any PC.
+    let cdT = 0, cdRun = false, cdStopped = false, cdVisible = false;
+    const cdCancel = e => {
+      if (e.type === 'wheel' && e.deltaY > 0) return;
+      if (e.target?.closest?.('.endcard .btn')) return;
+      if (e.key === 'Enter') { const nx = nextAfter(segs[segs.length - 1].chapter); stopCountdown(false); if (nx) { e.preventDefault(); e.stopPropagation(); goChapter(nx); } return; }   // Enter: open it now
+      stopCountdown(true);
+    };
+    function startCountdown() {
+      const nx = nextAfter(segs[segs.length - 1].chapter);
+      if (!cdOn() || !nx || cdRun || cdStopped || appending || state !== s || document.hidden || !end.isConnected) return;
+      if (opt.mode === 'strip' && pagesBox.scrollTop < 200) return;   // pages still loading in at the top: you haven't scrolled to the end
+      cdRun = true; end.classList.add('counting');
+      box.addEventListener('pointerdown', cdCancel, true); box.addEventListener('wheel', cdCancel, { passive: true }); document.addEventListener('keydown', cdCancel, true);
+      let n = 3;
+      const tick = () => {
+        if (!cdRun || state !== s) return;
+        if (n === 0) { stopCountdown(false); goChapter(nx); return; }
+        end.querySelector('.cdnum')?.replaceWith(el('b.cdnum.pop', { text: String(n) }));
+        n--; cdT = setTimeout(tick, 1000);
+      };
+      tick();
+    }
+    function stopCountdown(byYou) {
+      if (byYou) { cdStopped = true; end.classList.add('stopped'); const t = end.querySelector('.cdtext'); if (t) t.textContent = "Stopped. Open it when you're ready."; }
+      if (!cdRun) return;
+      cdRun = false; clearTimeout(cdT); end.classList.remove('counting');
+      box.removeEventListener('pointerdown', cdCancel, true); box.removeEventListener('wheel', cdCancel); document.removeEventListener('keydown', cdCancel, true);
+    }
+    s.stopCountdown = stopCountdown;
     let observe = () => {};
     async function appendNext() {
       const last = segs[segs.length - 1], nx = nextAfter(last.chapter);
@@ -538,6 +579,7 @@
       // main thread, so scrolling never stops to measure the page (that caused the stutter).
       const line = new IntersectionObserver(entries => {
         for (const e of entries) if (e.isIntersecting) { const i = Number(e.target.dataset.i); if (i !== s.page) setPage(i, true); }
+        if (cdVisible && !cdRun && !jump) startCountdown();
       }, { root: pagesBox, rootMargin: '-40% 0px -59.5% 0px' });
       // far away (above or below): free the picture; its space stays so nothing jumps
       const far = new IntersectionObserver(entries => {
@@ -549,9 +591,11 @@
         s.page = s.pages.length - 1; s.finished = true; saveProgress();
       }, { root: pagesBox });
       const nearEnd = new IntersectionObserver(es => { if (es[0].isIntersecting && seamless && !jump) appendNext(); }, { root: pagesBox, rootMargin: '0px 0px 2500px 0px' });
+      // the countdown runs while most of the Up next card is on screen
+      const cdSeen = new IntersectionObserver(es => { cdVisible = es[0].isIntersecting; if (cdVisible && !jump) startCountdown(); else stopCountdown(false); }, { root: pagesBox, threshold: 0.6 });
       observe = p => { io.observe(p); line.observe(p); far.observe(p); };
       [...strip.querySelectorAll('.pg')].forEach(observe);
-      atEnd.observe(end); nearEnd.observe(end);
+      atEnd.observe(end); nearEnd.observe(end); if (cdOn()) cdSeen.observe(end);
       let lastY = 0, ticking = false;
       // Smooth guard: frame times are watched while you scroll. If this PC stutters in two checks in a row,
       // the ambient light steps down by itself (per page, then off) and this PC remembers it.
@@ -583,7 +627,7 @@
         ticking = true;
         requestAnimationFrame(() => { ticking = false; const y = pagesBox.scrollTop; if (Math.abs(y - lastY) > 80) { if (y > lastY && !box?.classList.contains('hide-ui')) box?.classList.add('hide-ui'); lastY = y; } });
       }, { passive: true });
-      s.cleanup = () => { io.disconnect(); line.disconnect(); far.disconnect(); atEnd.disconnect(); nearEnd.disconnect(); files.clear(); st.fill(''); strip.querySelectorAll('.pg').forEach(w => { if (job[Number(w.dataset.i)]) freeSlices(w); }); };
+      s.cleanup = () => { io.disconnect(); line.disconnect(); far.disconnect(); atEnd.disconnect(); nearEnd.disconnect(); cdSeen.disconnect(); stopCountdown(false); files.clear(); st.fill(''); strip.querySelectorAll('.pg').forEach(w => { if (job[Number(w.dataset.i)]) freeSlices(w); }); };
     }
 
     // Auto-scroll: the strip glides down by itself (in page mode, pages turn by themselves).
@@ -702,7 +746,7 @@
     const step = d => {
       if (opt.mode === 'paged') {
         const n = s.page + d;
-        if (n >= s.pages.length) { s.page = s.pages.length - 1; s.finished = true; saveProgress(); if (s.next && opt.autoNext) goChapter(s.next); else box.append(end); return; }
+        if (n >= s.pages.length) { s.page = s.pages.length - 1; s.finished = true; saveProgress(); if (s.next && cdOn()) { box.append(end); setTimeout(startCountdown, 60); } else if (s.next && opt.autoNext) goChapter(s.next); else box.append(end); return; }
         setPage(n);
       } else pagesBox.scrollBy({ top: d * pagesBox.clientHeight * 0.85, behavior: 'smooth' });
     };
@@ -778,6 +822,7 @@
         ambRange('Ambient smoothness', 'ambEase', 0, 100, 1, '%'),
         (() => { const n = tog('Calm bright pages', 'ambCalm', 'White pages glow less'); n.querySelector('.toggle').addEventListener('click', () => setTimeout(() => applyAmb(K.readerSettings()))); return n; })(),
         tog('Right to left', 'rtl', 'For manga in page mode', true),
+        tog('Next-chapter countdown', 'countdown', 'At the end: the next chapter with 3, 2, 1. Click to stay', true),
         tog('Keep reading into the next chapter', 'autoNext', 'Long strip: the next chapter joins underneath. Pages: goes on after the last page', true),
         tog('Tap sides to turn', 'tapZones', ''),
         el('div.ctl', el('div.lab', 'Zen mode', el('small', { text: 'Full screen, just the pages. Z or Esc to leave' })),

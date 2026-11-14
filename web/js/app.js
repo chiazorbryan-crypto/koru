@@ -74,7 +74,7 @@
     if (r.name === 'read') { K.openReader(r.parts[0], r.parts[1], r.parts[2]); return; }
     K.closeReader?.(true);
     const render = K.views[r.name] || K.views.library;
-    const navId = r.name === 'series' ? (sessionStorage.getItem('koru-from') || 'library') : r.name === 'local' ? 'downloads' : r.name;
+    const navId = r.name === 'series' ? (sessionStorage.getItem('koru-from') || 'library') : r.name === 'local' ? 'downloads' : r.name === 'wrapped' ? 'stats' : r.name;
     if (r.name !== 'series') sessionStorage.setItem('koru-from', r.name === 'local' ? 'downloads' : K.views[r.name] ? r.name : 'library');
     $$('.nav-btn').forEach(b => b.classList.toggle('on', b.dataset.nav === navId));
     movePill();
@@ -208,6 +208,7 @@
     await route();
     K.refreshDownloads?.();
     K.sync?.start();
+    document.dispatchEvent(new CustomEvent('koru-ready'));
     setTimeout(() => K.checkAppUpdate?.(), 20000);
     setTimeout(() => K.cleanAutoDownloads?.(), 30000);
     setTimeout(() => K.checkUpdates?.(), 8000);

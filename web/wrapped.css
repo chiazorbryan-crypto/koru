@@ -1,0 +1,121 @@
+/* Koru Wrapped (wr-) and the Surprise me / Today's pick bits (lv-).
+   Smoothness: only transform and opacity animate, every entrance runs once, nothing that animates is blurred.
+   Glass cards (.glass, which blur what's behind them) stay still; only their contents slide in. */
+
+/* ---------- Wrapped page ---------- */
+.wr-head { align-items: center; }
+.wr-head .btn .ic { width: 1.15em; height: 1.15em; }
+.wr-busy { opacity: .7; }
+.wr-bar { margin-bottom: 18px; gap: 12px; }
+.wr-empty .fox { animation: none; }   /* the usual empty-state fox bobs forever; this one stays put */
+
+.wr-hero { position: relative; overflow: hidden; isolation: isolate; border-radius: calc(var(--radius) * 1.25); padding: 28px 30px 26px; margin-bottom: 14px;
+  background: var(--accent-grad); color: var(--on-accent); box-shadow: 0 18px 40px -20px var(--accent);
+  animation: wr-pop var(--t-slow) var(--ease-move) both; }
+.wr-hero .wr-fox { position: absolute; right: -24px; bottom: -36px; width: 230px; height: 230px; opacity: .13; z-index: -1; pointer-events: none; }
+.wr-k { font-size: .76em; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+.wr-hero h2 { font-family: var(--title-font); font-size: clamp(1.5em, 3vw, 2.2em); line-height: 1.1; margin: 6px 0 14px; font-weight: 700; letter-spacing: -.02em; }
+.wr-big { font-family: var(--title-font); font-size: clamp(2.8em, 7vw, 4.4em); font-weight: 800; line-height: 1; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.wr-cap { opacity: .85; margin-top: 4px; }
+.wr-nums { display: flex; flex-wrap: wrap; gap: 12px 34px; margin-top: 20px; }
+.wr-num { display: grid; gap: 0; }
+.wr-num b { font-family: var(--title-font); font-size: 1.7em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.wr-num small { opacity: .85; font-size: .85em; }
+.wr-hero > :not(.wr-fox) { animation: wr-up var(--t-slow) var(--ease-move) both; }
+.wr-hero > .wr-k { animation-delay: calc(60ms / var(--spd)); }
+.wr-hero > h2 { animation-delay: calc(100ms / var(--spd)); }
+.wr-hero > .wr-big { animation-delay: calc(150ms / var(--spd)); }
+.wr-hero > .wr-cap { animation-delay: calc(190ms / var(--spd)); }
+.wr-hero > .wr-nums { animation-delay: calc(230ms / var(--spd)); }
+
+.wr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.wr-card { padding: 18px; }
+.wr-wide { grid-column: 1 / -1; }
+.wr-c { display: grid; gap: 8px; align-content: start; animation: wr-up var(--t-slow) var(--ease-move) both; animation-delay: calc((140ms + min(var(--i, 0), 8) * 60ms) / var(--spd)); }
+.wr-c h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 2px; font-size: .78em; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.wr-c h3 .ic { color: var(--accent-solid); width: 1.3em; height: 1.3em; }
+.wr-val { display: flex; align-items: center; gap: 10px; font-family: var(--title-font); font-size: 1.45em; font-weight: 700; line-height: 1.2; }
+.wr-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.wr-note { margin: 0; color: var(--muted); font-size: .9em; }
+
+/* top series */
+.wr-top { display: grid; gap: 4px; }
+.wr-row { display: grid; grid-template-columns: 26px 48px 1fr auto; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 12px; color: inherit; text-decoration: none; transition: background var(--t-fast); }
+.wr-row:hover { background: rgba(255,255,255,.06); }
+.wr-rank { font-weight: 800; color: var(--muted); text-align: center; }
+.wr-row:first-child .wr-rank { color: var(--accent-solid); }
+.wr-th { width: 48px; height: 66px; border-radius: 9px; overflow: hidden; background: var(--glass); }
+.wr-th img, .lv-cv img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity var(--t); }
+.wr-th img.ready, .lv-cv img.ready { opacity: 1; }
+.wr-tinfo { min-width: 0; display: grid; gap: 3px; }
+.wr-tinfo b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wr-tinfo small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wr-tbar { height: 5px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
+.wr-tbar i { display: block; height: 100%; border-radius: 99px; background: var(--accent-line); transform: scaleX(var(--w, 1)); transform-origin: left center;
+  animation: wr-grow-x var(--t-slow) var(--ease-move) both; animation-delay: calc((300ms + var(--j, 0) * 70ms) / var(--spd)); }
+.wr-time { font-variant-numeric: tabular-nums; }
+
+/* reading clock */
+.wr-clock { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; height: 74px; margin-top: 4px; }
+.wr-hb { display: flex; align-items: flex-end; height: 100%; }
+.wr-hb i { display: block; width: 100%; height: 100%; border-radius: 3px; background: color-mix(in srgb, var(--accent-solid) 40%, transparent);
+  transform: scaleY(var(--h, 0)); transform-origin: center bottom;
+  animation: wr-grow-y var(--t-slow) var(--ease-move) both; animation-delay: calc((300ms + var(--j, 0) * 14ms) / var(--spd)); }
+.wr-hb.peak i { background: var(--accent-grad); }
+.wr-ticks { display: grid; grid-template-columns: repeat(4, 1fr); font-size: .74em; color: var(--muted); }
+
+/* badges */
+.wr-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.wr-badge { display: flex; align-items: center; gap: 10px; padding: 6px 14px 6px 8px; border-radius: 99px; background: rgba(255,255,255,.07); border: 1px solid var(--edge); }
+.wr-badge .e { font-size: 1.35em; line-height: 1; }
+.wr-badge > span:last-child { display: grid; line-height: 1.2; }
+.wr-badge small { font-size: .75em; }
+
+@keyframes wr-up { from { opacity: 0; transform: translateY(14px); } }
+@keyframes wr-pop { from { opacity: 0; transform: translateY(12px) scale(.97); } }
+@keyframes wr-grow-x { from { transform: scaleX(0); } }
+@keyframes wr-grow-y { from { transform: scaleY(0); } }
+@keyframes wr-fade { from { opacity: 0; } }
+
+/* ---------- Surprise me ---------- */
+.lv-surprise .ic { transition: transform var(--t) var(--ease); }
+.lv-surprise:hover .ic { transform: rotate(18deg) scale(1.12); }
+.lv-surprise.busy { opacity: .75; cursor: progress; }
+.lv-surprise.busy .ic { transform: rotate(180deg) scale(.9); transition-duration: var(--t-slow); }
+
+/* ---------- Today's pick ---------- */
+.lv-daily { position: relative; display: flex; align-items: center; gap: 14px; max-width: 560px; padding: 12px 44px 12px 12px; margin-bottom: 18px;
+  border-radius: var(--radius); border: var(--edge-w) solid var(--edge); color: var(--text);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-solid) 22%, var(--bg)), color-mix(in srgb, var(--accent2) 12%, var(--bg)));
+  box-shadow: 0 10px 30px -16px var(--shadow);
+  animation: lv-in var(--t-slow) var(--ease-move) both; }
+.lv-daily.lv-out { animation: lv-out var(--t) ease both; pointer-events: none; }
+.lv-cv { width: 60px; height: 84px; border-radius: 10px; overflow: hidden; flex: none; background: var(--glass); cursor: pointer; transition: transform var(--t) var(--ease); }
+.lv-cv:hover { transform: translateY(-2px) scale(1.03); }
+.lv-info { min-width: 0; flex: 1; display: grid; gap: 2px; }
+.lv-k { display: flex; align-items: center; gap: 6px; font-size: .72em; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--accent-solid); }
+.lv-k .ic { width: 14px; height: 14px; }
+.lv-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lv-info small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lv-act { margin-top: 6px; }
+.lv-x { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); transition: background var(--t-fast), color var(--t-fast); }
+.lv-x:hover { background: rgba(255,255,255,.1); color: var(--text); }
+.lv-x .ic { width: 14px; height: 14px; }
+@keyframes lv-in { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+@keyframes lv-out { to { opacity: 0; transform: scale(.97); } }
+
+/* ---------- light theme touches ---------- */
+html.light .wr-row:hover, html.light .lv-x:hover { background: rgba(0,0,0,.05); }
+html.light .wr-tbar, html.light .wr-badge { background: rgba(0,0,0,.05); }
+
+/* ---------- light mode (CPU drawing): a short plain fade, no slides, no growing bars ---------- */
+html.lite .wr-hero, html.lite .wr-hero > :not(.wr-fox), html.lite .wr-c, html.lite .lv-daily { animation: wr-fade 160ms ease both !important; animation-delay: 0s !important; }
+html.lite .wr-tbar i, html.lite .wr-hb i { animation: none !important; }
+html.lite .lv-daily.lv-out { animation: lv-out 140ms ease both !important; }
+html.lite .wr-hero { box-shadow: none; }
+html.lite .lv-daily { box-shadow: none; }
+html.lite .lv-cv, html.lite .lv-surprise .ic { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  html:not(.force-motion) .wr-hero, html:not(.force-motion) .wr-hero > *, html:not(.force-motion) .wr-c,
+  html:not(.force-motion) .wr-tbar i, html:not(.force-motion) .wr-hb i, html:not(.force-motion) .lv-daily { animation: none; }
+}

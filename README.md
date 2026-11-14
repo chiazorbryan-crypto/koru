@@ -4,7 +4,8 @@ A personal manga and manhwa reader for Windows, with a liquid glass look you can
 
 - **Sources (23):** Omega, Vortex, Asura, Flame, MangaDex, Thunder, Madara Scans, King of Shojo, Violet, Rokari, Lagoon, Drake, Elf Toon, Weeb Central, MangaBuddy (Comizy), Hive Toons, Webtoons, Qi Scans, Nyx Scans, Magus Manga, MangaPill, MangaRead and ManhuaPlus, read through each site's public pages and APIs. Free chapters only. (Toonily is hidden for now: its site blocks Koru.)
 - **Library:** favourites, continue reading, history, and new chapter checks every 30 minutes while Koru is open (plus when you come back to it), with a desktop notification
-- **Reader:** long strip or page by page, right-to-left, ambient light, auto next chapter, keyboard controls
+- **Reader:** long strip or page by page, right-to-left, ambient light, an "Up next" countdown into the next chapter (can be switched off), keyboard controls
+- **Lively:** a fox that naps when Koru sits idle, perks up at new chapters and cheers when you finish one; reading streaks; 16 badges plus a themed badge for every series you get into (The Greatest Estate Developer: 💰 Love of Money); Koru Wrapped for your month or year; Surprise me and a daily pick
 - **Downloads:** save chapters and read them offline; the next chapter(s) can save themselves while you read and clear away once read
 - **Sync between PCs:** favourites, likes, bookmarks, history and read marks stay the same on your PCs through a folder both can see (OneDrive, Google Drive, Dropbox or a USB stick)
 - **Updates:** Settings → About checks GitHub and installs new versions in one click, no account or key needed

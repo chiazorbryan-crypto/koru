@@ -307,6 +307,7 @@
         K.toast(`New chapters in ${gainedSeries.length} series (${gained} chapter${s(gained)})`, 'ok');
         if (!/^#\/?(library)?$/.test(location.hash)) K.setNavBadge('library', true);
         notify(gainedSeries, gained);
+        document.dispatchEvent(new CustomEvent('koru-new-chapters', { detail: { gained } }));
       } else if (force) {
         if (!entries.length) K.toast('Add series to your favourites to get new chapter checks.');
         else if (withNew) K.toast(`No newer chapters. ${withNew} series still ha${withNew === 1 ? 's' : 've'} unread new chapters.`);
@@ -354,9 +355,11 @@
       try { if (typeof Notification !== 'undefined' && Notification.permission === 'default' && K.data.settings.notifyNew !== false) Notification.requestPermission().catch(() => {}); } catch {}
       try { await K.checkUpdates(true); } finally { refresh.disabled = false; refresh.querySelector('.ic').style.animation = ''; }
     } }, icon('refresh'), 'Check updates');
-    root.append(el('div.head', el('div', el('h1', { text: 'Library' }), el('div.sub', { text: hello })), el('div.sp'), refresh));
+    root.append(el('div.head', el('div', el('h1', { text: 'Library' }), el('div.sub', el('span', { text: hello }), K.lively?.streakChip?.() || '')), el('div.sp'), refresh));
+    const pick = el('div.lv-pickslot');
     const body = el('div');
-    root.append(body);
+    root.append(pick, body);
+    K.lively2?.dailyPick?.(pick);
 
     function draw() {
       body.replaceChildren();
@@ -437,7 +440,7 @@
     let src = sessionStorage.getItem('koru-src') || 'omega';
     if (!K.providerList.some(p => p.id === src)) src = 'omega';
     let sort = sessionStorage.getItem('koru-sort') || 'latest';
-    root.append(el('div.head', el('div', el('h1', { text: 'Explore' }), el('div.sub', { text: 'Browse your sources' }))));
+    root.append(el('div.head', el('div', el('h1', { text: 'Explore' }), el('div.sub', { text: 'Browse your sources' })), el('div.sp'), K.lively2?.surpriseButton?.() || ''));
     if (!K.providers[src]) src = 'omega';
     const srcRow = el('div.srcs');
     const drawSrcs = () => srcRow.replaceChildren(...K.providerList.map(p => el('button.chip' + (src === p.id ? '.on' : ''), { onclick: () => { if (src === p.id) return; src = p.id; sessionStorage.setItem('koru-src', src); drawSrcs(); load(true); } }, el('i.dot', { style: { background: p.hue, boxShadow: '0 0 8px ' + p.hue } }), p.name)));
@@ -575,6 +578,7 @@
           el('h1', { text: s.title }),
           s.author ? el('div.muted', { text: s.author }) : null,
           el('div.tags', (s.tags || []).slice(0, 10).map(t => el('span.tag', { text: t }))),
+          K.seriesBadges?.chip?.(s, key, chapters) || null,
           prog,
           el('div.row', readBtn, heart, liked,
             offline ? null : el('button.btn.icon', { title: 'Open on the site', onclick: () => K.api.post('/k/open-external', { url: s.url }).catch(() => {}) }, icon('external'))))));
@@ -901,7 +905,8 @@
   // ---------- Stats: reading time, chapters, series, and your top series for a period ----------
   K.views.stats = async function (root) {
     let period = sessionStorage.getItem('koru-statp') || 'month', offset = 0;
-    root.append(el('div.head', el('div', el('h1', { text: 'Stats' }), el('div.sub', { text: 'Counted only while you’re actually reading' }))));
+    root.append(el('div.head', el('div', el('h1', { text: 'Stats' }), el('div.sub', { text: 'Counted only while you’re actually reading' })), el('div.sp'),
+      K.views.wrapped ? el('button.btn.primary', { onclick: () => K.go('/wrapped') }, icon('sparkle'), 'Your Wrapped') : ''));
     const bar = el('div.row.statbar'), body = el('div');
     root.append(bar, body);
     const fmt = ms => { const m = Math.round(ms / 60000); return m < 60 ? m + 'm' : Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm'; };
@@ -947,7 +952,7 @@
         tile('Series read', String(seriesN), 'at least a minute each'),
         tile('Daily average', fmt(total / dayCount), dayCount + ' day' + (dayCount > 1 ? 's' : '')),
         tile('Streak', streak + (streak === 1 ? ' day' : ' days'), 'in a row, a minute or more'));
-      body.replaceChildren(tiles, chart(r, days), topList(per, meta));
+      body.replaceChildren(tiles, chart(r, days), topList(per, meta), ...[K.lively?.badgesCard?.(), K.seriesBadges?.card?.()].filter(Boolean));
     }
     function tile(label, value, sub) { return el('div.tile.glass', el('small', { text: label }), el('b', { text: value }), el('span.muted', { text: sub })); }
     // one bar per day (per month for a year or all time): how long you read
