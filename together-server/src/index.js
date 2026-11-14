@@ -56,7 +56,11 @@ async function ghGet(env, path, token) {
   return { status: r.status, j };
 }
 // a picture people may use: one uploaded here, a GitHub picture, or a meme picture (stickers)
-const okPicture = (url, origin, memes) => typeof url === 'string' && url.length <= 300 && (url.startsWith(origin + '/media/') || url.startsWith('https://avatars.githubusercontent.com/') || (memes && /^https:\/\/i\.imgflip\.com\/[\w.]+$/.test(url)));
+const okPicture = (url, origin, memes) => typeof url === 'string' && url.length <= 300 && (url.startsWith(origin + '/media/') || url.startsWith('https://avatars.githubusercontent.com/') || (memes && (/^https:\/\/i\.imgflip\.com\/[\w.]+$/.test(url) || /^https:\/\/media\.giphy\.com\/media\/\w+\/200\.gif$/.test(url))));
+// meme sticker tabs: what GIPHY is searched for (trending = what's popular right now)
+const MEME_CATS = { trending: 'trending', speed: ['ishowspeed', 'ishowspeed speed', 'speed meme'], kai: ['kai cenat', 'kaicenat', 'kai cenat stream'], duke: ['duke dennis', 'amp duke dennis'], brainrot: ['brainrot', 'skibidi', 'aura meme', 'john pork'], reactions: ['reaction meme', 'shocked meme', 'side eye meme', 'crying laughing meme'], classics: 'classics' };
+// the old templates people still actually use; the rest of Imgflip's list is left out
+const CLASSICS = ['drake', 'distracted boyfriend', 'two buttons', 'woman yelling at cat', 'change my mind', 'expanding brain', 'left exit 12', 'uno draw 25', 'once again asking', 'disaster girl', "gru's plan", 'is this a pigeon', 'waiting skeleton', 'buff doge', 'always has been', 'monkey puppet', 'sad pablo', 'trade offer', 'epic handshake', 'anakin padme', 'batman slapping', 'running away balloon', 'hide the pain', 'this is fine', 'panik kalm', 'spider man pointing', 'spiderman pointing', 'they\'re the same picture', 'surprised pikachu', 'mocking spongebob', 'sleeping shaq', 'two guys on a bus', 'squidward', 'bike fall', 'clown applying makeup', 'think about it', 'boardroom meeting', 'roll safe', 'black girl wat', 'leonardo dicaprio cheers', 'blank nut button', 'grus plan', 'x, x everywhere', 'unsettled tom', 'guy holding cardboard sign', 'flex tape', 'tuxedo winnie'];
 function cleanStats(s) {
   if (!s || typeof s !== 'object') return null;
   const n = v => Math.max(0, Math.min(1e9, Math.round(Number(v) || 0)));
@@ -83,14 +87,37 @@ export default {
       }
       // ---- meme pictures for stickers (Imgflip's popular templates), kept for a day ----
       if (path === '/memes' && req.method === 'GET') {
-        const cache = caches.default, key = new Request(origin + '/memes-cache-v1');
+        // categories: recent GIPHY searches (Speed, Kai Cenat, ...), plus the classics people still use
+        const cat = url.searchParams.get('cat') || 'trending', q = clean(url.searchParams.get('q') || '', 50).trim().toLowerCase();
+        const offset = Math.min(450, Math.max(0, Math.floor(Number(url.searchParams.get('offset')) / 50) * 50 || 0));
+        if (!q && !MEME_CATS[cat]) return err(400, 'Unknown category');
+        if (offset && !q && cat === 'classics') return json({ memes: [] });
+        const cache = caches.default, key = new Request(origin + '/memes-cache-v3?' + new URLSearchParams({ ...(q ? { q } : { cat }), offset }));
         const hit = await cache.match(key);
         if (hit) return new Response(hit.body, { headers: { 'Content-Type': 'application/json', ...CORS } });
-        const r = await fetch('https://api.imgflip.com/get_memes', { headers: { 'User-Agent': UA } });
-        const j = await r.json().catch(() => null);
-        if (!j?.success) return err(502, 'Couldn\'t load memes right now.');
-        const list = j.data.memes.filter(x => okPicture(x.url, origin, true)).map(x => ({ id: String(x.id), name: x.name, url: x.url, w: x.width, h: x.height }));
-        const res = json({ memes: list }, 200, { 'Cache-Control': 'public, max-age=86400' });
+        let list;
+        if (!q && cat === 'classics') {
+          const r = await fetch('https://api.imgflip.com/get_memes', { headers: { 'User-Agent': UA } });
+          const j = await r.json().catch(() => null);
+          if (!j?.success) return err(502, 'Couldn\'t load memes right now.');
+          list = j.data.memes.filter(x => CLASSICS.some(c => x.name.toLowerCase().includes(c)) && okPicture(x.url, origin, true)).map(x => ({ id: String(x.id), name: x.name, url: x.url, w: x.width, h: x.height }));
+        } else {
+          if (!env.GIPHY_KEY) return err(503, 'New memes aren\'t set up on the server yet. Classics still work.');
+          const api = env.GIPHY_API || 'https://api.giphy.com';
+          const page = offset / 50;
+          const queries = q ? [q] : MEME_CATS[cat] === 'trending' ? null : MEME_CATS[cat];
+          const each = queries ? Math.ceil(50 / queries.length) : 50;
+          const targets = queries ? queries.map(x => `${api}/v1/gifs/search?` + new URLSearchParams({ api_key: env.GIPHY_KEY, q: x, limit: String(each), offset: String(page * each), rating: q ? 'r' : 'pg-13', lang: 'en' }))
+            : [`${api}/v1/gifs/trending?` + new URLSearchParams({ api_key: env.GIPHY_KEY, limit: '50', offset: String(offset), rating: 'pg-13' })];
+          const got = await Promise.all(targets.map(t => fetch(t, { headers: { 'User-Agent': UA } }).then(r => r.ok ? r.json() : null).catch(() => null)));
+          if (got.every(x => !Array.isArray(x?.data))) return err(502, 'Couldn\'t load memes right now.');
+          // take turns from each search so a tab mixes them, without repeats
+          const lists = got.map(x => x?.data || []), seen = new Set(), mixed = [];
+          for (let i = 0; i < Math.max(...lists.map(l => l.length)); i++) for (const l of lists) { const x = l[i]; if (x && !seen.has(x.id)) { seen.add(x.id); mixed.push(x); } }
+          const j = { data: mixed };
+          list = j.data.filter(x => /^\w+$/.test(x.id || '')).map(x => { const im = x.images?.fixed_height || {}; return { id: 'g' + x.id, name: String(x.title || '').replace(/\s*GIF( by .*)?$/i, '').slice(0, 80) || 'GIF', url: `https://media.giphy.com/media/${x.id}/200.gif`, w: Number(im.width) || 200, h: Number(im.height) || 200 }; });
+        }
+        const res = json({ memes: list }, 200, { 'Cache-Control': 'public, max-age=' + (q ? 3600 : cat === 'trending' ? 3 * 3600 : 86400) });
         ctx.waitUntil(cache.put(key, res.clone()));
         return res;
       }
@@ -234,6 +261,7 @@ export default {
         const fwd = new Request('https://crew/ws', { headers: req.headers });
         fwd.headers.set('X-Koru-User', JSON.stringify(person(me)));
         fwd.headers.set('X-Koru-Device', device);
+        if (url.searchParams.get('lite') === '1') fwd.headers.set('X-Koru-Lite', '1');
         fwd.headers.set('X-Koru-Crew', JSON.stringify(crew));
         fwd.headers.set('X-Koru-Origin', origin);
         return crewStub(env, m[1]).fetch(fwd);
@@ -379,7 +407,9 @@ export class Crew extends DurableObject {
     const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server, ['u' + user.id]);
     server.serializeAttachment({ user: user.id, name: user.name, device, idle: false });
-    server.send(JSON.stringify({ t: 'init', me: user, crew, members: this.members(), msgs: this.page(null), rt: this.rt(), lastId: this.lastId() }));
+    // lite: Koru is open but showing another crew; it only counts you as online here (and hears about new messages)
+    if (req.headers.get('X-Koru-Lite') === '1') server.send(JSON.stringify({ t: 'lite', lastId: this.lastId() }));
+    else server.send(JSON.stringify({ t: 'init', me: user, crew, members: this.members(), msgs: this.page(null), rt: this.rt(), lastId: this.lastId() }));
     this.broadcast({ t: 'presence', members: this.members() }, server);
     return new Response(null, { status: 101, webSocket: client });
   }

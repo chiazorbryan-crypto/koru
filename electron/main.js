@@ -1,7 +1,7 @@
 // Koru for Windows. The app's pages are served from koru://app/ and its background calls (/k/...)
 // are answered by backend.js here in the main process. No local port is opened, and the pages
 // have no Node access (contextIsolation + sandbox).
-import { app, BrowserWindow, protocol, shell, Menu, nativeTheme, nativeImage, net } from 'electron';
+import { app, BrowserWindow, protocol, shell, Menu, Tray, nativeTheme, nativeImage, net } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
@@ -138,7 +138,22 @@ function themeShortcuts(img) {
     } catch {}
   }, 1500);
 }
-app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
+app.on('second-instance', () => showWin());
+
+// Closing the window keeps Koru running in the tray (so your crew sees you online and new chapters are still checked).
+// Quit from the tray icon's menu.
+let tray = null, quitting = false;
+app.on('before-quit', () => { quitting = true; });
+function showWin() { if (!win) return; if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+function makeTray() {
+  if (tray || process.env.KORU_BG_TEST) return;
+  try {
+    tray = new Tray(nativeImage.createFromPath(path.join(here, '..', 'build', 'icon.ico')).resize({ width: 16, height: 16 }));
+    tray.setToolTip('Koru');
+    tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Open Koru', click: showWin }, { type: 'separator' }, { label: 'Quit Koru', click: () => { quitting = true; app.quit(); } }]));
+    tray.on('click', showWin);
+  } catch {}
+}
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
@@ -221,6 +236,13 @@ app.whenReady().then(() => {
     if (input.type === 'keyDown' && input.key === 'F11') { win.setFullScreen(!win.isFullScreen()); e.preventDefault(); }
     if (input.type === 'keyDown' && input.key === 'F12' && !app.isPackaged) win.webContents.toggleDevTools();
   });
+  win.on('close', e => {
+    if (quitting || process.env.KORU_BG_TEST || !tray) return;
+    e.preventDefault(); win.hide();
+    const told = path.join(app.getPath('userData'), 'tray-told');
+    if (!fs.existsSync(told)) { try { fs.writeFileSync(told, '1'); tray.displayBalloon({ iconType: 'info', title: 'Koru is still running', content: 'It stays in the tray so your crew sees you online. Right-click the icon to quit.' }); } catch {} }
+  });
+  makeTray();
   win.loadURL('koru://app/index.html');
 });
 

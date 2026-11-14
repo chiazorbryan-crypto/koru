@@ -73,6 +73,7 @@
     T.crew = c;
     if (c && T.state === 'off') connect();
     if (!c) disconnect();
+    syncLite();
     pushStats();
     return j;
   }
@@ -80,7 +81,7 @@
   function signOutLocal() {
     disconnect();
     const s = { ...cfg() }; delete s.token; delete s.user; delete s.crew; K.data.settings.together = s; K.save('settings');
-    T.crews = null; T.crew = null; T.msgs = []; ls.set(CACHE, []); K.setNavBadge?.('chat', false);
+    T.crews = null; T.crew = null; T.msgs = []; ls.set(CACHE, []); K.setNavBadge?.('chat', false); syncLite();
   }
 
   // ---------- the live connection ----------
@@ -142,11 +143,36 @@
     refresh().catch(() => {}).finally(route);
   }
 
-  // idle: no mouse/keys for 5 minutes, or Koru hidden for 5 minutes
-  let idleNow = false, idleT = 0;
-  const notIdle = () => { clearTimeout(idleT); if (idleNow) { idleNow = false; send({ t: 'idle', on: false }); } idleT = setTimeout(() => { idleNow = true; send({ t: 'idle', on: true }); }, 5 * 60e3); };
-  for (const ev of ['pointerdown', 'keydown', 'wheel']) document.addEventListener(ev, notIdle, { passive: true, capture: true });
-  notIdle();
+  // You show as online whenever Koru is running with internet (also in the tray), not only in Chat.
+  // Idle is only when you pick it yourself.
+  const idleNow = false;
+  // the crews you aren't looking at get a light connection too, so you're online in all of them and hear about new messages
+  const lite = new Map();
+  function syncLite() {
+    const want = new Set(signedIn() ? (T.crews || []).map(c => c.id).filter(id => id !== cfg().crew) : []);
+    for (const [id, l] of lite) if (!want.has(id)) { l.stop = true; clearTimeout(l.retry); clearInterval(l.ping); try { l.ws?.close(); } catch {} lite.delete(id); }
+    for (const id of want) if (!lite.has(id)) openLite(id, { tries: 0 });
+  }
+  function openLite(id, l) {
+    lite.set(id, l);
+    let ws; try { ws = new WebSocket(server().replace(/^http/, 'ws') + `/crews/${id}/ws?` + new URLSearchParams({ token: cfg().token, device: device(), lite: '1' })); } catch { return; }
+    l.ws = ws;
+    ws.onopen = () => { l.tries = 0; clearInterval(l.ping); l.ping = setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 30000); };
+    ws.onmessage = e => {
+      if (e.data === 'pong') return;
+      let m; try { m = JSON.parse(e.data); } catch { return; }
+      if (m.t === 'lite') { l.last = Math.max(l.last || 0, m.lastId || 0); return; }
+      const x = m.t === 'msg' ? m.m : null;
+      if (x?.id && x.id > (l.last || 0)) l.last = x.id; else return;   // only brand-new messages, not edits or reactions
+      if (x.user !== meId() && !x.deleted) {
+        const c = T.crews?.find(y => y.id === id);
+        K.setNavBadge?.('chat', true);
+        try { if ((document.hidden || !document.hasFocus()) && typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification((x.name || 'Someone') + ' · ' + (c?.name || 'Koru'), { body: x.text || ({ sticker: 'sent a meme', image: 'sent a picture', voice: 'sent a voice message', together: 'is reading', share: 'shared a series' }[x.kind] || 'sent a message') }).onclick = () => { window.focus?.(); setCfg({ crew: id }); disconnect(); T.msgs = []; ls.set(CACHE, []); ls.set(SEEN, 0); refresh().then(() => K.go('/chat')); }; } catch {}
+      }
+    };
+    ws.onclose = e => { clearInterval(l.ping); if (l.stop || lite.get(id) !== l) return; if (e.code === 4003) { lite.delete(id); refresh().catch(() => {}); return; } l.retry = setTimeout(() => openLite(id, l), Math.min(30000, 1000 * 2 ** ++l.tries)); };
+  }
+  T.syncLite = syncLite;
 
   // ---------- what the server sends ----------
   function upsert(x) {
@@ -541,24 +567,52 @@
   }
 
   // ---------- meme stickers ----------
-  let memeCache = null;
+  const MEME_TABS = [['trending', '🔥 Trending'], ['speed', '⚡ Speed'], ['kai', '👑 Kai Cenat'], ['duke', '🏀 Duke'], ['brainrot', '🧠 Brainrot'], ['reactions', '😂 Reactions'], ['classics', '🗿 Classics']];
+  const memeCache = {};
   async function stickerPicker(anchor) {
     document.querySelector('.tg-stick')?.remove();
-    const q = el('input.txt', { type: 'text', placeholder: 'Find a meme', spellcheck: false });
-    const grid = el('div.tg-sgrid', el('div.spinner'));
-    const box = el('div.menu.glass.tg-stick', el('div.tg-shead', el('b', { text: 'Meme stickers' }), q), grid);
+    let tab = ls.get('koru-tg-memetab', 'trending'); if (!MEME_TABS.some(t => t[0] === tab)) tab = 'trending';
+    const q = el('input.txt', { type: 'text', placeholder: 'Search GIPHY memes (press Enter)', spellcheck: false });
+    const grid = el('div.tg-sgrid');
+    const tabs = el('div.tg-stabs', ...MEME_TABS.map(([k, label]) => el('button' + (k === tab ? '.on' : ''), { dataset: { k }, onclick: () => { q.value = ''; tab = k; ls.set('koru-tg-memetab', k); load(); } }, label)));
+    const box = el('div.menu.glass.tg-stick', el('div.tg-shead', el('b', { text: 'Meme stickers' }), q), tabs, grid, el('small.tg-giphy.muted', { text: 'Powered by GIPHY' }));
     const r = anchor.getBoundingClientRect();
-    placeMenu(box, r.right - 420, r.top - 470 < 8 ? r.bottom + 6 : r.top - 470);
+    placeMenu(box, r.right - 440, r.top - 520 < 8 ? r.bottom + 6 : r.top - 520);
     setTimeout(() => q.focus(), 30);
-    try { memeCache ||= (await api('/memes')).memes; } catch (e) { grid.replaceChildren(el('small.muted', { text: e.message })); return; }
-    const draw = () => {
-      const s = q.value.trim().toLowerCase();
-      const list = memeCache.filter(x => !s || x.name.toLowerCase().includes(s));
-      grid.replaceChildren(...(list.length ? list.map(x => el('button', { title: x.name, onclick: () => { box.remove(); sendMsg({ kind: 'sticker', data: { url: x.url, name: x.name, w: x.w, h: x.h } }); } },
-        el('img', { src: x.url, alt: x.name, loading: 'lazy' }), el('span', { text: x.name }))) : [el('small.muted', { text: 'No memes found' })]));
+    let seq = 0, key = '', busy = false;
+    const tile = x => el('button', { title: x.name, onclick: () => { box.remove(); sendMsg({ kind: 'sticker', data: { url: x.url, name: x.name, w: x.w, h: x.h } }); } },
+      el('img', { src: x.url, alt: x.name, loading: 'lazy' }), el('span', { text: x.name }));
+    const fetchPage = async k => {
+      const c = memeCache[k] ||= { list: [], done: false };
+      const s = k.startsWith('q:') ? k.slice(2) : '';
+      const j = await api('/memes?' + new URLSearchParams({ ...(s ? { q: s } : { cat: k }), offset: c.list.length }));
+      const have = new Set(c.list.map(x => x.url)), add = j.memes.filter(x => !have.has(x.url));
+      c.list.push(...add); if (!add.length || c.list.length >= 500) c.done = true;
+      return add;
     };
-    q.addEventListener('input', draw);
-    draw();
+    async function load() {
+      const s = q.value.trim().toLowerCase(), k = s ? 'q:' + s : tab, my = ++seq; key = k;
+      tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', !s && b.dataset.k === tab));
+      if (!memeCache[k]?.list.length) {
+        grid.replaceChildren(el('div.spinner'));
+        try { await fetchPage(k); } catch (e) { if (my === seq) grid.replaceChildren(el('small.muted', { text: e.message })); return; }
+      }
+      if (my !== seq) return;
+      const list = memeCache[k].list;
+      grid.replaceChildren(...(list.length ? list.map(tile) : [el('small.muted', { text: 'No memes found' })]));
+      grid.scrollTop = 0;
+    }
+    // scroll down for more (up to 500 per tab)
+    grid.addEventListener('scroll', async () => {
+      if (busy || grid.scrollTop + grid.clientHeight < grid.scrollHeight - 300) return;
+      const k = key, c = memeCache[k]; if (!c || c.done) return;
+      busy = true;
+      try { const add = await fetchPage(k); if (k === key) grid.append(...add.map(tile)); } catch {}
+      busy = false;
+    });
+    let t; q.addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(t); load(); } });
+    q.addEventListener('input', () => { clearTimeout(t); if (!q.value.trim()) load(); else if (q.value.trim().length >= 3) t = setTimeout(load, 900); });
+    load();
   }
 
   // ---------- sending ----------

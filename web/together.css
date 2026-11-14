@@ -265,3 +265,9 @@ html.lite .tg-compose, html.lite div.tg-side { backdrop-filter: none; }
 .tg-themerow input[type=color] { width: 34px; height: 28px; border: 0; padding: 0; background: none; cursor: pointer; }
 .tg-swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255,255,255,.2); cursor: pointer; padding: 0; }
 .tg-swatch:hover { border-color: #fff; }
+.tg-stick { width: 440px; height: 510px; }
+.tg-stabs { display: flex; flex-wrap: wrap; gap: 4px; flex: none; }
+.tg-stabs button { flex: none; border: 0; border-radius: 999px; padding: 5px 10px; background: rgba(255,255,255,.06); color: inherit; font: inherit; font-size: .82em; cursor: pointer; white-space: nowrap; }
+.tg-stabs button:hover { background: rgba(255,255,255,.12); }
+.tg-stabs button.on { background: var(--accent, #5865f2); color: #fff; }
+.tg-giphy { text-align: right; font-size: .7em; flex: none; }
