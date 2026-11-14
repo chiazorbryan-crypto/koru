@@ -574,7 +574,7 @@
   }
   async function shrink(file) {
     // big photos are shrunk before sending (GIFs and small pictures go as they are, so animations keep working)
-    if (file.type === 'image/gif' || file.size < 900 * 1024) return { blob: file, ...(await dims(file)) };
+    if (file.type === 'image/gif' || file.type === 'image/webp' || file.size < 900 * 1024) return { blob: file, ...(await dims(file)) };   // GIF and WebP can move: sent as they are
     const bmp = await createImageBitmap(file);
     const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
     const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
@@ -584,7 +584,7 @@
   }
   const dims = f => new Promise(r => { const u = URL.createObjectURL(f), i = new Image(); i.onload = () => { r({ w: i.naturalWidth, h: i.naturalHeight }); URL.revokeObjectURL(u); }; i.onerror = () => { r({}); URL.revokeObjectURL(u); }; i.src = u; });
   async function upload(blob, type) {
-    if (blob.size > 8 * 1024 * 1024) throw new Error('That file is too big (8 MB at most).');
+    if (blob.size > 14 * 1024 * 1024) throw new Error('That file is too big (14 MB at most).');
     return api('/media', { method: 'POST', raw: blob, type: type || blob.type });
   }
   T.upload = upload;
@@ -960,14 +960,14 @@
         btn.disabled = true; btn.textContent = 'Uploading…';
         try {
           let blob = f;
-          // still pictures are resized; GIFs stay as they are so they keep moving
-          if (f.type !== 'image/gif') { const bmp = await createImageBitmap(f); const kk = Math.min(1, w / bmp.width); const c = document.createElement('canvas'); c.width = Math.round(bmp.width * kk); c.height = Math.round(bmp.height * kk); c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); blob = await new Promise(r => c.toBlob(r, 'image/webp', 0.9)) || f; }
+          // still pictures are resized; GIFs and WebPs stay as they are so animated ones keep moving
+          if (f.type !== 'image/gif' && f.type !== 'image/webp') { const bmp = await createImageBitmap(f); const kk = Math.min(1, w / bmp.width); const c = document.createElement('canvas'); c.width = Math.round(bmp.width * kk); c.height = Math.round(bmp.height * kk); c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); blob = await new Promise(r => c.toBlob(r, 'image/webp', 0.9)) || f; }
           const u = await upload(blob, blob.type || f.type); draft[k] = u.url; paint();
         } catch (e) { K.toast(e.message, 'error'); }
         btn.disabled = false; btn.replaceChildren(icon('image'), 'Change');
       } });
       const btn = el('button.btn.small', { onclick: () => fi.click() }, icon('image'), 'Change');
-      return el('div.row', btn, fi, el('button.btn.small', { onclick: () => { draft[k] = null; paint(); } }, icon('x'), 'Remove'), el('small.muted', { text: 'PNG, JPG, WebP or GIF (animated), 8 MB at most' }));
+      return el('div.row', btn, fi, el('button.btn.small', { onclick: () => { draft[k] = null; paint(); } }, icon('x'), 'Remove'), el('small.muted', { text: 'PNG, JPG, or animated GIF / WebP, 14 MB at most' }));
     };
     const color = el('input', { type: 'color', value: draft.color, oninput: () => { draft.color = color.value; paint(); } });
     const status = el('select.txt', { onchange: () => { draft.status = status.value; paint(); } }, ...['online', 'idle', 'dnd', 'invisible'].map(s => el('option', { value: s, selected: s === draft.status, text: PRESENCE[s] })));

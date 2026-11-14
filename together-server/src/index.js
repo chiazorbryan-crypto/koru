@@ -11,7 +11,7 @@
 //  - Hub (one): people and profiles, sessions, crews and who's in them.
 //  - Crew (one per crew): the chat (SQLite, kept forever: replies, reactions, edits, pins), live connections,
 //    who's reading what.
-//  - Media (one): pictures and GIFs people upload (profile pictures, banners, chat pictures), up to 8 MB each.
+//  - Media (one): pictures and GIFs people upload (profile pictures, banners, chat pictures), up to 14 MB each.
 // Sockets use the WebSocket Hibernation API, so a quiet connection costs nothing, and "ping" is answered with
 // "pong" by Cloudflare without waking the crew.
 import { DurableObject } from 'cloudflare:workers';
@@ -28,7 +28,7 @@ const KINDS = ['text', 'share', 'together', 'sticker', 'image', 'voice'];
 const STATUSES = ['online', 'idle', 'dnd', 'invisible'];
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 const AUDIO_TYPES = ['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg'];   // voice messages
-const PAGE = 60, MAX_MEMBERS = 12, MAX_MEDIA = 8 * 1024 * 1024, PART = 1024 * 1024;
+const PAGE = 60, MAX_MEMBERS = 12, MAX_MEDIA = 14 * 1024 * 1024, PART = 1024 * 1024;
 const UA = 'Koru-Together';
 
 const ghWeb = env => (env.GH_WEB || 'https://github.com').replace(/\/+$/, '');
@@ -160,10 +160,10 @@ export default {
         const type = (req.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
         if (!IMAGE_TYPES.includes(type) && !AUDIO_TYPES.includes(type)) return err(415, 'Only pictures, GIFs and voice messages.');
         const len = Number(req.headers.get('Content-Length') || 0);
-        if (len > MAX_MEDIA) return err(413, 'That file is too big (8 MB at most).');
+        if (len > MAX_MEDIA) return err(413, 'That file is too big (14 MB at most).');
         const buf = await req.arrayBuffer();
         if (!buf.byteLength) return err(400, 'Empty file');
-        if (buf.byteLength > MAX_MEDIA) return err(413, 'That file is too big (8 MB at most).');
+        if (buf.byteLength > MAX_MEDIA) return err(413, 'That file is too big (14 MB at most).');
         const id = rand(20);
         await media(env).put(id, type, buf, me.id);
         return json({ id, url: origin + '/media/' + id, type, size: buf.byteLength });
