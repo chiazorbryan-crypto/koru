@@ -79,6 +79,43 @@
 
   // Themes picked from genres and the description, most telling first: [pattern, emoji, name, what it's for]
   const THEMES = [
+    // specific kinds of story first; they win ties against the broad genres further down
+    [/\b(vampires?|bloodsuckers?)\b/, '🧛', 'Night Blood', 'Ran with the vampires'],
+    [/\b(pirates?|sea ?king|navy)\b/, '🏴‍☠️', 'Sea Legs', 'Sailed with pirates'],
+    [/\b(ninjas?|shinobi)\b/, '🥷', 'Shadow Step', 'Moved like a ninja'],
+    [/\b(doctors?|surgeon|medical|hospital|medicine|healer)\b/, '🩺', 'Miracle Hands', 'Saved lives, chapter by chapter'],
+    [/\b(idols?|k-?pop|singer|trainee|entertainment industry|actor|actress)\b/, '🎤', 'Center Stage', 'Took the stage'],
+    [/\b(knights?|paladin|holy order)\b/, '🛡️', 'Sworn Knight', 'Swore the knight’s oath'],
+    [/\b(assassins?|hitman|killers?)\b/, '🗡️', 'Silent Blade', 'Struck from the shadows'],
+    [/\b(necromancer|undead|skeletons?|lich)\b/, '💀', 'Raise the Dead', 'Commanded the dead'],
+    [/\b(archer|bow|marksman|sniper)\b/, '🏹', 'Sharpshooter', 'Never missed a shot'],
+    [/\b(mecha|robots?|cyborg|android)\b/, '🤖', 'Steel Heart', 'Piloted something huge'],
+    [/\b(gods?|deity|divine|heaven)\b/, '✨', 'Divine Favour', 'Caught the gods’ attention'],
+    [/\b(emperor|empire|throne|crown prince|king|kingdom)\b/, '👑', 'Throne Watcher', 'Watched the fight for the throne'],
+    [/\b(wolf|wolves|werewolf|beast|tamer|summon(er|s)?|pets?)\b/, '🐺', 'Beast Bond', 'Bonded with beasts'],
+    [/\b(alchemy|alchemist|potions?|herbs?|pill)\b/, '⚗️', 'Alchemist', 'Brewed something powerful'],
+    [/\b(blacksmith|forge|crafting|craftsman|smith)\b/, '🔨', 'Master Crafter', 'Made something legendary'],
+    [/\b(farm|farming|farmer|harvest)\b/, '🌾', 'Green Thumb', 'Grew a whole farm'],
+    [/\b(detective|mystery|murder|crime|investigat\w*)\b/, '🕵️', 'Case Closed', 'Followed every clue'],
+    [/\b(police|cop|prosecutor|lawyer|court)\b/, '⚖️', 'Order in Court', 'Saw justice through'],
+    [/\b(military|soldiers?|army|war|mercenar\w*)\b/, '🎖️', 'Veteran', 'Survived the war'],
+    [/\b(gangs?|delinquents?|thugs?|street fights?|bully|bullies)\b/, '👊', 'Street Fighter', 'Won the street fights'],
+    [/\b(office|company|salary ?man|employee|ceo|corporate)\b/, '💼', 'Overtime', 'Clocked in, chapter after chapter'],
+    [/\b(webtoon artist|manga artist|author|writer|novel)\b/, '✍️', 'Plot Twist', 'Lived inside a story'],
+    [/\b(music|band|piano|guitar|violin)\b/, '🎵', 'Encore', 'Played it again'],
+    [/\b(art|painter|painting|artist)\b/, '🎨', 'Masterpiece', 'Painted a masterpiece'],
+    [/\b(space|stars|galaxy|alien|planet)\b/, '🚀', 'Starbound', 'Went to the stars'],
+    [/\b(time loop|loop|repeat(ed|ing)? the same day)\b/, '🔁', 'Loop Breaker', 'Broke the loop'],
+    [/\b(villainess|evil (lady|daughter|stepmother))\b/, '🌹', 'Villainess Era', 'Rewrote the villainess’ ending'],
+    [/\b(contract marriage|fake (dating|marriage|relationship)|arranged marriage)\b/, '💍', 'Contract Signed', 'Signed on for a fake romance'],
+    [/\b(childcare|baby|daughter|parenting|adopted|stepmother|stepdaughter)\b/, '🍼', 'Family First', 'Raised a family'],
+    [/\b(divorce[sd]?|ex-husband|ex-wife|remarr\w*)\b/, '💔', 'Moving On', 'Saw a marriage end and a life begin'],
+    [/\b(maids?|butler|servant)\b/, '🧹', 'At Your Service', 'Served in a grand house'],
+    [/\b(princess|noble lady|duchess|countess|young miss)\b/, '🌹', 'Noble Lady', 'Lived the noble life'],
+    [/\b(fortune|prophecy|fate|oracle|seer)\b/, '🔮', 'Fate Reader', 'Read what fate had planned'],
+    [/\b(ghost|spirits?|exorcis\w*|shaman|curse[sd]?)\b/, '👻', 'Spirit Seer', 'Saw what others can’t'],
+    [/\b(hamsters?|cats?|dogs?|bunny|bunnies)\b/, '🐾', 'Animal Friend', 'Made a furry friend'],
+
     [/\b(money|merchant|business|debt|rich|wealth|chaebol|tycoon|gold coins?|trade|economy)\b/, '💰', 'Love of Money', 'Followed the money'],
     [/\b(cook|cooking|chef|restaurant|food|recipe)\b/, '🍜', 'Foodie', 'Ate well, chapter after chapter'],
     [/\b(sports?|football|soccer|basketball|baseball|volleyball|boxing|mma|golf|tennis)\b/, '🏆', 'Team Player', 'Gave it everything on the field'],
@@ -106,9 +143,11 @@
     const tags = ((series?.tags || []).join(' ') + ' ' + (series?.genres || []).join(' ')).toLowerCase();
     const desc = K.plainText(series?.description || '').slice(0, 1500).toLowerCase();
     const hits = (re, txt) => (txt.match(new RegExp(re.source, 'g')) || []).length;
+    // the specific kinds of story (vampires, villainesses, doctors…) count double against the broad genres
+    const broadFrom = THEMES.findIndex(x => x[2] === 'Love of Money');
     let best = null, bestScore = 0;
     THEMES.forEach(([re, e, name, d], i) => {
-      const sc = hits(re, t) * 3 + hits(re, tags) * 2 + hits(re, desc);
+      const sc = (hits(re, t) * 3 + hits(re, tags) * 2 + hits(re, desc)) * (i < broadFrom ? 2 : 1);
       if (sc < (name === 'Love of Money' ? 2 : 1)) return;
       if (sc > bestScore) { bestScore = sc; best = { e, name, desc: d }; }
     });

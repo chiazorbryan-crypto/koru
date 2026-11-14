@@ -149,7 +149,7 @@
     const ambImg = ambCx.createImageData(AW, AH);
     const tgtF = new Float32Array(N * 3), curF = new Float32Array(N * 3), tmpF = new Float32Array(N * 3);
     const ambCache = new Map();   // page -> { w, h, d } colour strip
-    let ambO = opt, ambRaf = 0, ambUntil = 0, ambLast = 0, ambHas = false, calm = 1;
+    let ambO = opt, ambRaf = 0, ambUntil = 0, ambLast = 0, ambHas = false, calm = 1, ambFrozen = false;
     const ofs = []; let ofsDirty = true, viewH = 1;   // cached page tops/heights for the light
     const tau = () => 50 + ambO.ambEase * 9;   // how slowly the light follows: 50 to 950 ms
     // copy one row of a page's strip (r may fall between two rows) into target row y
@@ -197,13 +197,14 @@
     const ambFrame = now => {
       ambRaf = 0;
       if (state !== s || !ambO.ambient) return;
+      if (ambFrozen) { ambLast = 0; return; }   // the smooth guard is checking whether the light is what's slow
       // the light is soft and slow, so 20 updates a second look the same as 60 and cost a third
       if (ambLast && now - ambLast < 48) { ambRaf = requestAnimationFrame(ambFrame); return; }
       const dt = ambLast ? Math.min(150, now - ambLast) : 16; ambLast = now;
       if (fillTarget()) {
-        // light mode: one plain gradient per page, painted once (no picture to rescale every frame)
-        const lite = document.documentElement.classList.contains('lite');
-        const k = ambHas && !lite ? 1 - Math.exp(-dt / tau()) : 1;
+        // the light is a 48×30 picture on its own layer (the graphics card, or the compositor, stretches it),
+        // so it eases smoothly in light mode too
+        const k = ambHas ? 1 - Math.exp(-dt / tau()) : 1;
         for (let i = 0; i < tgtF.length; i++) curF[i] += (tgtF[i] - curF[i]) * k;
         const r = Math.max(0, Math.round(ambO.ambBlur / 55));
         let src = curF;
@@ -215,18 +216,7 @@
           lumSum += L;
           d[p * 4] = L + (R - L) * sat; d[p * 4 + 1] = L + (G - L) * sat; d[p * 4 + 2] = L + (B - L) * sat; d[p * 4 + 3] = 255;
         }
-        if (lite) {
-          const stops = [];
-          for (let y = 0; y < AH; y += 5) {
-            let r = 0, g = 0, b = 0;
-            for (let yy = y; yy < y + 5; yy++) for (let x = 0; x < AW; x += 4) { const p = (yy * AW + x) * 4; r += d[p]; g += d[p + 1]; b += d[p + 2]; }
-            const n = 5 * AW / 4;
-            stops.push(`rgb(${Math.round(r / n)},${Math.round(g / n)},${Math.round(b / n)})`);
-          }
-          amb.style.backgroundImage = `linear-gradient(to bottom, ${stops.join(', ')})`;
-          ambCv.style.display = 'none';
-          ambUntil = 0;
-        } else { ambCv.style.display = ''; amb.style.backgroundImage = ''; ambCx.putImageData(ambImg, 0, 0); }
+        ambCx.putImageData(ambImg, 0, 0);
         if (!ambHas) { ambHas = true; amb.classList.add('on'); }
         // Calm bright pages: a mostly white screen glows less, so it doesn't glare
         const lum = lumSum / N / 255;
@@ -597,19 +587,29 @@
       [...strip.querySelectorAll('.pg')].forEach(observe);
       atEnd.observe(end); nearEnd.observe(end); if (cdOn()) cdSeen.observe(end);
       let lastY = 0, ticking = false;
-      // Smooth guard: frame times are watched while you scroll. If this PC stutters in two checks in a row,
-      // the ambient light steps down by itself (per page, then off) and this PC remembers it.
-      const guard = { gaps: [], last: 0, raf: 0, until: 0, bad: 0 };
+      // Smooth guard: frame times are watched while you scroll. When scrolling stutters, the light is paused
+      // for the next check to see whether it's really the cause (usually it's a big page being decoded).
+      // Only if scrolling is smooth without it does the light step down to once per page. It never turns
+      // the light off by itself. Stutter that isn't the light's fault leads to light mode, as before.
+      const guard = { gaps: [], last: 0, raf: 0, until: 0, testing: false, cleared: false };
       const judge = () => {
         const g = guard.gaps.sort((a, b) => a - b); guard.gaps = [];
-        const share = g.filter(x => x > 25).length / g.length;   // frames slower than 40 fps
-        guard.bad = share > 0.2 ? guard.bad + 1 : 0;
-        if (guard.bad < 1) return;
-        guard.bad = 0;
+        const bad = g.filter(x => x > 25).length / g.length > 0.2;   // a fifth of frames slower than 40 fps
         const o = K.readerSettings();
-        if (!o.ambient) { if (!document.documentElement.classList.contains('lite') && K.setLite) { K.setLite('on'); K.toast('Scrolling stuttered, so Koru switched to light mode on this PC. Change it in Settings → Graphics.'); } return; }
-        if (o.ambMode !== 'page') { setReader({ ambMode: 'page' }); applyAmb(K.readerSettings()); K.toast('Scrolling stuttered, so the ambient light now changes once per page. You can switch it back in reader settings.'); }
-        else { setReader({ ambient: false }); applyAmb(K.readerSettings()); K.toast('Scrolling still stuttered, so ambient light is off on this PC. Turn it back on in reader settings.'); }
+        if (guard.testing) {
+          guard.testing = false; ambFrozen = false; kickAmb();
+          if (bad) { guard.cleared = true; return; }   // still slow without the light: not the light's fault
+          if (o.ambMode !== 'page') { setReader({ ambMode: 'page' }); applyAmb(K.readerSettings()); K.toast('Scrolling was smoother without the moving light, so it now changes once per page. Switch it back in reader settings.'); }
+          return;
+        }
+        if (!bad) return;
+        if (o.ambient && !guard.cleared && (o.ambMode !== 'page' || !sessionStorage.getItem('koru-amb-tested'))) {
+          sessionStorage.setItem('koru-amb-tested', '1'); guard.testing = true; ambFrozen = true; return;
+        }
+        if (!document.documentElement.classList.contains('lite') && K.setLite && !sessionStorage.getItem('koru-lite-asked')) {
+          sessionStorage.setItem('koru-lite-asked', '1');
+          K.toast('Scrolling stutters on this PC. Light mode in Settings → Graphics can help (your ambient light stays on).');
+        }
       };
       const guardTick = t => {
         guard.raf = 0;

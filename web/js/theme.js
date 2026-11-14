@@ -314,13 +314,20 @@
     const key = url && t.dynLight && t.glassUi !== false ? url : '';
     if (key === dynKey) return;
     dynKey = key;
-    if (!key) { fx.classList.remove('dyn'); return; }
+    const sets = [...fx.querySelectorAll('.dl')];
+    const off = () => { fx.classList.remove('dyn'); sets.forEach(d => d.classList.remove('on')); };
+    if (!key) { off(); return; }
     try {
       const cols = await coverColors(url);
       if (dynKey !== key || !cols.length) return;
-      cols.forEach(([r, g, b], i) => fx.style.setProperty('--dyn' + (i + 1), `rgba(${r},${g},${b},${Math.min(1, t.colors['glow' + (i + 1)][1] / 100 * 1.1).toFixed(3)})`));
+      // paint the new colours into the spare set while it's invisible, then crossfade (opacity only)
+      const next = sets.find(d => !d.classList.contains('on')) || sets[0];
+      cols.forEach(([r, g, b], i) => next.style.setProperty('--c' + (i + 1), `rgba(${r},${g},${b},${Math.min(1, t.colors['glow' + (i + 1)][1] / 100 * 1.1).toFixed(3)})`));
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 60))));
+      if (dynKey !== key) return;
+      sets.forEach(d => d.classList.toggle('on', d === next));
       fx.classList.add('dyn');
-    } catch { if (dynKey === key) fx.classList.remove('dyn'); }
+    } catch { if (dynKey === key) off(); }
   }
   // every series page shows its cover in .hero .bd, so the light follows whatever page is open
   function watchHero() {

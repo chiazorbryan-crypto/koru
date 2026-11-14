@@ -202,6 +202,15 @@
     try { const info = await K.api.get('/k/info'); K.info = info; if (info.platform === 'desktop') document.documentElement.classList.add('desktop'); }
     catch { K.info = { platform: 'web' }; }
     await K.loadData();
+    // 0.5.1: ambient light is far lighter now, so turn it back on where the old smooth guard switched it off
+    const rs = K.data.settings.reader;
+    if (rs && !rs.v4) {
+      const was = rs.ambient === false;
+      K.data.settings.reader = { ...rs, ambient: true, v4: true };
+      if (K.data.settings.lite === 'on') K.data.settings.lite = 'auto';
+      K.save('settings');
+      if (was) setTimeout(() => K.toast("Ambient light is back on, and it's now much lighter on your PC.", 'ok'), 6000);
+    }
     K.theme.apply(); K.applyLite();
     buildSidebar();
     window.addEventListener('hashchange', route);
