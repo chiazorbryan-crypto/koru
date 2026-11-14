@@ -300,7 +300,7 @@
       lastSent = ''; sharePos(true);
       const p = K.readerPos?.();
       if (p) send({ t: 'send', kind: 'together', text: 'started reading together', data: p, nonce: nonce() });
-      posT = setInterval(() => sharePos(), 500);
+      posT = setInterval(() => sharePos(), 150);   // only sends when your spot moved
       K.toast('Reading together: your crew can follow along now', 'ok');
     } else { clearInterval(posT); send({ t: 'pos', pos: null }); lastSent = ''; K.toast('Stopped reading together'); }
     paintPill(); paintReaderBtn(); pushStats(true);

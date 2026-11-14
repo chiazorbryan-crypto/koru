@@ -675,10 +675,38 @@
         if (!p) return false;
         load(i);
         pagesBox.style.scrollBehavior = 'auto';
-        pagesBox.scrollTop = p.offsetTop + Math.max(0, Math.min(0.999, off || 0)) * p.offsetHeight - pagesBox.clientHeight * 0.4;
+        const target = p.offsetTop + Math.max(0, Math.min(0.999, off || 0)) * p.offsetHeight - pagesBox.clientHeight * 0.4;
+        // far away (a new chapter, a big jump): go straight there; close by: glide, like the friend is scrolling your screen
+        if (Math.abs(target - pagesBox.scrollTop) > pagesBox.clientHeight * 3) { glide = null; pagesBox.scrollTop = target; }
+        else glideTo(target);
       } else if (i !== s.page) setPage(i);
       return true;
     };
+    // smooth following: eases toward the friend's spot and keeps moving at their speed between updates
+    let glide = null;
+    function glideTo(target) {
+      const now = performance.now();
+      if (glide) {
+        const dt = now - glide.at;
+        const v = dt > 30 && dt < 1500 ? (target - glide.target) / dt : 0;
+        glide.v = Math.max(-6, Math.min(6, glide.v * 0.3 + v * 0.7));
+        glide.target = target; glide.at = now;
+        return;
+      }
+      glide = { target, at: now, v: 0, last: now };
+      const step = t => {
+        if (!glide || !pagesBox.isConnected) { glide = null; return; }
+        const dt = Math.min(64, t - glide.last); glide.last = t;
+        const ahead = Math.min(t - glide.at, 450);
+        const want = glide.target + glide.v * ahead;
+        const d = want - pagesBox.scrollTop;
+        if (Math.abs(d) < 0.5 && t - glide.at > 1500) { glide = null; return; }
+        pagesBox.scrollTop += d * Math.min(1, dt / 110);
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }
+    for (const ev of ['wheel', 'pointerdown', 'touchstart', 'keydown']) pagesBox.addEventListener(ev, () => { glide = null; }, { passive: true });
 
     if (opt.mode === 'strip') {
       // the page whose top passed the middle of the screen is the current page
