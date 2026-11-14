@@ -16,7 +16,9 @@
 .tg-chat { position: relative; display: flex; flex-direction: column; height: calc(100vh - var(--titlebar, 0px) - 30px); min-height: 380px; }
 .tg-chat.drop::after { content: 'Drop pictures to send'; position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.4em; font-weight: 700; border: 2px dashed var(--accent-solid); border-radius: var(--radius); background: color-mix(in srgb, var(--bg) 70%, transparent); z-index: 5; }
 .tg-top { display: flex; align-items: center; gap: 8px; padding: 0 2px 10px; border-bottom: 1px solid rgba(255,255,255,.07); margin-bottom: 4px; flex-wrap: wrap; }
-.tg-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.tg-title { display: flex; align-items: center; gap: 8px; min-width: 0; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; padding: 4px 8px; margin-left: -8px; border-radius: 8px; }
+.tg-title:hover { background: rgba(255,255,255,.07); }
+.tg-title > svg { width: 16px; height: 16px; flex: none; opacity: .7; }
 .tg-title b { font-size: 1.25em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tg-status { color: #ffb547; }
 .tg-search { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: 8px; background: rgba(0,0,0,.25); color: var(--muted); }
@@ -252,3 +254,14 @@ html.lite .tg-compose, html.lite div.tg-side { backdrop-filter: none; }
   div.tg-side.show { position: absolute; inset: 50px 0 0 0; width: auto; z-index: 6; }
   .tg-emoji, .tg-stick { width: calc(100vw - 20px); }
 }
+/* profile theme: the card takes your two colours */
+.tg-pwrap { border-radius: inherit; min-height: 100%; }
+.tg-pwrap.themed { padding: 4px; }
+.tg-pwrap.themed .tg-banner { border-radius: 10px 10px 0 0; }
+.tg-pwrap.themed .tg-psec, .tg-pwrap.themed .tg-pstats div { background: rgba(0,0,0,.32); }
+.tg-pwrap.themed .tg-pbody { color: #fff; }
+.tg-pwrap.themed .tg-face.huge { border-color: var(--ring); }
+.tg-themerow { flex-wrap: wrap; gap: 6px; align-items: center; }
+.tg-themerow input[type=color] { width: 34px; height: 28px; border: 0; padding: 0; background: none; cursor: pointer; }
+.tg-swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255,255,255,.2); cursor: pointer; padding: 0; }
+.tg-swatch:hover { border-color: #fff; }

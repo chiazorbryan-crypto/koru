@@ -779,7 +779,7 @@
     const owner = T.crew.owner === meId();
     const status = el('small.tg-status');
     const top = el('div.tg-top',
-      el('div.tg-title', el('b', { text: '# ' + T.crew.name }), status),
+      el('button.tg-title', { title: 'Crew settings: rename, leave, delete', onclick: e => crewMenu(e) }, el('b', { text: '# ' + T.crew.name }), icon('chevdown'), status),
       el('div.sp'),
       T.crews?.length > 1 ? el('select.tg-pick', { title: 'Switch crew', onchange: e => { setCfg({ crew: e.target.value }); disconnect(); T.msgs = []; ls.set(CACHE, []); ls.set(SEEN, 0); refresh().then(route); } },
         ...T.crews.map(c => el('option', { value: c.id, selected: c.id === cfg().crew, text: c.name }))) : null,
@@ -854,19 +854,10 @@
     setTimeout(() => login.focus(), 30); void v;
   }
 
-  // ---------- you: status, profile, sign out ----------
-  function youMenu(ev) {
-    const st = T.profile?.status || 'online';
-    const set = async s => { close(); try { const j = await api('/me/profile', { method: 'POST', body: { status: s } }); T.profile = j.profile; route(); } catch (e) { K.toast(e.message, 'error'); } };
+  // ---------- crew: rename, leave, delete (click the crew name, or your picture) ----------
+  function crewItems(ev, item) {
     const owner = T.crew && T.crew.owner === meId();
-    const item = (ic, label, fn, cls = '') => el('button.tg-mi' + cls, { onclick: () => { close(); fn(); } }, ic ? icon(ic) : null, el('span', { text: label }));
-    const m = el('div.menu.glass.tg-ctx.tg-you',
-      el('div.tg-youhead', face({ ...me(), presence: st === 'invisible' ? 'offline' : st }, '.big', true), el('div', el('b', { text: me()?.name || '' }), el('small.muted', { text: '@' + (me()?.login || '') }))),
-      el('hr'),
-      ...['online', 'idle', 'dnd', 'invisible'].map(s => el('button.tg-mi' + (s === st ? '.cur' : ''), { onclick: () => set(s) }, el('i.tg-dot.inline.' + (s === 'invisible' ? 'offline' : s)), el('span', { text: PRESENCE[s] }))),
-      el('hr'),
-      item('pencil', 'Edit Profile', editProfile),
-      item('users', 'View Profile', () => showProfile(meId(), ev.currentTarget || document.body)),
+    return [
       T.crew && owner ? item('pencil', 'Rename Crew', () => {
         const box = el('div.menu.glass.tg-ctx', el('small.muted', { text: 'Crew name' }));
         const inp = el('input.txt', { type: 'text', value: T.crew.name, maxLength: 40 });
@@ -893,8 +884,36 @@
         try { await api(`/crews/${T.crew.id}`, { method: 'DELETE' }); } catch (e) { T.leaving = false; K.toast(e.message, 'error'); return; }
         K.toast(T.crew.name + ' deleted');
         disconnect(); T.leaving = false; setCfg({ crew: null }); T.crew = null; T.crews = null; T.msgs = []; ls.set(CACHE, []); refresh().finally(route);
-      }, '.danger') : null,
-      T.crew ? item('plus', 'Make Another Crew', () => { T.makeNew = true; route(); }) : null,
+      }, '.danger') : null];
+  }
+  function crewMenu(ev) {
+    const item = (ic, label, fn, cls = '') => el('button.tg-mi' + cls, { onclick: () => { m.remove(); fn(); } }, ic ? icon(ic) : null, el('span', { text: label }));
+    const owner = T.crew.owner === meId();
+    const m = el('div.menu.glass.tg-ctx.tg-you',
+      el('div.tg-youhead', el('div', el('b', { text: T.crew.name }), el('small.muted', { text: (T.members?.length || 0) + ' in this crew' + (owner ? ' · you own it' : '') }))),
+      el('hr'),
+      owner ? item('plus', 'Add Person', () => addPerson(document.querySelector('.tg-top'))) : null,
+      ...crewItems(ev, item),
+      item('plus', 'Add New Crew', () => { T.makeNew = true; route(); }));
+    const r = ev.currentTarget.getBoundingClientRect();
+    placeMenu(m, r.left, r.bottom + 6);
+  }
+
+  // ---------- you: status, profile, sign out ----------
+  function youMenu(ev) {
+    const st = T.profile?.status || 'online';
+    const set = async s => { close(); try { const j = await api('/me/profile', { method: 'POST', body: { status: s } }); T.profile = j.profile; route(); } catch (e) { K.toast(e.message, 'error'); } };
+    const owner = T.crew && T.crew.owner === meId();
+    const item = (ic, label, fn, cls = '') => el('button.tg-mi' + cls, { onclick: () => { close(); fn(); } }, ic ? icon(ic) : null, el('span', { text: label }));
+    const m = el('div.menu.glass.tg-ctx.tg-you',
+      el('div.tg-youhead', face({ ...me(), presence: st === 'invisible' ? 'offline' : st }, '.big', true), el('div', el('b', { text: me()?.name || '' }), el('small.muted', { text: '@' + (me()?.login || '') }))),
+      el('hr'),
+      ...['online', 'idle', 'dnd', 'invisible'].map(s => el('button.tg-mi' + (s === st ? '.cur' : ''), { onclick: () => set(s) }, el('i.tg-dot.inline.' + (s === 'invisible' ? 'offline' : s)), el('span', { text: PRESENCE[s] }))),
+      el('hr'),
+      item('pencil', 'Edit Profile', editProfile),
+      item('users', 'View Profile', () => showProfile(meId(), ev.currentTarget || document.body)),
+      ...crewItems(ev, item),
+      T.crew ? item('plus', 'Add New Crew', () => { T.makeNew = true; route(); }) : null,
       el('hr'),
       item('back', 'Sign Out', async () => { try { await api('/auth/signout', { method: 'POST' }); } catch {} signOutLocal(); route(); }, '.danger'));
     const r = ev.currentTarget.getBoundingClientRect();
@@ -923,7 +942,8 @@
     const s = p.stats || {};
     const reading = T.rt[String(id)]?.pos || (id === meId() && T.hosting ? K.readerPos?.() : null);
     const banner = el('div.tg-banner', { style: { background: p.color || `hsl(${hue(id)} 45% 35%)` } }, p.banner ? el('img', { src: p.banner, alt: '' }) : null);
-    return [
+    const th = Array.isArray(p.theme) ? p.theme : null;
+    return [el('div.tg-pwrap' + (th ? '.themed' : ''), { style: th ? { background: `linear-gradient(180deg, ${th[0]}, ${th[1]})`, '--ring': th[0] } : {} },
       banner,
       el('div.tg-pav', face({ ...p, id }, '.huge', true)),
       el('div.tg-pbody',
@@ -940,7 +960,7 @@
         p.bio ? el('div.tg-psec', el('small', { text: 'ABOUT ME' }), el('p', { text: p.bio })) : null,
         s.top?.length ? el('div.tg-psec', el('small', { text: 'TOP SERIES' }), el('div.tg-ptop', ...s.top.map(t => el('button', { title: t.title, onclick: () => { if (K.providers[t.provider]) { document.querySelector('.tg-prof')?.remove(); K.go(`/series/${t.provider}/${encodeURIComponent(t.slug)}`); } } },
           t.cover ? el('img', { src: t.cover, alt: '', loading: 'lazy' }) : el('div.tg-nocv', icon('book')), el('span', { text: t.title }))))) : null,
-        p.joined ? el('div.tg-psec', el('small', { text: 'KORU MEMBER SINCE' }), el('span', { text: new Date(p.joined).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) })) : null)];
+        p.joined ? el('div.tg-psec', el('small', { text: 'KORU MEMBER SINCE' }), el('span', { text: new Date(p.joined).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) })) : null))];
   }
 
   // ---------- profile editor ----------
@@ -948,7 +968,7 @@
     document.querySelector('.tg-editp')?.remove();
     try { const j = await api('/me'); T.profile = j.profile; setCfg({ user: j.user }); } catch {}   // the latest, also from your other device
     const p = { ...me(), ...(T.profile || {}) };
-    const draft = { name: p.name || '', pronouns: p.pronouns || '', bio: p.bio || '', custom: p.custom || '', status: p.status || 'online', color: p.color || '#5865f2', avatar: p.avatar || null, banner: p.banner || null };
+    const draft = { name: p.name || '', pronouns: p.pronouns || '', bio: p.bio || '', custom: p.custom || '', status: p.status || 'online', color: p.color || '#5865f2', avatar: p.avatar || null, banner: p.banner || null, theme: Array.isArray(p.theme) ? p.theme : null };
     const preview = el('div.tg-prof.tg-preview.glass');
     const paint = () => preview.replaceChildren(...profileCard({ ...p, ...draft, presence: draft.status === 'invisible' ? 'offline' : draft.status }, meId(), true));
     const field = (label, node) => el('div.tg-field', el('small', { text: label }), node);
@@ -970,12 +990,20 @@
       return el('div.row', btn, fi, el('button.btn.small', { onclick: () => { draft[k] = null; paint(); } }, icon('x'), 'Remove'), el('small.muted', { text: 'PNG, JPG, or animated GIF / WebP, 14 MB at most' }));
     };
     const color = el('input', { type: 'color', value: draft.color, oninput: () => { draft.color = color.value; paint(); } });
+    const themeBox = () => {
+      const t = draft.theme || ['#5865f2', '#1e1f3a'];
+      const ins = [0, 1].map(i => el('input', { type: 'color', value: t[i], title: i ? 'Accent' : 'Primary', oninput: () => { draft.theme = [ins[0].value, ins[1].value]; paint(); } }));
+      const presets = [['#5865f2', '#1e1f3a'], ['#e0457b', '#2b1030'], ['#f0a020', '#3a1a08'], ['#20b080', '#0b2a24'], ['#8a5cf6', '#14b8a6'], ['#ff6b6b', '#4d96ff'], ['#111111', '#444444']];
+      return el('div.row.tg-themerow', ...ins,
+        ...presets.map(pr => el('button.tg-swatch', { title: 'Use this theme', style: { background: `linear-gradient(180deg, ${pr[0]}, ${pr[1]})` }, onclick: () => { draft.theme = pr; ins[0].value = pr[0]; ins[1].value = pr[1]; paint(); } })),
+        el('button.btn.small', { onclick: () => { draft.theme = null; paint(); } }, icon('x'), 'None'));
+    };
     const status = el('select.txt', { onchange: () => { draft.status = status.value; paint(); } }, ...['online', 'idle', 'dnd', 'invisible'].map(s => el('option', { value: s, selected: s === draft.status, text: PRESENCE[s] })));
     const save = el('button.btn.primary', { onclick: async () => {
       if (!draft.name.trim()) { K.toast('Type a name', 'error'); return; }
       save.disabled = true;
       try {
-        const j = await api('/me/profile', { method: 'POST', body: { name: draft.name.trim(), pronouns: draft.pronouns, bio: draft.bio, custom: draft.custom, status: draft.status, color: draft.color, avatar: draft.avatar, banner: draft.banner } });
+        const j = await api('/me/profile', { method: 'POST', body: { name: draft.name.trim(), pronouns: draft.pronouns, bio: draft.bio, custom: draft.custom, status: draft.status, color: draft.color, avatar: draft.avatar, banner: draft.banner, theme: draft.theme } });
         T.profile = j.profile; setCfg({ user: j.user }); profCache.delete(meId()); K.toast('Profile saved', 'ok'); wrap.remove(); route();
       } catch (e) { K.toast(e.message, 'error'); save.disabled = false; }
     } }, icon('check'), 'Save Changes');
@@ -989,6 +1017,7 @@
             field('PROFILE PICTURE', pickFile('avatar', 512)),
             field('BANNER', pickFile('banner', 1200)),
             field('BANNER COLOUR (when there\'s no banner picture)', color),
+            field("PROFILE THEME (your card's colours)", themeBox()),
             field('ABOUT ME', bio),
             field('CUSTOM STATUS', txt('custom', 80, 'e.g. binging Solo Leveling 📚')),
             field('STATUS', status),

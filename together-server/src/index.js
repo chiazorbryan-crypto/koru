@@ -43,7 +43,7 @@ const person = u => {
   return { id: u.id, login: u.login, name: u.nick || u.name || u.login, avatar: p.avatar || u.avatar || null, status: STATUSES.includes(p.status) ? p.status : 'online', custom: p.custom || '', color: p.color || null };
 };
 // the full profile card
-const card = u => { const p = prof(u); return { ...person(u), bio: p.bio || '', pronouns: p.pronouns || '', banner: p.banner || null, joined: u.joined || null, stats: p.stats || null }; };
+const card = u => { const p = prof(u); return { ...person(u), bio: p.bio || '', pronouns: p.pronouns || '', banner: p.banner || null, theme: p.theme || null, joined: u.joined || null, stats: p.stats || null }; };
 
 async function ghForm(env, path, body) {
   const r = await fetch(ghWeb(env) + path, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA }, body: new URLSearchParams(body) });
@@ -143,6 +143,7 @@ export default {
         if ('custom' in b) p.custom = clean(b.custom, 80).trim();
         if ('status' in b) { if (!STATUSES.includes(b.status)) return err(400, 'Bad status'); p.status = b.status; }
         if ('color' in b) { if (b.color !== null && !/^#[0-9a-f]{6}$/i.test(b.color)) return err(400, 'Bad colour'); p.color = b.color; }
+        if ('theme' in b) { if (b.theme !== null && !(Array.isArray(b.theme) && b.theme.length === 2 && b.theme.every(c => /^#[0-9a-f]{6}$/i.test(c)))) return err(400, 'Bad theme'); p.theme = b.theme; }
         for (const k of ['avatar', 'banner']) if (k in b) { if (b[k] !== null && !okPicture(b[k], origin)) return err(400, 'That picture can\'t be used.'); p[k] = b[k]; }
         if ('stats' in b) p.stats = cleanStats(b.stats);
         const r = await H.saveProfile(me.id, patch, p);
