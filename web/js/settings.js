@@ -170,6 +170,7 @@
         toggle('Keep reading into the next chapter', ro.autoNext, v => setR({ autoNext: v }), 'Long strip: the next chapter joins underneath as you reach the end, like Kotatsu'),
         toggle('Tap sides to turn', ro.tapZones, v => setR({ tapZones: v })),
         toggle('Zen mode', ro.zen, v => setR({ zen: v }), 'Chapters open full screen with just the pages. Press Z while reading to switch'),
+        toggle('Show the time', ro.clock, v => setR({ clock: v }), 'A small clock while you read: in the top bar, and in the corner when the bars hide as you scroll or in zen mode'),
         toggle('Show frame rate', ro.fps, v => setR({ fps: v }), 'A small meter while reading, to check for lag'),
         select('Download next chapters while reading', [['0', 'Off'], ['1', 'Next chapter'], ['2', 'Next 2 chapters'], ['3', 'Next 3 chapters']], String(ro.autoDl), v => setR({ autoDl: Number(v) })),
         toggle('Remove those after reading', ro.autoDlClean, v => setR({ autoDlClean: v }), 'Chapters Koru saved by itself are deleted once read. Ones you download yourself always stay')));

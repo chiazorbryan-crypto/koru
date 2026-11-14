@@ -3,7 +3,7 @@
 'use strict';
 (function () {
   const { el, icon } = K;
-  const DEFAULTS = { mode: 'strip', rtl: false, gap: 0, width: 760, autoNext: true, preload: 4, tapZones: true, ambient: true, ambStrength: 55, ambBlur: 90, ambMode: 'page', ambSat: 170, ambEase: 45, ambCalm: true, fps: false, zen: false, autoSpeed: 90, autoSecs: 8, autoStart: false, autoDl: 1, autoDlClean: true, countdown: true };
+  const DEFAULTS = { mode: 'strip', rtl: false, gap: 0, width: 760, autoNext: true, preload: 4, tapZones: true, ambient: true, ambStrength: 55, ambBlur: 90, ambMode: 'page', ambSat: 170, ambEase: 45, ambCalm: true, fps: false, zen: false, autoSpeed: 90, autoSecs: 8, autoStart: false, autoDl: 1, autoDlClean: true, countdown: true, clock: true };
   K.readerSettings = () => ({ ...DEFAULTS, ...(K.data.settings.reader || {}) });
   const setReader = patch => { K.data.settings.reader = { ...K.readerSettings(), ...patch }; K.save('settings'); };
 
@@ -130,6 +130,7 @@
       el('button.btn.icon', { title: 'Back', onclick: () => K.closeReader() }, icon('back')),
       el('div.tt', el('b', { text: s.series?.title || s.slug }), el('small', { text: s.chapter?.name || '' })),
       K.incognito() ? el('span.tag', { title: 'Nothing is saved while incognito' }, 'Incognito') : null,
+      K.readerSettings().clock ? el('span.rclock.inbar', { title: 'The time (Settings → Reader → Show the time)' }) : null,
       s.pages?.length ? mark : null,
       el('button.btn.icon.autob', { title: 'Auto-scroll (S)', onclick: () => K.toggleAuto?.() }, icon('auto')),
       el('button.btn.icon', { title: 'Zen mode (Z)', onclick: () => K.toggleZen?.() }, icon('zen')),
@@ -459,6 +460,15 @@
     drawer.append(dlist);
 
     box.replaceChildren(amb, pagesBox, topBar(), bottom, drawer);
+    // Show the time: in the top bar, and in a small corner tag while the bars are hidden (scrolling, zen).
+    // It changes once a minute, right on the minute.
+    let clockT = 0;
+    if (opt.clock) {
+      box.append(el('div.rclock.float', { 'aria-hidden': 'true' }));
+      const paint = () => { const t = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); box.querySelectorAll('.rclock').forEach(c => { if (c.textContent !== t) c.textContent = t; }); };
+      const next = () => { clockT = setTimeout(() => { if (state !== s) return; paint(); next(); }, 60000 - Date.now() % 60000 + 30); };
+      paint(); next();
+    }
     let fpsRaf = 0;
     if (opt.fps) {
       const meter = el('div.fps', { text: '… fps' });
@@ -778,7 +788,7 @@
     };
     document.addEventListener('keydown', onKey);
     const oldCleanup = s.cleanup;
-    s.cleanup = () => { oldCleanup?.(); ofsWatch.disconnect(); cancelAnimationFrame(ambRaf); ambRaf = 0; ambCache.clear(); document.removeEventListener('keydown', onKey); clearTimeout(hideT); clearTimeout(idleT); cancelAnimationFrame(fpsRaf); cancelAnimationFrame(autoRaf); clearInterval(statT); window.removeEventListener('resize', placePop); document.removeEventListener('keydown', act); };
+    s.cleanup = () => { oldCleanup?.(); ofsWatch.disconnect(); cancelAnimationFrame(ambRaf); ambRaf = 0; ambCache.clear(); document.removeEventListener('keydown', onKey); clearTimeout(hideT); clearTimeout(idleT); cancelAnimationFrame(fpsRaf); cancelAnimationFrame(autoRaf); clearInterval(statT); clearTimeout(clockT); window.removeEventListener('resize', placePop); document.removeEventListener('keydown', act); };
 
     // reader settings popover
     function toggleSettings() {
@@ -827,6 +837,7 @@
         tog('Tap sides to turn', 'tapZones', ''),
         el('div.ctl', el('div.lab', 'Zen mode', el('small', { text: 'Full screen, just the pages. Z or Esc to leave' })),
           el('button.btn.small', { onclick: () => K.toggleZen() }, icon('zen'), 'Enter')),
+        tog('Show the time', 'clock', 'A small clock in the top bar, and in the corner when the bars hide', true),
         tog('Show frame rate', 'fps', 'A small meter in the corner, to check for lag', true)));
     }
 

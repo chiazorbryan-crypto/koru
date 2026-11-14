@@ -115,3 +115,9 @@ html.lite .badge.gold .em { box-shadow: none; }
 /* no graphics card and light mode switched off: pop-ups appear at once instead of sliding over the glass */
 html.nogpu:not(.lite) .cele, html.nogpu:not(.lite) .foxpop, html.nogpu:not(.lite) .foxpop .fx .fox { animation: none; }
 html.nogpu:not(.lite) .cele.out, html.nogpu:not(.lite) .foxpop.out { animation: none; opacity: 0; }
+
+/* ---------- the time while reading ---------- */
+.rclock.inbar { padding: 0 8px; font-size: 13px; color: var(--muted, #bbb); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.reader .rclock.float { position: absolute; top: calc(var(--titlebar, 0px) + 12px); right: 14px; z-index: 4; padding: 3px 10px; border-radius: 999px; pointer-events: none;
+  background: rgba(0, 0, 0, .5); color: rgba(255, 255, 255, .88); font-size: 12px; font-variant-numeric: tabular-nums; opacity: 0; transition: opacity .3s ease; }
+.reader.hide-ui .rclock.float, .reader.zen .rclock.float { opacity: 1; }
