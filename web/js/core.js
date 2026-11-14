@@ -122,7 +122,8 @@ K.api = {
 
 // ---------- saved data ----------
 // library: favourites   history: last read spot per series   read: read chapters per series   settings: everything else
-K.data = { library: {}, history: {}, read: {}, settings: {}, liked: {}, bookmarks: {}, flags: {}, stats: {} };
+// notes: your rating, note and shelves per series ({ 'provider:slug': { rating, note, shelves: [names], at } }); shelves: your shelf list ({ name: { at, order } })
+K.data = { library: {}, history: {}, read: {}, settings: {}, liked: {}, bookmarks: {}, flags: {}, stats: {}, notes: {}, shelves: {} };
 K.flag = (provider, slug) => K.data.flags[provider + ':' + slug] || {};
 K.notTrash = s => !K.flag(s.provider, s.slug).trash;
 K.incognito = () => !!K.data.settings.incognito;

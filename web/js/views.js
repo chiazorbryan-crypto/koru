@@ -17,6 +17,7 @@
     if (f.trash) cv.append(el('span.ribbon.trash', { text: 'Absolute trash' }));
     if (f.hidden) a.classList.add('is-hidden');
     if (extra.progress != null) cv.append(el('div.prog', el('i', { style: { width: Math.round((f.completed ? 1 : extra.progress) * 100) + '%' } })));
+    K.libx?.cardBadge?.(s, cv);
     a.append(cv);
     if (extra.menu) {
       const open = e => { e.preventDefault(); e.stopPropagation(); K.bookMenu(s, e, extra.onChange); };
@@ -332,6 +333,8 @@
 
   // Which books a Library filter shows. Hidden and trashed books only show under their own filter.
   K.flagPass = (x, filter) => {
+    const own = K.libx?.filterPass?.(x, filter);   // Rated and your shelves (library-extra.js)
+    if (own != null) return own;
     const f = K.flag(x.provider, x.slug);
     if (filter === 'hidden') return !!f.hidden;
     if (filter === 'trash') return !!f.trash;
@@ -363,6 +366,7 @@
 
     function draw() {
       body.replaceChildren();
+      if (K.libx?.filterOk && !K.libx.filterOk(filter)) { filter = 'all'; sessionStorage.setItem('koru-libfilter', filter); }   // a shelf that was deleted
       const hist = Object.values(K.data.history).filter(h => { const f = K.flag(h.provider, h.slug); return !f.hidden && !f.trash && !f.completed; }).sort((a, b) => b.at - a.at).slice(0, 12);
       if (hist.length) {
         body.append(el('div.section', el('h2', { text: 'Continue reading' })));
@@ -381,7 +385,8 @@
       body.append(el('div.section', segmented(tabs, tab, v => { tab = v; sessionStorage.setItem('koru-libtab', v); drawGrid(); })));
       const chips = el('div.row', { style: { marginBottom: '14px' } });
       const sources = [['all', 'All'], ['new', 'New chapters'], ['completed', 'Completed'], ['hidden', 'Hidden'], ['trash', 'Trash'], ...K.providerList.map(p => [p.id, p.short])];
-      const drawChips = () => chips.replaceChildren(...sources.map(([v, l]) => el('button.chip' + (filter === v ? '.on' : ''), { onclick: () => { filter = v; sessionStorage.setItem('koru-libfilter', v); drawChips(); drawGrid(); } }, l)));
+      const setFilter = v => { filter = v; sessionStorage.setItem('koru-libfilter', v); drawChips(); drawGrid(); };
+      const drawChips = () => { chips.replaceChildren(...sources.map(([v, l]) => el('button.chip' + (filter === v ? '.on' : ''), { onclick: () => setFilter(v) }, l))); K.libx?.libraryChips?.(chips, filter, setFilter); };
       drawChips();
       body.append(chips);
       const items = Object.values(K.data.library);
@@ -391,9 +396,10 @@
       function drawGrid() {
         chips.style.display = tab === 'marks' ? 'none' : '';
         if (tab !== 'fav') return drawOther();
-        let list = filter === 'trash' ? Object.keys(K.data.flags).filter(k => K.data.flags[k].trash).map(k => { const [provider, ...rest] = k.split(':'); const slug = rest.join(':'); const h = K.data.flags[k]; return { provider, slug, title: h.title || slug, cover: h.cover || null }; }) : items.slice();
+        let list = filter === 'trash' ? Object.keys(K.data.flags).filter(k => K.data.flags[k].trash).map(k => { const [provider, ...rest] = k.split(':'); const slug = rest.join(':'); const h = K.data.flags[k]; return { provider, slug, title: h.title || slug, cover: h.cover || null }; }) : (K.libx?.listFor?.(filter, items) || items.slice());
         list = list.filter(x => K.flagPass(x, filter));
-        list.sort((a, b) => (b.newCount || 0) - (a.newCount || 0) || (K.data.history[K.key(b.provider, b.slug)]?.at || b.addedAt) - (K.data.history[K.key(a.provider, a.slug)]?.at || a.addedAt));
+        list.sort((a, b) => (b.newCount || 0) - (a.newCount || 0) || (K.data.history[K.key(b.provider, b.slug)]?.at || b.addedAt || 0) - (K.data.history[K.key(a.provider, a.slug)]?.at || a.addedAt || 0));
+        K.libx?.sortFor?.(filter, list);
         if (!list.length) {
           gridBox.replaceChildren(el('div.empty', K.fox(), el('h3', { text: items.length ? 'Nothing here' : 'Start your library' }),
             el('p', { text: items.length ? 'No series match this filter.' : 'Find a series in Explore or Search and tap the heart to keep it here.' }),
@@ -489,7 +495,7 @@
 
   // ---------- Search ----------
   K.views.search = async function (root, r) {
-    root.append(el('div.head', el('div', el('h1', { text: 'Search' }), el('div.sub', { text: 'Both sources at once' }))));
+    root.append(el('div.head', el('div', el('h1', { text: 'Search' }), el('div.sub', { text: 'Every source at once' }))));
     const input = el('input', { type: 'search', placeholder: 'Search titles', value: r.query.get('q') || '', spellcheck: false, autocomplete: 'off' });
     root.append(el('div.searchbox.glass', icon('search'), input));
     const out = el('div', { style: { marginTop: '10px' } });
@@ -501,6 +507,7 @@
       const v = root.closest('.view'); if (v) v._q = q;
       if (!q.trim()) { out.replaceChildren(el('div.empty', K.fox(), el('h3', { text: 'Find something to read' }), el('p', { text: 'Type a title. Koru searches all ' + K.providerList.length + ' sources together.' }))); return; }
       out.replaceChildren();
+      if (K.libx?.search) return K.libx.search(out, q, () => my === gen);   // one card per series, across sources
       for (const p of K.providerList) {
         const sec = el('div', el('div.section', el('h2', { text: p.name, style: { color: p.hue } }), el('span.count')), skeletonGrid(6));
         out.append(sec);
@@ -531,7 +538,8 @@
     } catch (e) {
       // No connection: show what's downloaded.
       const d = K.dl.series?.find(x => x.provider === provider && x.seriesSlug === slug);
-      if (!d) throw e;
+      // nothing saved either: say the site didn't answer and look for the series on the other sources
+      if (!d) { if (!K.libx?.failBox || !K.providers[provider]) throw e; if (alive()) root.replaceChildren(K.libx.failBox(e, provider, slug)); return; }
       offline = true;
       s = { provider, slug, title: d.title, cover: d.cover, description: 'You\'re offline. Showing downloaded chapters.', tags: [], status: '' };
       chapters = d.chapters.map(c => ({ slug: c.chapterSlug, name: c.chapterName, number: c.number, date: c.savedAt, locked: false }))
@@ -581,11 +589,12 @@
           K.seriesBadges?.chip?.(s, key, chapters) || null,
           prog,
           el('div.row', readBtn, heart, liked,
-            offline ? null : el('button.btn.icon', { title: 'Open on the site', onclick: () => K.api.post('/k/open-external', { url: s.url }).catch(() => {}) }, icon('external'))))));
+            offline ? null : el('button.btn.icon', { title: 'Open on the site', onclick: () => K.api.post('/k/open-external', { url: s.url }).catch(() => {}) }, icon('external')),
+            K.libx?.findButton?.(s, chapters) || null))));
     if (K.flag(provider, slug).trash) root.append(el('div.glass', { style: { padding: '12px 16px', margin: '0 0 14px', display: 'flex', gap: '10px', alignItems: 'center' } },
       icon('trash'), el('span', { style: { flex: 1 }, text: 'You put this in Absolute trash, so it\'s hidden from your feed.' }),
       el('button.btn.small', { onclick: () => { const f = { ...K.data.flags[key] }; delete f.trash; if (f.hidden || f.completed) K.data.flags[key] = f; else delete K.data.flags[key]; K.save('flags'); K.toast('Restored', 'ok'); K.go('/series/' + provider + '/' + encodeURIComponent(slug), true); location.reload(); } }, icon('undo'), 'Restore')));
-    root.append(hero, el('div', { style: { marginTop: '18px' } }, desc));
+    root.append(hero, el('div', { style: { marginTop: '18px' } }, desc), K.libx?.seriesPanel?.(s) || '');
 
     // chapters — Kotatsu style: long-press or right-click a chapter to start selecting, Shift-click for a range
     let asc = false, selecting = false, view = 'all', anchor = null;
@@ -858,6 +867,7 @@
             el('div.row', { style: { marginTop: '16px' } },
               el('button.btn.primary', { onclick: () => readLocal(s, res.c) }, icon('play'), res.label),
               el('a.btn', { href: `#/series/${provider}/${encodeURIComponent(slug)}` }, icon('explore'), 'Series page'),
+              K.libx?.cbzLink?.({ series: s.chapters[0].dir.split('/')[0] }, s.title, 'Export CBZ') || null,
               el('button.btn', { title: 'Delete every downloaded chapter of this series', onclick: async () => {
                 if (!confirm(`Delete all ${s.chapters.length} downloaded chapters of ${s.title}? They can be downloaded again later.`)) return;
                 await K.api.post('/k/dl/delete', { series: `${provider}:${slug}` }); await K.refreshDownloads(); K.toast('Downloads deleted'); K.go('/downloads', true);
@@ -891,6 +901,7 @@
           picking ? el('span.check', picked.has(c.id) ? icon('done') : null) : null,
           el('div.n', el('b', { text: c.chapterName }),
             el('small', { text: [cur ? `Reading · page ${(h.page || 0) + 1} of ${c.files.length}` : read ? 'Read' : null, `${c.files.length} pages`, K.bytes(c.bytes || 0), c.savedAt ? 'saved ' + K.ago(c.savedAt) : null].filter(Boolean).join(' · ') })),
+          picking ? null : K.libx?.cbzLink?.({ dir: c.dir }, `${s.title} - ${c.chapterName.replace(/ — .*/, '')}`) || null,
           picking ? null : el('button.btn.small.icon', { title: 'Delete this download', onclick: async e => {
             e.stopPropagation(); await K.api.post('/k/dl/delete', { id: c.id }); await K.refreshDownloads(); s = find();
             if (!s) { K.go('/downloads', true); return; } drawHero(); drawTools(); drawList();
@@ -928,7 +939,7 @@
           el('button.btn.small.icon', { title: 'Later', disabled: offset === 0, onclick: () => { offset = Math.max(0, offset - 1); drawBar(); draw(); } }, icon('next'))));
     }
     function draw() {
-      const st = K.data.stats || {}, days = st.days || {}, meta = st.series || {};
+      const st = K.statsAll?.() || K.data.stats || {}, days = st.days || {}, meta = st.series || {};   // with GitHub sync: both PCs
       const r = range(), from = dk(r.start), to = dk(r.end);
       const inRange = Object.entries(days).filter(([d]) => d >= from && d <= to);
       if (!Object.keys(days).length) { body.replaceChildren(el('div.empty', K.fox(), el('h3', { text: 'No reading yet' }), el('p', { text: 'Open a chapter and read. Koru counts the time you’re actively reading, and your top series show up here.' }))); return; }

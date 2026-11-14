@@ -11,6 +11,8 @@
 //   GET  /k/dl/queue             what is downloading now
 //   GET  /k/dl/list              everything downloaded
 //   GET  /k/dl/file/<series>/<chapter>/<file>   a downloaded page or cover
+//   GET  /k/dl/cbz?dir=<series>/<chapter> | ?id=<provider:series:chapter> | ?series=<series folder>
+//                                a downloaded chapter or whole series as a .cbz (an uncompressed ZIP + ComicInfo.xml), streamed
 //   GET  /k/info                 app version, platform, downloads folder
 import fs from 'node:fs';
 import net from 'node:net';
@@ -47,6 +49,70 @@ const IMG_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp
 const MIME = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif', json: 'application/json' };
 const safe = s => String(s).replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^\.+/, '_').slice(0, 90) || '_';
 export const dlId = (provider, seriesSlug, chapterSlug) => `${provider}:${seriesSlug}:${chapterSlug}`;
+
+// ---------- a tiny ZIP writer (STORE only, no compression: comic pages are already compressed) ----------
+const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+export function crc32(buf) { let c = 0xFFFFFFFF; for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+const dosTime = d => ({ time: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), date: ((Math.max(1980, d.getFullYear()) - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate() });
+// entries: [{ name, file } | { name, data: Buffer }] in order. Returns a web ReadableStream of the .zip; files are read
+// one at a time as the reader asks for more, so a whole series never sits in memory. Zip64 kicks in past 4 GB / 65535 files.
+export function zipStream(entries) {
+  const now = dosTime(new Date()), central = [];
+  let offset = 0, i = 0, finished = false;
+  const u16 = (b, o, v) => b.writeUInt16LE(v & 0xFFFF, o), u32 = (b, o, v) => b.writeUInt32LE(v >>> 0, o);
+  return new ReadableStream({
+    async pull(ctl) {
+      try {
+        if (i < entries.length) {
+          const e = entries[i++];
+          const data = e.data || await fsp.readFile(e.file);
+          const name = Buffer.from(e.name, 'utf8'), crc = crc32(data);
+          const h = Buffer.alloc(30);
+          u32(h, 0, 0x04034b50); u16(h, 4, 20); u16(h, 6, 0x0800); u16(h, 8, 0); u16(h, 10, now.time); u16(h, 12, now.date);
+          u32(h, 14, crc); u32(h, 18, data.length); u32(h, 22, data.length); u16(h, 26, name.length); u16(h, 28, 0);
+          central.push({ name, crc, size: data.length, offset });
+          offset += h.length + name.length + data.length;
+          ctl.enqueue(new Uint8Array(Buffer.concat([h, name]))); ctl.enqueue(new Uint8Array(data));
+          return;
+        }
+        if (finished) return;
+        finished = true;
+        const parts = [], cdStart = offset;
+        for (const c of central) {
+          const big = c.offset >= 0xFFFFFFFF;
+          const x = big ? Buffer.alloc(12) : null;
+          if (x) { u16(x, 0, 0x0001); u16(x, 2, 8); x.writeBigUInt64LE(BigInt(c.offset), 4); }
+          const h = Buffer.alloc(46);
+          u32(h, 0, 0x02014b50); u16(h, 4, big ? 45 : 20); u16(h, 6, big ? 45 : 20); u16(h, 8, 0x0800); u16(h, 10, 0); u16(h, 12, now.time); u16(h, 14, now.date);
+          u32(h, 16, c.crc); u32(h, 20, c.size); u32(h, 24, c.size); u16(h, 28, c.name.length); u16(h, 30, x ? x.length : 0);
+          u16(h, 32, 0); u16(h, 34, 0); u16(h, 36, 0); u32(h, 38, 0); u32(h, 42, big ? 0xFFFFFFFF : c.offset);
+          parts.push(h, c.name); if (x) parts.push(x);
+        }
+        const cd = Buffer.concat(parts), cdSize = cd.length, n = central.length;
+        const z64 = n >= 0xFFFF || cdStart >= 0xFFFFFFFF || cdSize >= 0xFFFFFFFF;
+        const tail = [];
+        if (z64) {
+          const r = Buffer.alloc(56), zEnd = cdStart + cdSize;
+          u32(r, 0, 0x06064b50); r.writeBigUInt64LE(44n, 4); u16(r, 12, 45); u16(r, 14, 45); u32(r, 16, 0); u32(r, 20, 0);
+          r.writeBigUInt64LE(BigInt(n), 24); r.writeBigUInt64LE(BigInt(n), 32); r.writeBigUInt64LE(BigInt(cdSize), 40); r.writeBigUInt64LE(BigInt(cdStart), 48);
+          const l = Buffer.alloc(20); u32(l, 0, 0x07064b50); u32(l, 4, 0); l.writeBigUInt64LE(BigInt(zEnd), 8); u32(l, 16, 1);
+          tail.push(r, l);
+        }
+        const e = Buffer.alloc(22);
+        u32(e, 0, 0x06054b50); u16(e, 4, 0); u16(e, 6, 0); u16(e, 8, Math.min(n, 0xFFFF)); u16(e, 10, Math.min(n, 0xFFFF));
+        u32(e, 12, Math.min(cdSize, 0xFFFFFFFF)); u32(e, 16, Math.min(cdStart, 0xFFFFFFFF)); u16(e, 20, 0);
+        ctl.enqueue(new Uint8Array(Buffer.concat([cd, ...tail, e])));
+        ctl.close();
+      } catch (err) { ctl.error(err); }
+    }
+  }, { highWaterMark: 0 });
+}
+const xmlEsc = s => String(s ?? '').replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c])).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+// ComicInfo.xml (the Anansi/ComicRack format most comic readers understand)
+const comicInfo = f => '<?xml version="1.0" encoding="utf-8"?>\n<ComicInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">\n'
+  + Object.entries(f).filter(([, v]) => v != null && v !== '').map(([k, v]) => `  <${k}>${xmlEsc(v)}</${k}>\n`).join('') + '</ComicInfo>\n';
+const fileName = s => String(s || 'Koru').replace(/[\\/:*?"<>|\u0000-\u001F]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Koru';
+const PAGE_RE = /^[\w-][\w.-]*\.(jpe?g|png|webp|gif|avif)$/i;
 
 export function createBackend({ dataDir, downloadsDir, version = '0.0.0', platform = 'desktop', onOpenPath, onOpenExternal, onWindowIcon, fetchImpl = fetch }) {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -195,6 +261,68 @@ export function createBackend({ dataDir, downloadsDir, version = '0.0.0', platfo
     return out;
   }
 
+  // ---------- CBZ export ----------
+  // A folder name straight under downloadsDir (or one level deeper): no separators, no dots-only names, no links.
+  const okName = n => typeof n === 'string' && n.length > 0 && n.length < 200 && !/[\\/:*?"<>|\u0000-\u001F]/.test(n) && !/^\.+$/.test(n);
+  async function realDir(...names) {
+    if (!names.every(okName)) return null;
+    const full = path.join(downloadsDir, ...names);
+    if (!full.startsWith(downloadsDir + path.sep) || full.endsWith('.part')) return null;
+    try { const st = await fsp.lstat(full); return st.isDirectory() && !st.isSymbolicLink() ? full : null; } catch { return null; }
+  }
+  // The pages of one downloaded chapter folder, in reading order (as chapter.json lists them).
+  async function chapterPages(dir) {
+    let meta = {};
+    try { meta = JSON.parse(await fsp.readFile(path.join(dir, 'chapter.json'), 'utf8')); } catch { return null; }
+    let names = Array.isArray(meta.files) ? meta.files.filter(f => typeof f === 'string' && PAGE_RE.test(f)) : [];
+    if (!names.length) names = (await fsp.readdir(dir)).filter(f => PAGE_RE.test(f)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const files = [];
+    for (const n of names) { const full = path.join(dir, n); try { const st = await fsp.lstat(full); if (st.isFile()) files.push(full); } catch {} }
+    return files.length ? { meta, files } : null;
+  }
+  async function cbz(query) {
+    let sdir = null, cdirs = [];
+    const id = query.get('id'), dir = query.get('dir'), series = query.get('series');
+    if (dir) {
+      const [a, b, ...more] = String(dir).split('/');
+      if (more.length || !b) return json(400, { error: 'Bad path' });
+      sdir = await realDir(a); const c = await realDir(a, b); if (c) cdirs = [c];
+    } else if (id) {
+      const [provider, seriesSlug, ...rest] = String(id).split(':');
+      if (!provider || !seriesSlug || !rest.length) return json(400, { error: 'Bad id' });
+      sdir = await realDir(path.basename(seriesDir(provider, seriesSlug)));
+      const c = sdir && await realDir(path.basename(sdir), path.basename(chapterDir(provider, seriesSlug, rest.join(':')))); if (c) cdirs = [c];
+    } else if (series) {
+      // the series folder name, or "provider:slug" like /k/dl/delete takes
+      const [provider, ...slug] = String(series).split(':');
+      sdir = await realDir(String(series)) || (slug.length ? await realDir(path.basename(seriesDir(provider, slug.join(':')))) : null);
+      if (sdir) for (const d of await fsp.readdir(sdir, { withFileTypes: true })) if (d.isDirectory() && !d.isSymbolicLink() && !d.name.endsWith('.part')) cdirs.push(path.join(sdir, d.name));
+    } else return json(400, { error: 'Say which download to export.' });
+    if (!sdir || !cdirs.length) return json(404, { error: 'Not downloaded' });
+    let smeta = {};
+    try { smeta = JSON.parse(await fsp.readFile(path.join(sdir, 'series.json'), 'utf8')); } catch {}
+    const chapters = (await Promise.all(cdirs.map(chapterPages))).filter(Boolean)
+      .sort((a, b) => (a.meta.number ?? 1e9) - (b.meta.number ?? 1e9) || String(a.meta.chapterName || '').localeCompare(String(b.meta.chapterName || ''), undefined, { numeric: true }));
+    if (!chapters.length) return json(404, { error: 'Not downloaded' });
+    const title = smeta.title || chapters[0].meta.seriesTitle || path.basename(sdir);
+    const one = !series && chapters.length === 1 ? chapters[0].meta : null;
+    const entries = [];
+    chapters.forEach((c, ci) => c.files.forEach((f, pi) => {
+      const ext = path.extname(f).toLowerCase().replace('.jpeg', '.jpg');
+      // one chapter: 0001.jpg…; a series: 0001-0001.jpg… (chapter, page), flat so every reader keeps the order
+      entries.push({ name: (one ? '' : String(ci + 1).padStart(4, '0') + '-') + String(pi + 1).padStart(4, '0') + ext, file: f });
+    }));
+    const pages = entries.length, nums = chapters.map(c => c.meta.number).filter(n => typeof n === 'number' && Number.isFinite(n));
+    const info = one
+      ? { Title: one.chapterName || '', Series: title, Number: one.number ?? '', PageCount: pages, Notes: 'Exported by Koru' }
+      : { Title: title, Series: title, Count: chapters.length, PageCount: pages,
+        Notes: `Exported by Koru: ${chapters.length} chapter${chapters.length > 1 ? 's' : ''}${nums.length ? ` (${Math.min(...nums)}–${Math.max(...nums)})` : ''}` };
+    entries.push({ name: 'ComicInfo.xml', data: Buffer.from(comicInfo(info), 'utf8') });
+    const name = fileName(one ? `${title} - ${one.chapterName || 'Chapter ' + (one.number ?? '')}` : title) + '.cbz';
+    return { status: 200, type: 'application/vnd.comicbook+zip', body: zipStream(entries), stream: true,
+      headers: { 'Content-Disposition': `attachment; filename="${name.replace(/[^\x20-\x7E]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}` } };
+  }
+
   // ---------- request handler ----------
   // req: { method, path, query: URLSearchParams, body: string }
   // returns: { status, type, body } where body is a string/Buffer, or { status, file, type } to stream a file.
@@ -262,6 +390,7 @@ export function createBackend({ dataDir, downloadsDir, version = '0.0.0', platfo
         }
         return json(200, { ok: true });
       }
+      if (p === '/k/dl/cbz' && method === 'GET') return await cbz(query);
       const file = p.match(/^\/k\/dl\/file\/([^/]+)\/([^/]+)(?:\/([^/]+))?$/);
       if (file && method === 'GET') {
         const parts = file.slice(1).filter(Boolean).map(decodeURIComponent);

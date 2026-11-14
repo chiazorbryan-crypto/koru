@@ -1,0 +1,123 @@
+/* Koru library extras: ratings, notes, shelves, merged search, find on another source, .cbz export.
+   Only transform and opacity move; nothing that moves is blurred. */
+
+/* ---------- stars ---------- */
+.lx-stars { display: inline-flex; gap: 2px; }
+.lx-star { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); transition: transform var(--t) var(--ease), color var(--t-fast); }
+.lx-star .ic { width: 22px; height: 22px; fill: transparent; stroke: currentColor; stroke-width: 1.6; transition: fill var(--t-fast); }
+.lx-star.on { color: #ffc94d; }
+.lx-star.on .ic { fill: currentColor; }
+.lx-star:hover { transform: scale(1.15); }
+.lx-star:active { transform: scale(.9); }
+
+/* ---------- the panel on a series page ---------- */
+.lx-panel { margin-top: 16px; padding: 14px 16px; display: grid; gap: 12px; max-width: 900px; }
+.lx-prow { display: flex; gap: 18px 28px; flex-wrap: wrap; }
+.lx-cell { display: grid; gap: 6px; align-content: start; }
+.lx-cell.grow { flex: 1; min-width: 220px; }
+.lx-cell > b, .lx-cell > .row > b { font-size: .82em; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); font-weight: 650; }
+.lx-shelfrow { display: flex; flex-wrap: wrap; gap: 6px; }
+.lx-shelfrow .chip { height: 28px; }
+.lx-on { padding-right: 4px; }
+.lx-x { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; opacity: .7; transition: opacity var(--t-fast), transform var(--t) var(--ease); }
+.lx-x:hover { opacity: 1; transform: scale(1.12); }
+.lx-x .ic { width: 12px; height: 12px; stroke-width: 2.6; }
+.lx-add .ic { width: 14px; height: 14px; }
+.lx-note { width: 100%; min-height: 64px; max-height: 260px; resize: vertical; padding: 10px 12px; border-radius: calc(var(--radius) * .6); line-height: 1.45;
+  background: rgba(0,0,0,.18); border: var(--edge-w) solid var(--edge); outline: none; user-select: text; transition: border-color var(--t-fast); }
+.lx-note:focus { border-color: var(--accent); }
+.lx-note::placeholder { color: var(--muted); }
+.lx-saved { font-size: .8em; }
+html.light .lx-note { background: rgba(255,255,255,.5); }
+
+/* ---------- pop-overs (shelf picker and shelf manager) ---------- */
+.lx-pop { min-width: 270px; max-width: 340px; }
+.lx-plist { display: grid; gap: 2px; max-height: 300px; overflow-y: auto; }
+.lx-tick .lx-box { width: 18px; height: 18px; border-radius: 6px; border: 2px solid var(--edge); display: grid; place-items: center; flex: none; }
+.lx-tick.on .lx-box { background: var(--accent-solid); border-color: transparent; color: var(--on-accent); }
+.lx-tick .lx-box .ic { width: 12px; height: 12px; color: inherit; stroke-width: 3; }
+.lx-tick span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lx-newrow { display: flex; gap: 6px; padding: 4px; align-items: center; }
+.lx-in { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border-radius: 10px; background: rgba(0,0,0,.2); border: var(--edge-w) solid var(--edge); outline: none; user-select: text; }
+.lx-in:focus { border-color: var(--accent); }
+html.light .lx-in { background: rgba(255,255,255,.6); }
+.lx-pnote { margin: 6px 10px; font-size: .86em; }
+.lx-srow { display: flex; align-items: center; gap: 4px; }
+.lx-srow .mi { flex: 1; min-width: 0; }
+.lx-srow .mi span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lx-srow .btn.small { height: 28px; padding: 0 9px; font-size: .8em; }
+.lx-srow .btn.small.icon { width: 28px; padding: 0; }
+.lx-del:hover { color: #ff5c78; }
+
+/* ---------- Library chips ---------- */
+.lx-sep { width: 1px; height: 20px; background: var(--edge); margin: 0 2px; }
+.chip .lx-st { width: 14px; height: 14px; fill: currentColor; stroke: none; }
+.lx-manage .ic { width: 15px; height: 15px; }
+.card .lx-rb { position: absolute; top: 40px; right: 8px; display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 99px; font-size: .72em; font-weight: 700;
+  background: var(--card); border: 1px solid rgba(255,255,255,.12); color: #ffc94d; }
+.card .lx-rb .ic { width: 12px; height: 12px; fill: currentColor; stroke: none; }
+
+/* ---------- merged search ---------- */
+.lx-sstat { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 16px; }
+.lx-schip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 99px; font-size: .8em; background: var(--glass); border: var(--edge-w) solid var(--edge); transition: opacity var(--t); }
+.lx-schip .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.lx-schip small { color: var(--muted); font-weight: 700; }
+.lx-schip.wait { opacity: .55; }
+.lx-schip.wait small { animation: lx-blink calc(1.2s / var(--spd)) ease-in-out 6; }   /* a few blinks, never forever */
+.lx-schip.none { opacity: .5; }
+.lx-schip.bad small { color: #ff6b81; }
+@keyframes lx-blink { 50% { opacity: .2; } }
+html.lite .lx-schip.wait small, html.nogpu .lx-schip.wait small { animation: none; }
+.card .lx-chips { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; flex-wrap: nowrap; gap: 4px; z-index: 2; overflow: hidden; pointer-events: none; }
+.card .lx-chips > * { pointer-events: auto; flex: none; }
+.lx-c { font-size: .7em; font-weight: 700; letter-spacing: .03em; padding: 3px 7px; border-radius: 99px; background: var(--card); border: 1px solid rgba(255,255,255,.12);
+  line-height: 1.2; white-space: nowrap; transition: transform var(--t) var(--ease), border-color var(--t-fast); }
+button.lx-c:hover { border-color: currentColor; }
+button.lx-c:active { transform: scale(.94); }
+.lx-c.best { border-color: currentColor; }
+.lx-c.more { color: var(--text); }
+html.plain .lx-c, html.plain .card .lx-rb { background: var(--p-surface2); }
+
+/* ---------- find on another source ---------- */
+.lx-sheetwrap { position: fixed; inset: 0; z-index: 350; display: grid; place-items: center; padding: 40px 16px 16px; background: rgba(0,0,0,.55); animation: lx-fade var(--t) ease both; }
+.lx-sheetwrap.out { animation: lx-fadeout var(--t-fast) ease-in both; }
+.lx-sheet { width: min(760px, 100%); max-height: min(86vh, 900px); display: flex; flex-direction: column; border-radius: var(--radius); overflow: hidden;
+  background: color-mix(in srgb, var(--bg) 88%, var(--text) 8%); border: 1px solid var(--edge); box-shadow: 0 30px 80px -20px rgba(0,0,0,.7);
+  animation: lx-rise var(--t) var(--ease-move) both; }
+.lx-sheetwrap.out .lx-sheet { animation: lx-sink var(--t-fast) ease-in both; }
+@keyframes lx-fade { from { opacity: 0; } } @keyframes lx-fadeout { to { opacity: 0; } }
+@keyframes lx-rise { from { opacity: 0; transform: translateY(24px) scale(.98); } } @keyframes lx-sink { to { opacity: 0; transform: translateY(12px); } }
+html[data-transition=none] .lx-sheetwrap, html[data-transition=none] .lx-sheet { animation: none; }
+/* light mode: no full-window fade and no big shadow to repaint while the sheet slides in */
+html.lite .lx-sheetwrap, html.nogpu .lx-sheetwrap { animation: none; }
+html.lite .lx-sheet { box-shadow: none; }
+html.plain .lx-sheet { background: var(--p-surface); box-shadow: none; }
+.lx-shead { display: flex; align-items: flex-start; gap: 12px; padding: 16px 18px 10px; }
+.lx-shead > div { flex: 1; min-width: 0; }
+.lx-shead h2 { margin: 0 0 2px; font-size: 1.2em; font-family: var(--title-font); }
+.lx-sbody { padding: 4px 18px 18px; overflow-y: auto; overscroll-behavior: contain; }
+.lx-fsearch { margin-bottom: 12px; }
+.lx-fsearch input { flex: 1; min-width: 0; background: none; border: 0; outline: none; user-select: text; }
+.lx-hits { gap: 6px; }
+.lx-hit { gap: 12px; padding: 8px 10px; }
+.lx-hit .lx-th { width: 46px; height: 64px; border-radius: 8px; overflow: hidden; background: var(--glass); flex: none; }
+.lx-hit .lx-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lx-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 3px; }
+.lx-meta small { color: var(--muted); font-size: .8em; }
+.lx-maybe { font-size: .72em; color: var(--muted); border: 1px dashed var(--edge); border-radius: 99px; padding: 1px 7px; }
+.lx-more { margin-top: 12px; }
+.lx-fail .empty { padding-bottom: 20px; }
+.lx-fail .lx-finder { max-width: 900px; }
+.lx-findb .ic { width: 18px; height: 18px; }
+
+/* ---------- .cbz links ---------- */
+a.lx-cbz { text-decoration: none; color: inherit; }
+.chlist .lx-cbz.icon { opacity: .7; }
+.chlist .item:hover .lx-cbz.icon { opacity: 1; }
+
+/* phones and narrow windows */
+@media (max-width: 640px) {
+  .lx-hit { flex-wrap: wrap; }
+  .lx-hit .n { flex-basis: calc(100% - 70px); }
+  .lx-sheetwrap { padding: 12px 8px; }
+}

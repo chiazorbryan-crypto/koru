@@ -52,7 +52,7 @@
   const day = d => K.dayKey(d);
   const readDay = (days, d) => (days[day(d)]?.ms || 0) >= 60000 || (days[day(d)]?.ch || 0) > 0;
   function streak() {
-    const days = K.data.stats?.days || {};
+    const days = (K.statsAll?.() || K.data.stats)?.days || {};   // with GitHub sync: both PCs
     const d = new Date(); d.setHours(12, 0, 0, 0);
     const today = readDay(days, d);
     if (!today) d.setDate(d.getDate() - 1);
@@ -96,7 +96,7 @@
     { id: 'finisher', e: '🎉', name: 'The end', desc: 'Finish the last chapter of a completed series', v: c => c.done, goal: 1 }
   ];
   function counts() {
-    const st = K.data.stats || {}, days = st.days || {}, marks = st.marks || {};
+    const st = (K.statsAll?.() || K.data.stats) || {}, days = st.days || {}, marks = st.marks || {};
     let ch = 0, dayCh = 0, dayMs = 0;
     for (const d of Object.values(days)) { ch += d.ch || 0; dayCh = Math.max(dayCh, d.ch || 0); dayMs = Math.max(dayMs, d.ms || 0); }
     const sources = new Set(Object.values(st.series || {}).filter(x => (x.ms || 0) >= 60000 || x.ch).map(x => x.provider)).size;
@@ -107,8 +107,8 @@
   function checkBadges(celebrate) {
     if (K.incognito?.()) return;
     const st = K.data.stats; if (!st) return;
-    const got = st.badges ||= {}, c = counts(), fresh = [];
-    for (const b of BADGES) if (!got[b.id] && b.v(c) >= b.goal) { got[b.id] = Date.now(); fresh.push(b); }
+    const own = st.badges ||= {}, got = (K.statsAll?.() || K.data.stats).badges || own, c = counts(), fresh = [];   // a badge your other PC earned isn't celebrated again
+    for (const b of BADGES) if (!got[b.id] && b.v(c) >= b.goal) { own[b.id] = Date.now(); fresh.push(b); }
     if (!fresh.length) return;
     K.save('stats');
     if (celebrate) fresh.forEach(b => queue(b));
@@ -136,7 +136,7 @@
     setTimeout(() => { c.classList.add('out'); setTimeout(() => c.remove(), 450); }, 3000);
   }
   function badgesCard() {
-    const got = K.data.stats?.badges || {}, c = counts();
+    const got = (K.statsAll?.() || K.data.stats)?.badges || {}, c = counts();
     const n = BADGES.filter(b => got[b.id]).length;
     return el('div.chartcard.glass',
       el('div.badgehead', el('b', { text: 'Badges' }), el('small.muted', { text: `${n} of ${BADGES.length}` })),

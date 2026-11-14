@@ -1,6 +1,6 @@
 {
   "name": "koru",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Koru — a personal manga and manhwa reader",
   "type": "module",
   "main": "electron/main.js",

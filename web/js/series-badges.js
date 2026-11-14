@@ -160,7 +160,7 @@
   // called after you finish a chapter (from lively.js); returns 'new', 'gold' or nothing
   function check(s) {
     if (!s?.provider || !s.slug || K.incognito?.()) return null;
-    const key = K.key(s.provider, s.slug), all = (K.data.stats.sb ||= {}), have = all[key];
+    const key = K.key(s.provider, s.slug), all = (K.data.stats.sb ||= {}), have = (K.statsAll?.() || K.data.stats).sb?.[key] || all[key];
     const chs = s.chapters || [], free = chs.filter(c => !c.locked), n = readCount(key);
     const newest = free[0], caught = newest && s.chapter && newest.slug === s.chapter.slug;
     const done = caught && /complete|finish|ended/i.test(s.series?.status || '');
@@ -172,7 +172,7 @@
   }
   // the chip on a series page: the badge, and how close you are
   function chip(series, key, chapters) {
-    const have = K.data.stats?.sb?.[key], th = have || theme(series);
+    const have = (K.statsAll?.() || K.data.stats)?.sb?.[key], th = have || theme(series);
     const total = (chapters || []).filter(c => !c.locked).length, n = readCount(key), goal = need(total);
     const label = have ? (have.lvl > 1 ? ' · gold' : ' · unlocked') : ` · ${Math.min(n, goal)}/${goal} chapters`;
     return el('div.sbchip' + (have ? '.got' : '') + (have?.lvl > 1 ? '.gold' : ''), { title: th.desc + (have ? '' : '. Read ' + goal + ' chapters to unlock it.') },
@@ -180,7 +180,7 @@
       have ? null : el('i.sbp', el('i', { style: { transform: `scaleX(${Math.min(1, n / goal).toFixed(3)})` } })));
   }
   function card() {
-    const list = Object.values(K.data.stats?.sb || {}).sort((a, b) => (b.lvl - a.lvl) || (b.at - a.at));
+    const list = Object.values((K.statsAll?.() || K.data.stats)?.sb || {}).sort((a, b) => (b.lvl - a.lvl) || (b.at - a.at));
     return el('div.chartcard.glass',
       el('div.badgehead', el('b', { text: 'Series badges' }), el('small.muted', { text: list.length ? `${list.length} earned · ${list.filter(b => b.lvl > 1).length} gold` : 'one for every series you get into' })),
       list.length ? el('div.badges', ...list.map(b => el('a.badge.got' + (b.lvl > 1 ? '.gold' : ''), { href: `#/series/${b.provider}/${encodeURIComponent(b.slug)}`, title: b.desc },

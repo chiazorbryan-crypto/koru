@@ -46,7 +46,7 @@
 
   function crunch(kind) {
     const r = periodRange(kind);
-    const st = K.data.stats || {}, days = st.days || {}, meta = st.series || {};
+    const st = (K.statsAll?.() || K.data.stats) || {}, days = st.days || {}, meta = st.series || {};
     const from = K.dayKey(r.start), to = K.dayKey(r.end);
     const inRange = Object.entries(days).filter(([d]) => d >= from && d <= to);
     let total = 0, chapters = 0, daysRead = 0, busiest = null, hasHours = false;

@@ -3,12 +3,17 @@
 'use strict';
 (function () {
   const { el, icon } = K;
-  const DEFAULTS = { mode: 'strip', rtl: false, gap: 0, width: 760, autoNext: true, preload: 4, tapZones: true, ambient: true, ambStrength: 55, ambBlur: 90, ambMode: 'page', ambSat: 170, ambEase: 45, ambCalm: true, fps: false, zen: false, autoSpeed: 90, autoSecs: 8, autoStart: false, autoDl: 1, autoDlClean: true, countdown: true, clock: true };
+  const DEFAULTS = { mode: 'strip', rtl: false, gap: 0, width: 760, autoNext: true, preload: 4, tapZones: true, ambient: true, ambStrength: 55, ambBlur: 90, ambMode: 'page', ambSat: 170, ambEase: 45, ambCalm: true, fps: false, zen: false, autoSpeed: 90, autoSecs: 8, autoStart: false, autoDl: 1, autoDlClean: true, countdown: true, clock: true,
+    night: false, nightWarm: 50, nightDim: 80, nightAuto: false, nightFrom: 21, nightTo: 7, spread: 'auto', spreadCover: true };
   K.readerSettings = () => ({ ...DEFAULTS, ...(K.data.settings.reader || {}) });
   const setReader = patch => { K.data.settings.reader = { ...K.readerSettings(), ...patch }; K.save('settings'); };
 
   let box = null, state = null;
   let autoKeep = false;   // auto-scroll carries on into the next chapter while it's on
+  // Night filter switched by hand against the schedule: holds until the schedule itself changes (evening/morning)
+  let nightOverride = null;
+  // a small keyboard drawing for the shortcuts button (trusted constant)
+  const kbIcon = () => { const s = icon('dot'); s.innerHTML = '<rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M8 14h8"/>'; return s; };
 
   // Background worker that decodes pages and draws their slices (see slicer.js).
   let slicer = null, sliceSeq = 0;
@@ -251,6 +256,7 @@
     // The graphics card then only moves ready-made pieces while you scroll, instead of re-decoding giant
     // pictures (some pages are 900×16000) over and over, which is what lagged on big screens.
     const SLICE = 1536, OV = 2;
+    const dims = s.pages.map(p => (p.w && p.h ? [p.w, p.h] : null));   // page sizes once known (two-page view)
     const st = s.pages.map(() => '');   // '', 'loading', 'ready'
     const files = new Map();            // page -> downloaded file, kept for this chapter so scrolling back is instant
     const job = s.pages.map(() => '');  // current worker job per page
@@ -316,6 +322,7 @@
         wrap.style.minHeight = ''; wrap.style.aspectRatio = '';
         ambFrom(i, im, im.naturalWidth, im.naturalHeight);
         im.classList.add('ready'); st[i] = 'ready';
+        dims[i] = [im.naturalWidth, im.naturalHeight]; onDims(i);
       });
       im.addEventListener('error', () => { if (!im.getAttribute('src') || st[i] !== 'loading') return; st[i] = ''; failed(i); });
       const ph = el('div.ph', { text: String(i + 1) });
@@ -330,7 +337,8 @@
       const im = imgs[i];
       if (!im || st[i]) return;
       st[i] = 'loading';
-      if (opt.mode === 'strip') loadStrip(i); else im.src = im.dataset.src;
+      // page mode loads through Koru too (like the strip), so the ambient light can read the page's colours
+      if (opt.mode === 'strip') loadStrip(i); else im.src = im.dataset.src.startsWith('https://') ? K.viaKoru(im.dataset.src) : im.dataset.src;
     };
     // far-away pages are let go; their space stays so nothing jumps
     const unload = i => {
@@ -351,7 +359,8 @@
     const segOf = i => { for (let k = segs.length - 1; k >= 0; k--) if (i >= segs[k].start) return segs[k]; return segs[0]; };
     const nextAfter = ch => { const i = s.chapters.findIndex(c => c.slug === ch.slug); return i > 0 ? s.chapters.slice(0, i).reverse().find(c => !c.locked) : null; };
     const prevBefore = ch => { const i = s.chapters.findIndex(c => c.slug === ch.slug); return i >= 0 ? s.chapters.slice(i + 1).find(c => !c.locked) : null; };
-    s.local = () => { const g = segOf(s.page); return { chapter: g.chapter, page: s.page - g.start, total: g.count }; };
+    // two pages on screen: the left-most page number is saved, or the last page once the last pair shows
+    s.local = () => { const g = segOf(s.page), p = opt.mode === 'paged' && s.pageEnd === s.pages.length - 1 ? s.pageEnd : s.page; return { chapter: g.chapter, page: p - g.start, total: g.count }; };
     let appending = false, appendErr = null;
     const short = n => String(n || '').replace(/ — .*/, '');
     // the chapter you finished: read mark + Stats, once
@@ -459,7 +468,44 @@
     }
     drawer.append(dlist);
 
-    box.replaceChildren(amb, pagesBox, topBar(), bottom, drawer);
+    // Night filter: one plain layer over the pages (and the light around them) with a warm colour at some
+    // opacity. Warmth and dimming are folded into that one colour, so the graphics card just blends a flat
+    // colour: no filter on the pages, nothing redrawn as you scroll. It can switch on by itself in the evening.
+    const night = el('div.rnight', { 'aria-hidden': 'true' });
+    let nightT = 0, nightKey = '';
+    const nightSched = o => {
+      if (!o.nightAuto) return false;
+      const h = new Date().getHours(), a = Number(o.nightFrom) || 0, b = Number(o.nightTo) || 0;
+      return a === b ? false : a < b ? h >= a && h < b : h >= a || h < b;   // 21 → 7 runs past midnight
+    };
+    const nightOn = o => {
+      const sc = nightSched(o);
+      if (nightOverride && (nightOverride.sched !== sc || nightOverride.auto !== !!o.nightAuto)) nightOverride = null;
+      return nightOverride ? nightOverride.on : !!o.night || sc;
+    };
+    const paintNight = (o = K.readerSettings()) => {
+      const on = nightOn(o);
+      const w = Math.max(0, Math.min(100, o.nightWarm)) / 100 * 0.34, d = 1 - Math.max(30, Math.min(100, o.nightDim)) / 100;
+      const A = 1 - (1 - w) * (1 - d), f = A > 0 ? w * (1 - d) / A : 0;   // warm layer under a black layer = one layer of this colour
+      const bg = `rgb(${Math.round(255 * f)},${Math.round(138 * f)},${Math.round(36 * f)})`, op = on ? A.toFixed(3) : '0';
+      const key = bg + op;
+      if (key === nightKey) return on;
+      nightKey = key; night.style.background = bg; night.style.opacity = op;
+      box?.classList.toggle('night', on);
+      return on;
+    };
+    const nightTick = () => { nightT = setTimeout(() => { if (state !== s) return; paintNight(); nightTick(); }, 60000 - Date.now() % 60000 + 50); };
+    const toggleNight = () => {
+      const on = !nightOn(K.readerSettings());
+      setReader({ night: on }); nightOverride = null;
+      const o = K.readerSettings();
+      if (nightOn(o) !== on) nightOverride = { on, sched: nightSched(o), auto: !!o.nightAuto };
+      paintNight(o);
+      K.toast(on ? 'Night filter on · Shift+N to switch' : 'Night filter off');
+    };
+
+    box.replaceChildren(amb, pagesBox, night, topBar(), bottom, drawer);
+    paintNight(); nightTick();
     // Show the time: in the top bar, and in a small corner tag while the bars are hidden (scrolling, zen).
     // It changes once a minute, right on the minute.
     let clockT = 0;
@@ -512,9 +558,37 @@
       dlist.querySelector(`.item[data-slug="${CSS.escape(g.chapter.slug)}"]`)?.classList.add('read');
       history.replaceState(null, '', `#/read/${s.provider}/${encodeURIComponent(s.slug)}/${encodeURIComponent(g.chapter.slug)}`);
     }
-    function setPage(i, fromScroll) {
+    // Two-page view (page mode): pages are paired from the start of the chapter (the first page alone when
+    // "first page alone" is on); a wide page (already a spread) stands alone and the pairing starts again after
+    // it. Pages whose size isn't known yet count as tall until they load.
+    let winW = window.innerWidth, winH = window.innerHeight;
+    let starts = [], gOf = [], grouped = false;
+    const wideAt = i => !!dims[i] && dims[i][0] > dims[i][1];
+    const two = () => { if (opt.mode !== 'paged') return false; const v = K.readerSettings().spread; return v === 'on' || (v === 'auto' && winW > winH); };
+    const regroup = () => {
+      const n = s.pages.length, cover = K.readerSettings().spreadCover;
+      starts = []; gOf = new Array(n);
+      for (let i = 0; i < n;) {
+        const g = starts.push(i) - 1; gOf[i] = g;
+        if (i + 1 < n && !(cover && i === 0) && !wideAt(i) && !wideAt(i + 1)) { gOf[i + 1] = g; i += 2; } else i++;
+      }
+      grouped = true;
+    };
+    // first and last page shown when page i is on screen
+    const viewOf = i => {
+      if (!two()) return [i, i];
+      if (!grouped) regroup();
+      const g = gOf[i];
+      return [starts[g], (starts[g + 1] ?? s.pages.length) - 1];
+    };
+    const reView = () => { if (opt.mode !== 'paged' || state !== s) return; const [a, b] = viewOf(s.page); if (a !== s.page || b !== s.pageEnd) setPage(s.page, false, true); };
+    function onDims(i) { if (opt.mode === 'paged' && wideAt(i)) { grouped = false; reView(); } }
+    function setPage(i, fromScroll, keepZoom) {
       i = Math.max(0, Math.min(s.pages.length - 1, i));
-      s.page = i;
+      let e = i;
+      if (opt.mode === 'paged') [i, e] = viewOf(i);
+      const turned = i !== s.page;
+      s.page = i; s.pageEnd = e;
       const g = segOf(i);
       if (g.chapter !== s.chapter) switchTo(g);
       const li = i - g.start;
@@ -522,14 +596,18 @@
       slider.max = g.count;
       slider.value = li + 1;
       slider.style.setProperty('--p', (g.count > 1 ? (li / (g.count - 1)) * 100 : 100) + '%');
-      pc.textContent = `${li + 1} / ${g.count}`;
+      pc.textContent = e > i ? `${li + 1}–${li + 1 + e - i} / ${g.count}` : `${li + 1} / ${g.count}`;
       paintMark();
-      for (let k = i; k <= i + opt.preload; k++) load(k);
+      for (let k = i; k <= Math.max(e, i + opt.preload); k++) load(k);
       setAmb(i);
       if (i > 0) load(i - 1);
       if (opt.mode === 'paged') {
-        strip.querySelectorAll('.pg.cur').forEach(p => p.classList.remove('cur'));
-        pg(i)?.classList.add('cur');
+        if (turned && !keepZoom) zoomReset();
+        strip.querySelectorAll('.pg.cur').forEach(p => p.classList.remove('cur', 'sl', 'sr'));
+        strip.classList.toggle('two', e > i);
+        for (let k = i; k <= e; k++) pg(k)?.classList.add('cur');
+        // right to left: the first page of the pair is on the right
+        if (e > i) { pg(opt.rtl ? e : i)?.classList.add('sl'); pg(opt.rtl ? i : e)?.classList.add('sr'); }
       } else if (!fromScroll) {
         pg(i)?.scrollIntoView({ block: 'start' });
       }
@@ -604,6 +682,7 @@
       const guard = { gaps: [], last: 0, raf: 0, until: 0, testing: false, cleared: false };
       const judge = () => {
         const g = guard.gaps.sort((a, b) => a - b); guard.gaps = [];
+        if (K.perfChecking) return;   // Settings → Graphics → Check performance is measuring on purpose
         const bad = g.filter(x => x > 25).length / g.length > 0.2;   // a fifth of frames slower than 40 fps
         const o = K.readerSettings();
         if (guard.testing) {
@@ -706,7 +785,7 @@
       if (t > autoHold) {
         const o = K.readerSettings();
         if (isStrip) {
-          autoAcc += o.autoSpeed * dt / 1000;
+          autoAcc += o.autoSpeed * dt / 1000 / zm.z;   // zoomed in: the same speed on screen
           if (autoAcc >= 1) {
             const px = Math.floor(autoAcc); autoAcc -= px;
             const before = pagesBox.scrollTop;
@@ -718,7 +797,7 @@
           }
         } else if ((autoT += dt) >= o.autoSecs * 1000) {
           autoT = 0;
-          if (s.page >= s.pages.length - 1) { setAuto(false); step(1); return; }
+          if ((s.pageEnd ?? s.page) >= s.pages.length - 1) { setAuto(false); step(1); return; }
           step(1);
         }
       }
@@ -755,16 +834,158 @@
     slider.oninput = () => setPage(segOf(s.page).start + Number(slider.value) - 1);
     const step = d => {
       if (opt.mode === 'paged') {
-        const n = s.page + d;
-        if (n >= s.pages.length) { s.page = s.pages.length - 1; s.finished = true; saveProgress(); if (s.next && cdOn()) { box.append(end); setTimeout(startCountdown, 60); } else if (s.next && opt.autoNext) goChapter(s.next); else box.append(end); return; }
+        const [a, b] = viewOf(s.page);   // two pages on screen: turn past both
+        const n = d > 0 ? b + d : a + d;
+        if (n >= s.pages.length) { s.page = s.pageEnd = s.pages.length - 1; s.finished = true; saveProgress(); if (s.next && cdOn()) { box.append(end); setTimeout(startCountdown, 60); } else if (s.next && opt.autoNext) goChapter(s.next); else box.append(end); return; }
         setPage(n);
-      } else pagesBox.scrollBy({ top: d * pagesBox.clientHeight * 0.85, behavior: 'smooth' });
+      } else pagesBox.scrollBy({ top: d * pagesBox.clientHeight * 0.85 / zm.z, behavior: 'smooth' });   // zoomed: a screenful of what you see
     };
+    // Zoom: Ctrl + wheel, Ctrl + = / - / 0, double-click, and drag to look around while zoomed. The pages area
+    // is moved by one transform (scale + shift) set once per frame; sizes are read once per gesture, never per
+    // mouse move. In the long strip the wheel still scrolls while zoomed; dragging up and down scrolls too.
+    const zm = { z: 1, x: 0, y: 0, raf: 0, size: null, drag: null, eat: false, wc: false, settleT: 0, animT: 0, scrollTo: null, painted: '' };
+    const zSize = () => zm.size || (zm.size = { l: pagesBox.offsetLeft, t: pagesBox.offsetTop, w: pagesBox.offsetWidth || 1, h: pagesBox.offsetHeight || 1 });
+    const zClamp = () => {
+      const { w, h } = zSize();
+      zm.x = Math.min(0, Math.max(w * (1 - zm.z), zm.x)); zm.y = Math.min(0, Math.max(h * (1 - zm.z), zm.y));
+    };
+    const zPaint = () => {
+      zm.raf = 0;
+      if (state !== s) return;
+      if (zm.scrollTo != null) { pagesBox.scrollTop = zm.scrollTo; zm.scrollTo = null; }
+      const on = zm.z > 1;
+      const t = on ? `translate3d(${zm.x.toFixed(1)}px, ${zm.y.toFixed(1)}px, 0) scale(${zm.z.toFixed(4)})` : '';
+      if (t === zm.painted) return;
+      zm.painted = t; pagesBox.style.transform = t;
+      if (box.classList.contains('zoomed') !== on) box.classList.toggle('zoomed', on);
+    };
+    const zKick = () => { if (!zm.raf) zm.raf = requestAnimationFrame(zPaint); };
+    // while the size is changing the pages area is kept as one ready-made picture (will-change); once it
+    // settles that hint goes, so the pages are drawn sharp again at the new size
+    const zScaling = () => {
+      if (!zm.wc) { zm.wc = true; pagesBox.style.willChange = 'transform'; }
+      clearTimeout(zm.settleT);
+      zm.settleT = setTimeout(() => { zm.wc = false; pagesBox.style.willChange = ''; }, 320);
+    };
+    const lite = () => document.documentElement.classList.contains('lite');
+    function zoomAt(z, cx, cy, anim) {
+      const S = zSize();
+      z = Math.max(1, Math.min(4, z));
+      if (z < 1.02) z = 1;
+      if (z === zm.z) return;
+      const px = cx - S.l, py = cy - S.t;
+      zm.x = px - (px - zm.x) * z / zm.z; zm.y = py - (py - zm.y) * z / zm.z; zm.z = z;
+      if (z === 1) zm.x = zm.y = 0;
+      zClamp(); zScaling();
+      if (anim && !lite()) {
+        pagesBox.classList.add('zanim'); clearTimeout(zm.animT);
+        zm.animT = setTimeout(() => pagesBox.classList.remove('zanim'), 280);
+      }
+      zKick();
+    }
+    const zoomBy = f => { const S = zSize(); zoomAt(zm.z * f, S.l + S.w / 2, S.t + S.h / 2); };
+    function zoomReset() { if (zm.z === 1 && !zm.x && !zm.y) return; zm.z = 1; zm.x = zm.y = 0; zm.drag = null; box.classList.remove('panning'); zKick(); }
+    // The wheel listener stays passive so scrolling never waits for this page's code. Only while Ctrl is held
+    // a second, blocking listener is added, so Ctrl + wheel zooms instead of also scrolling the strip.
+    const wheelZoom = e => zoomAt(zm.z * Math.exp(-Math.max(-200, Math.min(200, e.deltaY)) * 0.0022), e.clientX, e.clientY);
+    const ctrlWheel = e => { if (e.cancelable) e.preventDefault(); wheelZoom(e); };
+    let ctrlHeld = false;
+    const ctrlOn = on => {
+      if (on === ctrlHeld) return;
+      ctrlHeld = on;
+      if (on) pagesBox.addEventListener('wheel', ctrlWheel, { passive: false }); else pagesBox.removeEventListener('wheel', ctrlWheel, { passive: false });
+    };
+    const ctrlKeys = e => ctrlOn(e.type === 'keydown' ? e.ctrlKey || e.key === 'Control' : e.ctrlKey && e.key !== 'Control');
+    const ctrlOff = () => ctrlOn(false);
+    document.addEventListener('keydown', ctrlKeys, true); document.addEventListener('keyup', ctrlKeys, true); window.addEventListener('blur', ctrlOff);
+    pagesBox.addEventListener('wheel', e => {
+      if (e.ctrlKey) { if (!ctrlHeld) wheelZoom(e); return; }   // e.g. a touchpad pinch, with no Ctrl key press first
+      ctrlOff();   // Ctrl was let go somewhere we didn't see
+      if (zm.z === 1) return;
+      if (opt.mode === 'paged') { zm.x -= e.shiftKey ? e.deltaY : e.deltaX; zm.y -= e.shiftKey ? 0 : e.deltaY; }   // page mode: the wheel looks around
+      else if (e.deltaX || e.shiftKey) zm.x -= e.deltaX || e.deltaY;                                                   // strip: up/down still scrolls
+      else return;
+      zClamp(); zKick();
+    }, { passive: true });
+    pagesBox.addEventListener('pointerdown', e => {
+      zm.eat = false;
+      if (zm.z === 1 || e.button !== 0 || e.target.closest('.endcard, button')) return;
+      e.preventDefault();   // no text selection or picture drag-out while looking around
+      zm.drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, tx: zm.x, ty: zm.y, st: opt.mode === 'strip' ? pagesBox.scrollTop : 0, moved: false };
+      try { pagesBox.setPointerCapture(e.pointerId); } catch {}
+    });
+    pagesBox.addEventListener('dragstart', e => { if (zm.z > 1) e.preventDefault(); });
+    pagesBox.addEventListener('pointermove', e => {
+      const d = zm.drag;
+      if (!d || e.pointerId !== d.id) return;
+      const dx = e.clientX - d.x0, dy = e.clientY - d.y0;
+      if (!d.moved) { if (Math.abs(dx) + Math.abs(dy) < 6) return; d.moved = true; box.classList.add('panning'); }
+      zm.x = d.tx + dx;
+      if (opt.mode === 'strip') zm.scrollTo = Math.max(0, d.st - dy / zm.z); else zm.y = d.ty + dy;
+      zClamp(); zKick();
+    });
+    const zUp = e => {
+      const d = zm.drag;
+      if (!d || e.pointerId !== d.id) return;
+      zm.drag = null; zm.eat = d.moved; box.classList.remove('panning');
+    };
+    pagesBox.addEventListener('pointerup', zUp); pagesBox.addEventListener('pointercancel', zUp);
+    pagesBox.addEventListener('dblclick', e => {
+      if (e.target.closest('.endcard, .ph, button')) return;
+      if (zm.z > 1) { zoomAt(1, e.clientX, e.clientY, true); return; }
+      const x = e.clientX / window.innerWidth;
+      if (opt.tapZones && (x < 0.3 || x > 0.7)) return;   // clicks there turn pages
+      zoomAt(2.5, e.clientX, e.clientY, true);
+    });
+
+    // Keyboard shortcuts: ? shows them all
+    let keysBox = null;
+    const closeKeys = () => { if (!keysBox) return; const k = keysBox; keysBox = null; k.classList.add('out'); setTimeout(() => k.remove(), lite() ? 0 : 160); };
+    const showKeys = () => {
+      if (keysBox) { closeKeys(); return; }
+      box.querySelector('.rset')?.remove();
+      const paged = opt.mode === 'paged', flip = paged && opt.rtl;
+      const fwd = paged ? 'Next page' : 'Scroll down', back = paged ? 'Previous page' : 'Scroll up';
+      // keys: ['A', 'B'] = A or B; combo('Ctrl', '0') = Ctrl + 0
+      const row = (keys, what) => el('div.rk', el('span.rkk', ...keys.map((k, n) => [n && k !== '+' && keys[n - 1] !== '+' ? el('i', { text: 'or' }) : null, k === '+' ? el('i', { text: '+' }) : el('kbd', { text: k })])), el('span.rkw', { text: what }));
+      const combo = (...keys) => keys.flatMap((k, n) => (n ? ['+', k] : [k]));
+      const sec = (title, ...rows) => el('div.rks', el('small', { text: title }), ...rows);
+      keysBox = el('div.rkeys', { onclick: e => { if (e.target === keysBox) closeKeys(); } },
+        el('div.rkcard.glass', { role: 'dialog', 'aria-label': 'Keyboard shortcuts' },
+          el('div.rkhead', kbIcon(), el('b', { text: 'Keyboard shortcuts' }), el('button.btn.small.icon', { title: 'Close (Esc)', onclick: closeKeys }, icon('x'))),
+          el('div.rkgrid',
+            sec('Reading',
+              row(['→', 'D'], flip ? back : fwd),
+              row(['←', 'A'], flip ? fwd : back),
+              row(['Space', 'Page Down'], fwd),
+              row(combo('Shift', 'Space'), back),
+              paged ? null : row(['↑', '↓'], 'Scroll a little'),
+              row(['N'], 'Next chapter'),
+              row(['P'], 'Previous chapter'),
+              row(['Enter'], 'Up next countdown: open it now')),
+            sec('Modes',
+              row(['S'], 'Auto-scroll on, pause, play'),
+              row(['Z'], 'Zen mode (full screen)'),
+              row(combo('Shift', 'N'), 'Night filter on or off'),
+              row(['Esc'], 'Leave zen · close the chapter list · close the chapter'),
+              row(['?'], 'Show or hide this list')),
+            sec('Zoom',
+              row(combo('Ctrl', 'Wheel'), 'Zoom at the mouse'),
+              row(combo('Ctrl', '='), 'Zoom in'),
+              row(combo('Ctrl', '-'), 'Zoom out'),
+              row(combo('Ctrl', '0'), 'Back to normal size (Esc too)'),
+              row(['Double-click'], 'Zoom in there, or back out'),
+              row(['Drag'], paged ? 'Look around while zoomed (the wheel too)' : 'Look around while zoomed; the wheel still scrolls')))));
+      box.append(keysBox);
+    };
+
     pagesBox.addEventListener('click', e => {
+      if (zm.eat) { zm.eat = false; return; }   // the end of a drag while zoomed, not a click
       if (e.target.closest('.endcard, .ph')) return;
       const x = e.clientX / window.innerWidth;
-      if (opt.tapZones && x < 0.3) { step(opt.rtl && opt.mode === 'paged' ? 1 : -1); return; }
-      if (opt.tapZones && x > 0.7) { step(opt.rtl && opt.mode === 'paged' ? -1 : 1); return; }
+      if (zm.z > 1) { /* zoomed: the sides don't turn pages */ }
+      else if (opt.tapZones && x < 0.3) { step(opt.rtl && opt.mode === 'paged' ? 1 : -1); return; }
+      else if (opt.tapZones && x > 0.7) { step(opt.rtl && opt.mode === 'paged' ? -1 : 1); return; }
       if (box.classList.contains('zen')) return;
       box.classList.contains('hide-ui') ? showUi() : box.classList.add('hide-ui');
     });
@@ -775,7 +996,16 @@
     });
     const onKey = e => {
       if (!box || e.target.matches?.('input, select, textarea')) return;
-      if (e.key === 'z' || e.key === 'Z') K.toggleZen();
+      if (keysBox && (e.key === 'Escape' || e.key === '?')) { e.preventDefault(); closeKeys(); return; }
+      if (e.ctrlKey && !e.altKey && ['=', '+', '-', '_', '0'].includes(e.key)) {
+        e.preventDefault();
+        if (e.key === '0') zoomAt(1, 0, 0, true); else zoomBy(e.key === '=' || e.key === '+' ? 1.25 : 0.8);
+        return;
+      }
+      if (e.key === '?') { e.preventDefault(); showKeys(); }
+      else if ((e.key === 'N' || e.key === 'n') && e.shiftKey) toggleNight();
+      else if (e.key === 'Escape' && zm.z > 1) zoomAt(1, 0, 0, true);
+      else if (e.key === 'z' || e.key === 'Z') K.toggleZen();
       else if (e.key === 's' || e.key === 'S') K.toggleAuto();
       else if (e.key === 'Escape' && box.classList.contains('zen')) K.toggleZen();
       else if (e.key === 'Escape') { if (drawer.classList.contains('open')) drawer.classList.remove('open'); else K.closeReader(); }
@@ -787,8 +1017,17 @@
       else return;
     };
     document.addEventListener('keydown', onKey);
+    // window size: the two-page view (wider than tall) and the zoom's cached sizes follow it
+    const onResize = () => {
+      winW = window.innerWidth; winH = window.innerHeight; zm.size = null;
+      if (zm.z > 1) { zm.z = 1; zm.x = zm.y = 0; zKick(); }
+      reView();
+    };
+    window.addEventListener('resize', onResize);
     const oldCleanup = s.cleanup;
-    s.cleanup = () => { oldCleanup?.(); ofsWatch.disconnect(); cancelAnimationFrame(ambRaf); ambRaf = 0; ambCache.clear(); document.removeEventListener('keydown', onKey); clearTimeout(hideT); clearTimeout(idleT); cancelAnimationFrame(fpsRaf); cancelAnimationFrame(autoRaf); clearInterval(statT); clearTimeout(clockT); window.removeEventListener('resize', placePop); document.removeEventListener('keydown', act); };
+    s.cleanup = () => { oldCleanup?.(); ofsWatch.disconnect(); cancelAnimationFrame(ambRaf); ambRaf = 0; ambCache.clear(); document.removeEventListener('keydown', onKey); clearTimeout(hideT); clearTimeout(idleT); cancelAnimationFrame(fpsRaf); cancelAnimationFrame(autoRaf); clearInterval(statT); clearTimeout(clockT); window.removeEventListener('resize', placePop); document.removeEventListener('keydown', act);
+      clearTimeout(nightT); cancelAnimationFrame(zm.raf); clearTimeout(zm.settleT); clearTimeout(zm.animT); window.removeEventListener('resize', onResize); keysBox?.remove(); keysBox = null;
+      ctrlOff(); document.removeEventListener('keydown', ctrlKeys, true); document.removeEventListener('keyup', ctrlKeys, true); window.removeEventListener('blur', ctrlOff); };
 
     // reader settings popover
     function toggleSettings() {
@@ -815,7 +1054,23 @@
         t.onclick = () => { const v = !K.readerSettings()[key]; t.classList.toggle('on', v); if (reload) re({ [key]: v }); else setReader({ [key]: v }); };
         return el('div.ctl', el('div.lab', label, sub ? el('small', { text: sub }) : null), t);
       };
+      // a toggle whose change shows at once (after the setting is saved)
+      const live = (n, fn) => { n.querySelector('.toggle').addEventListener('click', () => setTimeout(fn)); return n; };
+      const nightRange = (label, key, min, max, stepv, unit) => {
+        const n = range(label, key, min, max, stepv, unit), r = n.querySelector('input');
+        r.addEventListener('input', () => paintNight({ ...K.readerSettings(), [key]: Number(r.value) }));
+        return n;
+      };
+      const hourName = h => new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: 'numeric' });
+      const hourSel = key => {
+        const sel = el('select.sel-in', { title: key === 'nightFrom' ? 'From' : 'To' }, ...Array.from({ length: 24 }, (_, h) => el('option', { value: String(h), text: hourName(h) })));
+        sel.value = String(o[key]);
+        sel.onchange = () => { setReader({ [key]: Number(sel.value) }); nightOverride = null; paintNight(); };
+        return sel;
+      };
       box.append(el('div.rset.glass',
+        el('div.ctl', el('div.lab', 'Keyboard shortcuts', el('small', { text: 'Every key the reader knows. Key: ?' })),
+          el('button.btn.small', { onclick: () => showKeys() }, kbIcon(), 'Show')),
         el('div.ctl', el('div.lab', { text: 'Layout' }), K.segmented([['strip', 'Strip', 'scroll'], ['paged', 'Pages', 'pages']], o.mode, v => re({ mode: v }))),
         range('Page width', 'width', 400, 1600, 20, 'px'),
         range('Gap between pages', 'gap', 0, 40, 1, 'px'),
@@ -832,6 +1087,14 @@
         ambRange('Ambient smoothness', 'ambEase', 0, 100, 1, '%'),
         (() => { const n = tog('Calm bright pages', 'ambCalm', 'White pages glow less'); n.querySelector('.toggle').addEventListener('click', () => setTimeout(() => applyAmb(K.readerSettings()))); return n; })(),
         tog('Right to left', 'rtl', 'For manga in page mode', true),
+        opt.mode === 'paged' ? el('div.ctl', el('div.lab', 'Two pages', el('small', { text: 'Side by side like a book. Auto: when the window is wider than tall' })),
+          K.segmented([['off', 'Off'], ['auto', 'Auto'], ['on', 'On']], o.spread, v => { setReader({ spread: v }); grouped = false; reView(); })) : null,
+        opt.mode === 'paged' ? live(tog('First page alone', 'spreadCover', 'The cover shows by itself, then pages pair up'), () => { grouped = false; reView(); }) : null,
+        live(tog('Night filter', 'night', 'Warmer, dimmer pages for reading in the dark. Key: Shift+N'), () => { nightOverride = null; paintNight(); }),
+        nightRange('Night warmth', 'nightWarm', 0, 100, 1, '%'),
+        nightRange('Night brightness', 'nightDim', 30, 100, 1, '%'),
+        live(tog('Turn on by itself at night', 'nightAuto', 'Between the hours below'), () => { nightOverride = null; paintNight(); }),
+        el('div.ctl', el('div.lab', { text: 'Night hours' }), hourSel('nightFrom'), el('span.muted', { text: 'to' }), hourSel('nightTo')),
         tog('Next-chapter countdown', 'countdown', 'At the end: the next chapter with 3, 2, 1. Click to stay', true),
         tog('Keep reading into the next chapter', 'autoNext', 'Long strip: the next chapter joins underneath. Pages: goes on after the last page', true),
         tog('Tap sides to turn', 'tapZones', ''),

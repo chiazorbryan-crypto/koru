@@ -187,7 +187,7 @@ app.whenReady().then(() => {
     if (url.pathname.startsWith('/k/')) {
       const body = request.method === 'GET' || request.method === 'HEAD' ? '' : await request.text();
       const r = await handle({ method: request.method, path: url.pathname, query: url.searchParams, body });
-      const headers = { 'Content-Type': r.type, 'Cache-Control': r.file || r.cache ? 'max-age=86400' : 'no-store' };
+      const headers = { 'Content-Type': r.type, 'Cache-Control': r.file || r.cache ? 'max-age=86400' : 'no-store', ...(r.headers || {}) };   // e.g. the .cbz file name
       if (r.file) return new Response(Readable.toWeb(fs.createReadStream(r.file)), { status: 200, headers });
       return new Response(r.body, { status: r.status, headers });
     }

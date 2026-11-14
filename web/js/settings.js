@@ -170,7 +170,15 @@
         toggle('Keep reading into the next chapter', ro.autoNext, v => setR({ autoNext: v }), 'Long strip: the next chapter joins underneath as you reach the end, like Kotatsu'),
         toggle('Tap sides to turn', ro.tapZones, v => setR({ tapZones: v })),
         toggle('Zen mode', ro.zen, v => setR({ zen: v }), 'Chapters open full screen with just the pages. Press Z while reading to switch'),
-        toggle('Show the time', ro.clock, v => setR({ clock: v }), 'A small clock while you read: in the top bar, and in the corner when the bars hide as you scroll or in zen mode'),
+        select('Two pages side by side', [['off', 'Off'], ['auto', 'Auto: when the window is wider than tall'], ['on', 'Always']], ro.spread, v => setR({ spread: v })),
+        toggle('First page alone', ro.spreadCover, v => setR({ spreadCover: v }), 'Two-page view: the cover shows by itself, then pages pair up. Wide pages always show alone'),
+        toggle('Night filter', ro.night, v => setR({ night: v }), 'Warmer, dimmer pages for reading in the dark. Press Shift+N while reading to switch'),
+        slider('Night warmth', ro.nightWarm, 0, 100, 1, '%', v => setR({ nightWarm: v }), 'How orange the night filter is'),
+        slider('Night brightness', ro.nightDim, 30, 100, 1, '%', v => setR({ nightDim: v }), 'Lower: darker pages'),
+        toggle('Turn the night filter on by itself', ro.nightAuto, v => setR({ nightAuto: v }), 'Between the hours below, every day'),
+        select('Night starts at', Array.from({ length: 24 }, (_, h) => [String(h), new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: 'numeric' })]), String(ro.nightFrom), v => setR({ nightFrom: Number(v) })),
+        select('Night ends at', Array.from({ length: 24 }, (_, h) => [String(h), new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: 'numeric' })]), String(ro.nightTo), v => setR({ nightTo: Number(v) })),
+        toggle('Show the time', ro.clock, v => setR({ clock: v }),'A small clock while you read: in the top bar, and in the corner when the bars hide as you scroll or in zen mode'),
         toggle('Show frame rate', ro.fps, v => setR({ fps: v }), 'A small meter while reading, to check for lag'),
         select('Download next chapters while reading', [['0', 'Off'], ['1', 'Next chapter'], ['2', 'Next 2 chapters'], ['3', 'Next 3 chapters']], String(ro.autoDl), v => setR({ autoDl: Number(v) })),
         toggle('Remove those after reading', ro.autoDlClean, v => setR({ autoDlClean: v }), 'Chapters Koru saved by itself are deleted once read. Ones you download yourself always stay')));
@@ -178,7 +186,29 @@
       if (K.info?.platform === 'desktop') {
         const stat = el('div.gpustat', el('span', { text: 'Checking your graphics card…' }));
         const body = el('div');
-        grid.append(panel('sparkle', 'Graphics', 'If reading lags on a PC, try these. Changes apply when Koru restarts.', stat, body));
+        // Check performance: scrolls your last chapter three ways and says what (if anything) slows this PC down
+        const perfOut = el('div.perfout');
+        const showPerf = r => {
+          if (!r) return;
+          perfOut.replaceChildren(
+            el('div.perfrows', ...r.runs.map(x => el('div.perfrow', el('span', { text: x.label }), el('b', { text: x.fps + ' fps' }), el('small.muted', { text: x.slow + '% slow frames · slowest ' + x.worst + ' ms' })))),
+            el('p', { style: { margin: '10px 0 0' }, text: r.tip.text }),
+            r.tip.action ? el('button.btn.small.primary', { style: { marginTop: '8px' }, onclick: e => { K.perfApply(r.tip.action); e.currentTarget.disabled = true; e.currentTarget.textContent = 'Done'; K.toast('Changed', 'ok'); } }, r.tip.label) : null,
+            el('small.muted', { style: { display: 'block', marginTop: '6px' }, text: 'Checked ' + K.ago(r.at || Date.now()) }));
+        };
+        try { showPerf(JSON.parse(localStorage.getItem('koru-perf') || 'null')); } catch {}
+        const perfBtn = el('button.btn.small.primary', { onclick: async () => {
+          perfBtn.disabled = true;
+          const tag = el('div.perfrun', { text: 'Checking… keep your hands off the mouse for 15 seconds' });
+          document.body.append(tag);
+          try {
+            const r = await K.perfCheck((i, n, label) => { tag.textContent = 'Checking ' + i + ' of ' + n + ': ' + label.toLowerCase() + '…'; });
+            if (r) { r.at = Date.now(); try { localStorage.setItem('koru-perf', JSON.stringify(r)); } catch {} K.toast(r.tip.text.split('.')[0], r.runs[0].fps >= 57 ? 'ok' : 'info'); }
+          } catch (e) { K.toast(e.message, 'error'); }
+          finally { tag.remove(); }
+        } }, icon('chart'), 'Check performance');
+        grid.append(panel('sparkle', 'Graphics', 'If reading lags on a PC, try these. Changes apply when Koru restarts.', stat, body,
+          el('div', { style: { marginTop: '14px' } }, el('div.row', { style: { alignItems: 'center', gap: '10px' } }, perfBtn, el('small.muted', { text: 'Scrolls your last chapter three ways, about 15 seconds, and tells you what to change' })), perfOut)));
         K.api.get('/k/gpu').then(g => {
           const soft = K.gpuSoftware(g);
           const real = g.devices.filter(d => !/Basic Render|software/i.test(d.name + d.vendor));
@@ -266,21 +296,46 @@
         toggle('Incognito', K.incognito(), v => { K.data.settings.incognito = v; K.save('settings'); K.paintInc?.(); }, 'Reading history, progress and read marks aren\'t saved. Also in the sidebar.')));
       if (K.info?.platform === 'desktop' && K.sync) {
         const sbox = el('div');
-        grid.append(panel('refresh', 'Sync between PCs', 'Keep favourites, likes, bookmarks, history and read marks the same on your PCs. Pick a folder both PCs can see, like a OneDrive, Google Drive or Dropbox folder, or a USB stick, and pick the same folder on the other PC.', sbox));
+        grid.append(panel('refresh', 'Sync between PCs', 'Keep favourites, likes, bookmarks, history, read marks, ratings, notes and shelves the same on your PCs. Use a folder both PCs can see (OneDrive, Google Drive, Dropbox, a USB stick), or your own private GitHub repo, which also syncs your stats, streaks and badges.', sbox));
+        const ghForm = (i) => {
+          const repo = el('input', { type: 'text', placeholder: 'yourname/koru-sync', value: i?.repo || '', spellcheck: false, autocomplete: 'off' });
+          const key = el('input', { type: 'password', placeholder: i?.hasKey ? 'Saved (leave empty to keep it)' : 'github_pat_…', spellcheck: false, autocomplete: 'off' });
+          const go = el('button.btn.small.primary', { onclick: async () => {
+            go.disabled = true; go.textContent = 'Connecting…';
+            try { await K.sync.github(repo.value, key.value); K.toast('GitHub sync is on', 'ok'); paintSync(); }
+            catch (e) { K.toast(e.message, 'error'); go.disabled = false; go.textContent = 'Connect'; }
+          } }, 'Connect');
+          return el('div.keybox',
+            el('b', { text: 'Sync with GitHub' }),
+            el('ol.muted', { style: { margin: '6px 0 8px 18px', padding: 0, fontSize: '.9em', lineHeight: 1.6 } },
+              el('li', 'Make a ', el('b', { text: 'private' }), ' repo, for example koru-sync (it can be empty).'),
+              el('li', 'Make a fine-grained key with access to only that repo, and Repository permissions → Contents: Read and write.'),
+              el('li', { text: 'Paste both here, then do the same on your other PC with the same repo (a key each, or the same key).' })),
+            el('div.row', { style: { gap: '8px', marginBottom: '8px' } },
+              el('button.btn.small', { onclick: () => K.api.post('/k/open-external', { url: 'https://github.com/new' }).catch(() => {}) }, icon('plus'), 'Make a repo on GitHub'),
+              el('button.btn.small', { onclick: () => K.api.post('/k/open-external', { url: 'https://github.com/settings/personal-access-tokens/new' }).catch(() => {}) }, icon('external'), 'Make a key on GitHub')),
+            el('div.ctl', el('div.lab', { text: 'Repo' }), repo),
+            el('div.ctl', el('div.lab', { text: 'Key' }), key),
+            el('div.row', { style: { marginTop: '8px' } }, go),
+            el('p.muted', { style: { fontSize: '.85em', margin: '8px 0 0' }, text: 'The key is kept encrypted by Windows on this PC and only sent to GitHub. Koru writes one small file per PC into koru-sync/ in that repo.' }));
+        };
         const paintSync = async () => {
-          const i = await K.sync.info();
-          if (!i?.dir) {
-            sbox.replaceChildren(el('div.row', el('button.btn.small.primary', { onclick: async () => { try { const r = await K.sync.pick(); if (r.dir) K.toast('Sync is on', 'ok'); } catch (e) { K.toast(e.message, 'error'); } paintSync(); } }, icon('folder'), 'Pick sync folder')));
+          const i = await K.sync.info(true);
+          if (!i?.mode) {
+            sbox.replaceChildren(
+              el('div.row', el('button.btn.small.primary', { onclick: async () => { try { const r = await K.sync.pick(); if (r.dir) K.toast('Sync is on', 'ok'); } catch (e) { K.toast(e.message, 'error'); } paintSync(); } }, icon('folder'), 'Pick sync folder')),
+              el('div', { style: { marginTop: '12px' } }, ghForm(i)));
             return;
           }
-          const last = K.sync.last();
+          const last = K.sync.last(), gh = i.mode === 'github';
           sbox.replaceChildren(
-            el('div.vsync', el('b', { text: i.reachable ? 'Syncing with ' + i.dir : 'Sync folder not reachable: ' + i.dir }),
-              el('span.muted', { text: (last ? 'Last synced ' + K.ago(last) : 'Not synced yet') + ' · ' + (i.others.length ? 'Other PCs: ' + i.others.map(o => o.name).join(', ') : 'No other PC has synced to this folder yet') })),
+            el('div.vsync', el('b', { text: gh ? 'Syncing with GitHub: ' + i.repo : i.reachable ? 'Syncing with ' + i.dir : 'Sync folder not reachable: ' + i.dir }),
+              el('span.muted', { text: (last ? 'Last synced ' + K.ago(last) : 'Not synced yet') + ' · ' + (i.others.length ? 'Other PCs: ' + i.others.map(o => o.name).join(', ') : gh ? 'No other PC has synced to this repo yet' : 'No other PC has synced to this folder yet') + (gh ? ' · stats, streaks and badges included' : '') })),
             el('div.row', { style: { marginTop: '8px' } },
               el('button.btn.small.primary', { onclick: async () => { try { const r = await K.sync.now(true); K.toast(r.changed?.length ? 'Synced: ' + r.changed.join(', ') + ' updated' : 'Synced, nothing new', 'ok'); } catch (e) { K.toast(e.message, 'error'); } paintSync(); } }, icon('refresh'), 'Sync now'),
-              el('button.btn.small', { onclick: async () => { await K.sync.pick(); paintSync(); } }, icon('folder'), 'Change folder'),
-              el('button.btn.small', { onclick: async () => { await K.sync.off(); K.toast('Sync is off'); paintSync(); } }, icon('x'), 'Turn off')));
+              gh ? null : el('button.btn.small', { onclick: async () => { await K.sync.pick(); paintSync(); } }, icon('folder'), 'Change folder'),
+              el('button.btn.small', { onclick: async () => { await K.sync.off(); K.toast('Sync is off'); paintSync(); } }, icon('x'), 'Turn off')),
+            gh ? null : el('details', { style: { marginTop: '10px' } }, el('summary.muted', { text: 'Use GitHub instead (also syncs stats, streaks and badges)' }), ghForm(null)));
         };
         paintSync();
       }
