@@ -128,7 +128,7 @@
     github: async (repo, key) => { const r = await K.api.post('/k/sync/github', { repo, key }); await refreshInfo(); ls.set(SNAP, null); await now(true); K.sync.start(); return r; },
     off: async () => { await K.api.post('/k/sync/off'); await refreshInfo(); },
     start: async () => {
-      if (K.info?.platform !== 'desktop') return;
+      if (!K.native()) return;
       await refreshInfo();
       if (!info?.mode || started) return;
       started = true;

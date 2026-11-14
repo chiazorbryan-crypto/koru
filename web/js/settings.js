@@ -183,6 +183,36 @@
         select('Download next chapters while reading', [['0', 'Off'], ['1', 'Next chapter'], ['2', 'Next 2 chapters'], ['3', 'Next 3 chapters']], String(ro.autoDl), v => setR({ autoDl: Number(v) })),
         toggle('Remove those after reading', ro.autoDlClean, v => setR({ autoDlClean: v }), 'Chapters Koru saved by itself are deleted once read. Ones you download yourself always stay')));
 
+      if (K.info?.platform === 'android') {
+        // a phone: no graphics card choices, just light mode, what the start-up check found, and the performance check
+        const c = (() => { try { return JSON.parse(localStorage.getItem('koru-android-check') || 'null'); } catch { return null; } })();
+        const perfOut = el('div.perfout');
+        const showPerf = r => {
+          if (!r) return;
+          perfOut.replaceChildren(
+            el('div.perfrows', ...r.runs.map(x => el('div.perfrow', el('span', { text: x.label }), el('b', { text: x.fps + ' fps' }), el('small.muted', { text: x.slow + '% slow frames · slowest ' + x.worst + ' ms' })))),
+            el('p', { style: { margin: '10px 0 0' }, text: r.tip.text.replace(/this PC/g, 'this phone').replace(/a busy PC/g, 'a busy phone') }),
+            r.tip.action ? el('button.btn.small.primary', { style: { marginTop: '8px' }, onclick: e => { K.perfApply(r.tip.action); e.currentTarget.disabled = true; e.currentTarget.textContent = 'Done'; K.toast('Changed', 'ok'); } }, r.tip.label) : null);
+        };
+        try { showPerf(JSON.parse(localStorage.getItem('koru-perf') || 'null')); } catch {}
+        const perfBtn = el('button.btn.small.primary', { onclick: async () => {
+          perfBtn.disabled = true;
+          const tag = el('div.perfrun', { text: 'Checking… don\'t touch the screen for 15 seconds' });
+          document.body.append(tag);
+          try {
+            const r = await K.perfCheck((i, n, label) => { tag.textContent = 'Checking ' + i + ' of ' + n + ': ' + label.toLowerCase() + '…'; });
+            if (r) { r.at = Date.now(); try { localStorage.setItem('koru-perf', JSON.stringify(r)); } catch {} showPerf(r); }
+          } catch (e) { K.toast(e.message, 'error'); }
+          finally { tag.remove(); perfBtn.disabled = false; }
+        } }, icon('chart'), 'Check performance');
+        grid.append(panel('sparkle', 'Graphics', 'Koru checks this phone when it starts and turns on light mode on slower phones, so reading stays smooth.',
+          c ? el('div.gpustat' + (c.weak ? '.bad' : ''), el('b', { text: c.weak ? 'Light mode suits this phone' : 'This phone runs every effect smoothly' }),
+            el('span', { text: `${c.cores || '?'} cores · ${c.memMb ? (c.memMb / 1024).toFixed(1) + ' GB memory' : 'memory unknown'} · ${c.noGpu ? 'drawing without the graphics chip' : 'graphics chip in use'}` })) : null,
+          select('Light mode', [['auto', 'Auto: on for slower phones'], ['on', 'On'], ['off', 'Off']], K.liteSetting(), v => { K.setLite(v); K.toast(v === 'off' ? 'Light mode off: every effect is back' : v === 'on' ? 'Light mode on' : 'Light mode set to auto'); }),
+          el('p.muted', { style: { fontSize: '.8em', margin: '-2px 0 6px' }, text: 'Light mode keeps your colours and features, and skips the glass blur and moving background that a slower phone would have to redraw on every frame. Ambient light stays on.' }),
+          el('div', { style: { marginTop: '14px' } }, el('div.row', { style: { alignItems: 'center', gap: '10px' } }, perfBtn, el('small.muted', { text: 'Scrolls your last chapter three ways, about 15 seconds, and tells you what to change' })), perfOut)));
+      }
+
       if (K.info?.platform === 'desktop') {
         const stat = el('div.gpustat', el('span', { text: 'Checking your graphics card…' }));
         const body = el('div');
@@ -294,9 +324,10 @@
 
       grid.append(panel('incognito', 'Privacy', '',
         toggle('Incognito', K.incognito(), v => { K.data.settings.incognito = v; K.save('settings'); K.paintInc?.(); }, 'Reading history, progress and read marks aren\'t saved. Also in the sidebar.')));
-      if (K.info?.platform === 'desktop' && K.sync) {
+      if (K.native() && K.sync) {
         const sbox = el('div');
-        grid.append(panel('refresh', 'Sync between PCs', 'Keep favourites, likes, bookmarks, history, read marks, ratings, notes and shelves the same on your PCs. Use a folder both PCs can see (OneDrive, Google Drive, Dropbox, a USB stick), or your own private GitHub repo, which also syncs your stats, streaks and badges.', sbox));
+        const droid = K.info?.platform === 'android';
+        grid.append(panel('refresh', droid ? 'Sync with your PC' : 'Sync between PCs', droid ? 'Keep favourites, likes, bookmarks, history, read marks, ratings, notes, shelves, stats, streaks and badges the same here and in Koru on your PC, through your own private GitHub repo.' : 'Keep favourites, likes, bookmarks, history, read marks, ratings, notes and shelves the same on your PCs. Use a folder both PCs can see (OneDrive, Google Drive, Dropbox, a USB stick), or your own private GitHub repo, which also syncs your stats, streaks and badges.', sbox));
         const ghForm = (i) => {
           const repo = el('input', { type: 'text', placeholder: 'yourname/koru-sync', value: i?.repo || '', spellcheck: false, autocomplete: 'off' });
           const key = el('input', { type: 'password', placeholder: i?.hasKey ? 'Saved (leave empty to keep it)' : 'github_pat_…', spellcheck: false, autocomplete: 'off' });
@@ -310,27 +341,27 @@
             el('ol.muted', { style: { margin: '6px 0 8px 18px', padding: 0, fontSize: '.9em', lineHeight: 1.6 } },
               el('li', 'Make a ', el('b', { text: 'private' }), ' repo, for example koru-sync (it can be empty).'),
               el('li', 'Make a fine-grained key with access to only that repo, and Repository permissions → Contents: Read and write.'),
-              el('li', { text: 'Paste both here, then do the same on your other PC with the same repo (a key each, or the same key).' })),
+              el('li', { text: droid ? 'Paste both here, and use the same repo in Koru on your PC (a key each, or the same key).' : 'Paste both here, then do the same on your other PC with the same repo (a key each, or the same key).' })),
             el('div.row', { style: { gap: '8px', marginBottom: '8px' } },
               el('button.btn.small', { onclick: () => K.api.post('/k/open-external', { url: 'https://github.com/new' }).catch(() => {}) }, icon('plus'), 'Make a repo on GitHub'),
               el('button.btn.small', { onclick: () => K.api.post('/k/open-external', { url: 'https://github.com/settings/personal-access-tokens/new' }).catch(() => {}) }, icon('external'), 'Make a key on GitHub')),
             el('div.ctl', el('div.lab', { text: 'Repo' }), repo),
             el('div.ctl', el('div.lab', { text: 'Key' }), key),
             el('div.row', { style: { marginTop: '8px' } }, go),
-            el('p.muted', { style: { fontSize: '.85em', margin: '8px 0 0' }, text: 'The key is kept encrypted by Windows on this PC and only sent to GitHub. Koru writes one small file per PC into koru-sync/ in that repo.' }));
+            el('p.muted', { style: { fontSize: '.85em', margin: '8px 0 0' }, text: droid ? 'The key is kept encrypted on this phone and only sent to GitHub. Koru writes one small file per device into koru-sync/ in that repo.' : 'The key is kept encrypted by Windows on this PC and only sent to GitHub. Koru writes one small file per PC into koru-sync/ in that repo.' }));
         };
         const paintSync = async () => {
           const i = await K.sync.info(true);
           if (!i?.mode) {
             sbox.replaceChildren(
-              el('div.row', el('button.btn.small.primary', { onclick: async () => { try { const r = await K.sync.pick(); if (r.dir) K.toast('Sync is on', 'ok'); } catch (e) { K.toast(e.message, 'error'); } paintSync(); } }, icon('folder'), 'Pick sync folder')),
-              el('div', { style: { marginTop: '12px' } }, ghForm(i)));
+              droid ? null : el('div.row', el('button.btn.small.primary', { onclick: async () => { try { const r = await K.sync.pick(); if (r.dir) K.toast('Sync is on', 'ok'); } catch (e) { K.toast(e.message, 'error'); } paintSync(); } }, icon('folder'), 'Pick sync folder')),
+              el('div', { style: { marginTop: droid ? 0 : '12px' } }, ghForm(i)));
             return;
           }
           const last = K.sync.last(), gh = i.mode === 'github';
           sbox.replaceChildren(
             el('div.vsync', el('b', { text: gh ? 'Syncing with GitHub: ' + i.repo : i.reachable ? 'Syncing with ' + i.dir : 'Sync folder not reachable: ' + i.dir }),
-              el('span.muted', { text: (last ? 'Last synced ' + K.ago(last) : 'Not synced yet') + ' · ' + (i.others.length ? 'Other PCs: ' + i.others.map(o => o.name).join(', ') : gh ? 'No other PC has synced to this repo yet' : 'No other PC has synced to this folder yet') + (gh ? ' · stats, streaks and badges included' : '') })),
+              el('span.muted', { text: (last ? 'Last synced ' + K.ago(last) : 'Not synced yet') + ' · ' + (i.others.length ? (droid ? 'Other devices: ' : 'Other PCs: ') + i.others.map(o => o.name).join(', ') : gh ? (droid ? 'No other device has synced to this repo yet' : 'No other PC has synced to this repo yet') : 'No other PC has synced to this folder yet') + (gh ? ' · stats, streaks and badges included' : '') })),
             el('div.row', { style: { marginTop: '8px' } },
               el('button.btn.small.primary', { onclick: async () => { try { const r = await K.sync.now(true); K.toast(r.changed?.length ? 'Synced: ' + r.changed.join(', ') + ' updated' : 'Synced, nothing new', 'ok'); } catch (e) { K.toast(e.message, 'error'); } paintSync(); } }, icon('refresh'), 'Sync now'),
               gh ? null : el('button.btn.small', { onclick: async () => { await K.sync.pick(); paintSync(); } }, icon('folder'), 'Change folder'),
@@ -341,7 +372,7 @@
       }
 
       grid.append(panel('folder', 'Library and data', 'Back up your library, likes, bookmarks, reading history and read marks.',
-        toggle('New chapter notifications', K.data.settings.notifyNew !== false, v => { K.data.settings.notifyNew = v; K.save('settings'); }, 'A Windows notification when favourites get new chapters while Koru is in the background'),
+        K.info?.platform === 'android' ? null : toggle('New chapter notifications', K.data.settings.notifyNew !== false, v => { K.data.settings.notifyNew = v; K.save('settings'); }, 'A Windows notification when favourites get new chapters while Koru is in the background'),
         el('div.row',
           el('button.btn.small', { onclick: () => {
             const blob = new Blob([JSON.stringify({ app: 'koru', at: new Date().toISOString(), library: K.data.library, liked: K.data.liked, bookmarks: K.data.bookmarks, flags: K.data.flags, history: K.data.history, read: K.data.read, stats: K.data.stats }, null, 1)], { type: 'application/json' });
@@ -353,7 +384,7 @@
 
       const upd = el('div.updbox');
       const paintUpd = async (force) => {
-        if (K.info?.platform !== 'desktop') { upd.replaceChildren(); return; }
+        if (!K.native()) { upd.replaceChildren(); return; }
         upd.replaceChildren(el('span.muted', { text: 'Checking for updates…' }));
         try {
           const u = await K.api.get('/k/app-update/check' + (force ? '?force=1' : ''));
@@ -375,7 +406,7 @@
           }
           if (!u.newer) { upd.replaceChildren(el('span.muted', { text: 'You have the newest Koru (' + u.current + ').' }), el('button.btn.small', { onclick: () => paintUpd(true) }, icon('refresh'), 'Check again')); return; }
           const go = el('button.btn.small.primary', { onclick: () => K.installUpdate(go) }, icon('download'), 'Update now');
-          upd.replaceChildren(el('div', el('b', { text: u.name + ' is out' }), el('div.muted', { style: { fontSize: '.82em' }, text: 'About ' + Math.round(u.size / 1048576) + ' MB. Koru restarts by itself; your library and settings stay.' })),
+          upd.replaceChildren(el('div', el('b', { text: u.name + ' is out' }), el('div.muted', { style: { fontSize: '.82em' }, text: 'About ' + Math.round(u.size / 1048576) + ' MB. ' + (K.info?.platform === 'android' ? 'Android asks you to confirm the install; your library and settings stay.' : 'Koru restarts by itself; your library and settings stay.') })),
             u.canInstall ? go : el('span.muted', { text: 'Install it from the Releases page.' }));
         } catch (e) { upd.replaceChildren(el('span.muted', { text: e.message }), el('button.btn.small', { onclick: () => paintUpd(true) }, icon('refresh'), 'Try again')); }
       };

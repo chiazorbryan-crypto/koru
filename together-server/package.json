@@ -1,0 +1,6 @@
+{
+  "name": "koru-together",
+  "private": true,
+  "description": "Koru Together server: crew chat (kept forever) and read-together, on Cloudflare Workers + one Durable Object per crew",
+  "scripts": { "dev": "wrangler dev --local --port 8799", "deploy": "wrangler deploy" }
+}

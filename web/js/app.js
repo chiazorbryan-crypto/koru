@@ -8,6 +8,7 @@
     ['search', 'Search', 'search'],
     ['downloads', 'Downloads', 'download'],
     ['stats', 'Stats', 'chart'],
+    ['chat', 'Chat', 'chat'],
     ['settings', 'Settings', 'settings']
   ];
 
@@ -174,7 +175,7 @@
 
   // ---------- app updates ----------
   K.checkAppUpdate = async function () {
-    if (K.info?.platform !== 'desktop') return;
+    if (!K.native()) return;
     try {
       const u = await K.api.get('/k/app-update/check');
       if (u.newer && u.canInstall && sessionStorage.getItem('koru-upd-told') !== u.latest) {
@@ -191,7 +192,7 @@
     const tick = async () => {
       const s = await K.api.get('/k/app-update/status').catch(() => ({}));
       if (s.state === 'downloading') { if (btn) btn.textContent = 'Downloading ' + Math.round(s.done / Math.max(1, s.total) * 100) + '%'; setTimeout(tick, 700); }
-      else if (s.state === 'installing') { if (btn) btn.textContent = 'Installing…'; K.toast('Installing. Koru closes and opens again by itself.', 'ok'); }
+      else if (s.state === 'installing') { if (btn) btn.textContent = 'Installing…'; K.toast(K.info?.platform === 'android' ? 'Downloaded. Tap Install when Android asks.' : 'Installing. Koru closes and opens again by itself.', 'ok'); }
       else if (s.state === 'failed') { K.toast(s.error || 'Update failed', 'error'); if (btn) { btn.disabled = false; btn.textContent = 'Try again'; } }
       else setTimeout(tick, 700);
     };

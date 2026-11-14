@@ -58,6 +58,21 @@ const ICONS = {
   select: '<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/>',
+  chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/>',
+  users: '<circle cx="9" cy="8" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14a5 5 0 0 1 5 5"/>',
+  send: '<path d="M4 12l16-8-6 16-2.5-6.5z"/><path d="M11.5 13.5L20 4"/>',
+  smile: '<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0"/><path d="M9 9.5h.01M15 9.5h.01"/>',
+  reply: '<path d="M10 7L5 12l5 5"/><path d="M5 12h9a5 5 0 0 1 5 5v1"/>',
+  forward: '<path d="M14 7l5 5-5 5"/><path d="M19 12h-9a5 5 0 0 0-5 5v1"/>',
+  pin: '<path d="M9 4h6l-1 6 3 3H7l3-3z"/><path d="M12 13v7"/>',
+  dots: '<circle cx="6" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18" cy="12" r="1.3"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>',
+  image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="M4 18l5-5 4 4 3-3 4 4"/>',
+  sticker: '<path d="M14 3H6a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h7l8-8V6a3 3 0 0 0-3-3z"/><path d="M13 21v-5a3 3 0 0 1 3-3h5"/><path d="M8.5 9h.01M13.5 9h.01M8.5 12.5a3.5 3.5 0 0 0 5 0"/>',
+  pencil: '<path d="M4 20l1-4 11-11 3 3-11 11z"/><path d="M14 7l3 3"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  unread: '<path d="M4 6h11M4 12h8M4 18h11"/><circle cx="18.5" cy="9" r="2.5"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
   scroll: '<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M10 7h4M10 11h4M10 15h4"/>',
   pages: '<rect x="3" y="5" width="8" height="14" rx="1.5"/><rect x="13" y="5" width="8" height="14" rx="1.5"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -187,6 +202,8 @@ K.applyLite = mode => {
 K.setLite = v => { K.data.settings.lite = v; K.save('settings'); K.applyLite(); };
 K.applyLite();
 K.gpuSoftware = g => !g.now?.accel ? false : !/^enabled/.test(g.status?.gpu_compositing || '') || !/^enabled/.test(g.status?.rasterization || '');
+// The desktop app and the Android app both have Koru's background side (downloads, sync, updates).
+K.native = () => K.info?.platform === 'desktop' || K.info?.platform === 'android';
 K.debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 // An image whose server wants the site's own Referer: Koru's backend fetches it (and adds that Referer).
 K.viaKoru = url => (typeof url === 'string' && /^https:\/\//.test(url) ? '/k/fetch?u=' + encodeURIComponent(url) + '&accept=' + encodeURIComponent('image/avif,image/webp,image/*;q=0.8') : url);

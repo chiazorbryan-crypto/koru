@@ -103,11 +103,28 @@
     if (my !== state) return;
     state.pages = pages;
     const hist = K.data.history[K.key(provider, slug)];
-    const askPage = Number(new URLSearchParams(location.hash.split('?')[1] || '').get('page'));
+    const ask = new URLSearchParams(location.hash.split('?')[1] || ''), askPage = Number(ask.get('page')), askOff = Number(ask.get('off')) || 0;
+    const asked = ask.has('page') && askPage >= 0 && askPage < pages.length && (askPage > 0 || askOff > 0);   // ?page=&off= (bookmarks, Koru Together)
     const resume = hist?.chapterSlug === chapterSlug && !hist.done && hist.page < pages.length && (hist.off > 0 || hist.page < pages.length - 1);
-    const startPage = askPage > 0 && askPage < pages.length ? askPage : resume ? hist.page : 0;
-    const startOff = !(askPage > 0) && resume ? Math.max(0, Math.min(0.999, hist.off || 0)) : 0;
+    const startPage = asked ? askPage : resume ? hist.page : 0;
+    const startOff = asked ? Math.max(0, Math.min(0.999, askOff)) : resume ? Math.max(0, Math.min(0.999, hist.off || 0)) : 0;
     build(offline, startPage, startOff);
+  };
+
+  // Koru Together: where you are in the reader, and going to where a friend is
+  K.readerPos = () => {
+    const s = state;
+    if (!s?.pages?.length || !s.local) return null;
+    const l = s.local();
+    return { provider: s.provider, slug: s.slug, title: s.series?.title || s.slug, cover: s.series?.cover || null,
+      chapterSlug: l.chapter.slug, chapterName: String(l.chapter.name || '').replace(/ — .*/, ''), page: l.page, total: l.total,
+      off: Math.round((s.where?.() || 0) * 1000) / 1000 };
+  };
+  K.readerGoto = p => {
+    if (!p?.provider || !K.providers[p.provider]) return false;
+    if (state && state.provider === p.provider && state.slug === p.slug && state.goto?.(p.chapterSlug, p.page, p.off)) return true;
+    K.go(`/read/${p.provider}/${encodeURIComponent(p.slug)}/${encodeURIComponent(p.chapterSlug)}?page=${p.page | 0}&off=${Number(p.off) || 0}`, !!state);
+    return true;
   };
 
   function goChapter(c) { K.go(`/read/${state.provider}/${encodeURIComponent(state.slug)}/${encodeURIComponent(c.slug)}`, true); }
@@ -137,6 +154,7 @@
       K.incognito() ? el('span.tag', { title: 'Nothing is saved while incognito' }, 'Incognito') : null,
       K.readerSettings().clock ? el('span.rclock.inbar', { title: 'The time (Settings → Reader → Show the time)' }) : null,
       s.pages?.length ? mark : null,
+      K.together?.readerButton?.() || null,
       el('button.btn.icon.autob', { title: 'Auto-scroll (S)', onclick: () => K.toggleAuto?.() }, icon('auto')),
       el('button.btn.icon', { title: 'Zen mode (Z)', onclick: () => K.toggleZen?.() }, icon('zen')),
       el('button.btn.icon', { title: 'Chapters', onclick: () => box.querySelector('.drawer')?.classList.toggle('open') }, icon('list')));
@@ -538,7 +556,7 @@
       box.classList.toggle('zen', on);
       if (on) { box.classList.add('hide-ui'); drawer.classList.remove('open'); box.querySelector('.rset')?.remove(); }
       else { box.classList.remove('idle'); showUi(); }
-      if (K.info?.platform === 'desktop') K.api.post('/k/fullscreen', { on }).catch(() => {});
+      if (K.native()) K.api.post('/k/fullscreen', { on }).catch(() => {});
       if (!quiet) K.toast(on ? 'Zen mode · press Z or Esc to leave' : 'Zen mode off');
     };
     K.toggleZen = () => { const on = !box.classList.contains('zen'); setReader({ zen: on }); setZen(on); };
@@ -619,7 +637,7 @@
     const autoDone = new Set();
     function autoDownload(ch) {
       const n = Math.max(0, Math.min(3, Number(K.readerSettings().autoDl) || 0));
-      if (!n || autoDone.has(ch.slug) || K.info?.platform !== 'desktop' || !s.series) return;
+      if (!n || autoDone.has(ch.slug) || !K.native() || !s.series) return;
       autoDone.add(ch.slug);
       const list = []; let c = ch;
       while (list.length < n && (c = nextAfter(c))) if (!K.dl.index.has(`${s.provider}:${s.slug}:${c.slug}`)) list.push(c);
@@ -645,6 +663,21 @@
       const p = pg(s.page);
       if (!p || !p.offsetHeight) return 0;
       return Math.max(0, Math.min(0.999, (pagesBox.scrollTop + pagesBox.clientHeight * 0.4 - p.offsetTop) / p.offsetHeight));
+    };
+    // Koru Together: go to a friend's spot when that chapter is already in this strip (false otherwise)
+    s.goto = (chapterSlug, page, off) => {
+      const g = segs.find(x => x.chapter.slug === chapterSlug);
+      if (!g) return false;
+      const i = g.start + Math.max(0, Math.min(g.count - 1, page | 0));
+      jump = null;
+      if (opt.mode === 'strip') {
+        const p = pg(i);
+        if (!p) return false;
+        load(i);
+        pagesBox.style.scrollBehavior = 'auto';
+        pagesBox.scrollTop = p.offsetTop + Math.max(0, Math.min(0.999, off || 0)) * p.offsetHeight - pagesBox.clientHeight * 0.4;
+      } else if (i !== s.page) setPage(i);
+      return true;
     };
 
     if (opt.mode === 'strip') {

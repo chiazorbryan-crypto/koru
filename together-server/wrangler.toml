@@ -1,0 +1,38 @@
+# Koru Together: chat and read-together for a small crew (you and a couple of friends).
+# Deploy from this folder: npx wrangler deploy   (its own Worker on the same Cloudflare account as ClipPilot;
+# it shares nothing with clippilot-api)
+name = "koru-together"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[vars]
+# The "Koru" OAuth app on GitHub (Device Flow on). Not secret; no client secret is used.
+GITHUB_CLIENT_ID = "Ov23liE7CuT5gdnzsMwr"
+
+# Hub (one): people, sessions, crews. Crew (one per crew): its chat, kept forever, and the live connections.
+# SQLite-backed, which is what the Workers free plan allows.
+[[durable_objects.bindings]]
+name = "CREW"
+class_name = "Crew"
+
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "Hub"
+
+# Media (one): uploaded pictures and GIFs (profile pictures, banners, chat pictures), 8 MB each at most.
+[[durable_objects.bindings]]
+name = "MEDIA"
+class_name = "Media"
+
+[[migrations]]
+tag = "v1-crew"
+new_sqlite_classes = ["Crew"]
+
+[[migrations]]
+tag = "v2-hub"
+new_sqlite_classes = ["Hub"]
+
+[[migrations]]
+tag = "v3-media"
+new_sqlite_classes = ["Media"]

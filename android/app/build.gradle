@@ -1,0 +1,46 @@
+plugins { id 'com.android.application' }
+
+// The version comes from the desktop app's package.json, so both always match.
+def pkg = new groovy.json.JsonSlurper().parse(file('../../package.json'))
+def (maj, min, pat) = pkg.version.tokenize('.').collect { it as int }
+
+android {
+    namespace 'app.koru.reader'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'app.koru.reader'
+        minSdk 26
+        targetSdk 35
+        versionName pkg.version
+        versionCode maj * 10000 + min * 100 + pat
+        // -PkoruInspect builds a copy whose page can be measured from a PC over USB (never published)
+        buildConfigField 'boolean', 'INSPECT', project.hasProperty('koruInspect') ? 'true' : 'false'
+    }
+    // The page is the same web/ folder the desktop app uses.
+    sourceSets { main { assets.srcDirs = ['../../web'] } }
+    signingConfigs {
+        release {
+            // the permanent Koru key lives outside the repo (%USERPROFILE%\.koru), or wherever KORU_KEYSTORE says
+            def home = new File(System.getProperty('user.home'), '.koru')
+            def ks = file(System.getenv('KORU_KEYSTORE') ?: new File(home, 'koru-release.jks').path)
+            def passFile = new File(home, 'keystore-pass.txt')
+            def pass = System.getenv('KORU_KEYSTORE_PASS') ?: (passFile.exists() ? passFile.text.trim() : '')
+            if (ks.exists()) {
+                storeFile ks
+                storePassword pass
+                keyAlias 'koru'
+                keyPassword pass
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release.storeFile ? signingConfigs.release : null
+        }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildFeatures { buildConfig true }
+}
+
+dependencies { implementation 'androidx.core:core:1.15.0' }
