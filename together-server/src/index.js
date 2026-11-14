@@ -193,7 +193,24 @@ export default {
       if (m && req.method === 'DELETE') {
         const r = await H.removeMember(m[1], me.id, Number(m[2]));
         if (r.error) return err(r.status || 400, r.error);
-        await crewStub(env, m[1]).setMembers(r.members, Number(m[2]));
+        await crewStub(env, m[1]).setMembers(r.members, Number(m[2]), r.deleted ? { deleted: true } : { name: r.name, owner: r.owner });
+        return json(r);
+      }
+      // rename or delete a crew (its owner)
+      m = path.match(/^\/crews\/([a-z2-9]{8})$/);
+      if (m && req.method === 'POST') {
+        const b = await req.json().catch(() => ({}));
+        const name = clean(b.name, 40).trim();
+        if (!name) return err(400, 'Type a name.');
+        const r = await H.renameCrew(m[1], me.id, name);
+        if (r.error) return err(r.status || 400, r.error);
+        await crewStub(env, m[1]).setMembers(r.members, null, { name: r.name, owner: r.owner });
+        return json(r);
+      }
+      if (m && req.method === 'DELETE') {
+        const r = await H.deleteCrew(m[1], me.id);
+        if (r.error) return err(r.status || 400, r.error);
+        await crewStub(env, m[1]).setMembers([], null, { deleted: true });
         return json(r);
       }
       // forward a message into another of your crews
@@ -285,9 +302,30 @@ export class Hub extends DurableObject {
     const c = await this.crew(crew);
     if (!c) return { error: 'No such crew', status: 404 };
     if (actor !== c.owner && actor !== user) return { error: 'Only the person who made the crew can remove people.', status: 403 };
-    if (user === c.owner) return { error: 'The person who made the crew can\'t leave it.' };
+    if (user === c.owner && actor !== user) return { error: 'The crew\'s owner can only leave by themselves.' };
     this.sql.exec('DELETE FROM members WHERE crew = ? AND user = ?', crew, user);
+    // the owner left: the crew passes to whoever joined next, or goes away if nobody's left
+    if (user === c.owner) {
+      const next = this.rows('SELECT user FROM members WHERE crew = ? ORDER BY added LIMIT 1', crew)[0];
+      if (!next) { this.sql.exec('DELETE FROM crews WHERE id = ?', crew); return { deleted: true, members: [] }; }
+      this.sql.exec('UPDATE crews SET owner = ? WHERE id = ?', next.user, crew);
+    }
     return this.crew(crew);
+  }
+  async renameCrew(crew, actor, name) {
+    const c = await this.crew(crew);
+    if (!c) return { error: 'No such crew', status: 404 };
+    if (c.owner !== actor) return { error: 'Only the crew\'s owner can rename it.', status: 403 };
+    this.sql.exec('UPDATE crews SET name = ? WHERE id = ?', name, crew);
+    return this.crew(crew);
+  }
+  async deleteCrew(crew, actor) {
+    const c = await this.crew(crew);
+    if (!c) return { error: 'No such crew', status: 404 };
+    if (c.owner !== actor) return { error: 'Only the crew\'s owner can delete it.', status: 403 };
+    this.sql.exec('DELETE FROM members WHERE crew = ?', crew);
+    this.sql.exec('DELETE FROM crews WHERE id = ?', crew);
+    return { deleted: true, members: [] };
   }
 }
 
@@ -356,9 +394,12 @@ export class Crew extends DurableObject {
     });
   }
   // someone was added, removed or changed their profile: update everyone, and close a removed person's connections
-  async setMembers(members, removed) {
+  async setMembers(members, removed, crew) {
     const c = this.crewInfo() || {};
-    this.setMeta('crew', JSON.stringify({ ...c, members }));
+    this.setMeta('crew', JSON.stringify({ ...c, ...(crew ? { name: crew.name, owner: crew.owner } : {}), members }));
+    if (crew) this.broadcast({ t: 'crew', name: crew.name, owner: crew.owner });
+    // the crew was deleted: everyone's connection closes
+    if (crew?.deleted) { for (const ws of this.ctx.getWebSockets()) { try { ws.send(JSON.stringify({ t: 'removed', deleted: true })); ws.close(4003, 'deleted'); } catch {} } return true; }
     for (const m of members) for (const ws of this.ctx.getWebSockets('u' + m.id)) { const a = ws.deserializeAttachment(); if (a && a.name !== m.name) ws.serializeAttachment({ ...a, name: m.name }); }
     if (removed) for (const ws of this.ctx.getWebSockets('u' + removed)) { try { ws.send(JSON.stringify({ t: 'removed' })); ws.close(4003, 'removed'); } catch {} }
     this.broadcast({ t: 'presence', members: this.members() });

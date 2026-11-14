@@ -56,7 +56,18 @@
     if (!signedIn()) return null;
     const j = await api('/me');
     setCfg({ user: j.user });
+    // a crew you weren't in before: someone added you
+    const had = T.crews ? new Set(T.crews.map(x => x.id)) : null;
+    const fresh = had ? j.crews.filter(x => !had.has(x.id)) : [];
     T.crews = j.crews; T.profile = j.profile;
+    for (const c of fresh) if (c.owner !== meId()) {
+      const by = c.members.find(x => x.id === c.owner)?.name || 'Someone';
+      K.toast(by + ' added you to ' + c.name + '. Open it in Chat.', 'ok');
+      K.setNavBadge?.('chat', true);
+      try { if ((document.hidden || !document.hasFocus()) && typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification('Koru', { body: by + ' added you to ' + c.name }).onclick = () => { window.focus?.(); setCfg({ crew: c.id }); K.go('/chat'); }; } catch {}
+    }
+    // added to a crew while you had none open: open it
+    if (fresh.length && !cfg().crew) setCfg({ crew: fresh[0].id });
     const c = j.crews.find(x => x.id === cfg().crew) || j.crews[0] || null;
     if ((c?.id || null) !== (cfg().crew || null)) { setCfg({ crew: c?.id || null }); T.msgs = []; ls.set(CACHE, []); ls.set(SEEN, 0); }
     T.crew = c;
@@ -122,8 +133,9 @@
   let queue = [];
   function sendOrQueue(o) { if (!send(o)) { queue.push(o); if (T.state === 'off') { tries = 0; connect(); } } }
   function flushQueue() { const q = queue; queue = []; for (const o of q) send(o); }
-  function removed() {
-    K.toast('You were removed from ' + (T.crew?.name || 'the crew') + '.', 'error');
+  function removed(deleted) {
+    if (T.leaving) { T.leaving = false; return; }
+    K.toast(deleted ? (T.crew?.name || 'The crew') + ' was deleted by its owner.' : 'You were removed from ' + (T.crew?.name || 'the crew') + '.', 'error');
     setCfg({ crew: null }); T.crew = null; T.msgs = []; ls.set(CACHE, []);
     if (T.follow) stopFollow(true);
     if (T.hosting) { T.hosting = false; clearInterval(posT); paintPill(); }
@@ -198,7 +210,15 @@
       paintReading(); paintPill();
     } else if (m.t === 'typing') {
       T.typing[m.user] = Date.now(); paintTyping(); setTimeout(paintTyping, 4200);
-    } else if (m.t === 'removed') removed();
+    } else if (m.t === 'removed') removed(m.deleted);
+    else if (m.t === 'crew') {
+      if (!m.name || !T.crew) return;
+      const ownerChanged = T.crew.owner !== m.owner;
+      T.crew.name = m.name; T.crew.owner = m.owner;
+      const c = (T.crews || []).find(x => x.id === T.crew.id); if (c) { c.name = m.name; c.owner = m.owner; }
+      if (ownerChanged && m.owner === meId()) K.toast('You own ' + m.name + ' now.', 'ok');
+      route();
+    }
   }
   let lastIdKnown = 0;
   function cache() { if (!T.detached) { lastIdKnown = Math.max(lastIdKnown, lastId()); ls.set(CACHE, T.msgs.filter(x => x.id).slice(-200)); } }
@@ -750,6 +770,8 @@
 
   K.views.chat = async function (root, r, alive) {
     if (signedIn() && !T.crews) { root.append(el('div.spinner', { style: { margin: '20vh auto' } })); try { await refresh(); } catch (e) { root.replaceChildren(K.errorBox(e)); return; } if (!alive()) return; root.replaceChildren(); }
+    else if (signedIn() && Date.now() - lastRefresh > 5000) { lastRefresh = Date.now(); refresh().then(j => { if (j && alive() && (j.crews.length !== (T.crewsShown ?? j.crews.length))) route(); }).catch(() => {}); }
+    T.crewsShown = T.crews?.length;
     if (!signedIn()) { root.append(el('div.head', el('div', el('h1', { text: 'Read together' }), el('div.sub', { text: 'Koru Together' })))); signInBox(root); return; }
     if (cfg().named === false) { nameBox(root, route); return; }
     if (!inCrew() || !T.crew || T.makeNew) { T.makeNew = false; root.append(el('div.head', el('div', el('h1', { text: 'Read together' })), el('div.sp'), el('button.btn.icon', { title: 'You', onclick: e => youMenu(e) }, icon('settings')))); crewBox(root); return; }
@@ -845,11 +867,33 @@
       el('hr'),
       item('pencil', 'Edit Profile', editProfile),
       item('users', 'View Profile', () => showProfile(meId(), ev.currentTarget || document.body)),
-      T.crew && !owner ? item('x', 'Leave Crew', async () => {
-        if (!confirm('Leave ' + T.crew.name + '? Someone in it can add you again.')) return;
-        try { await api(`/crews/${T.crew.id}/members/${meId()}`, { method: 'DELETE' }); } catch (e) { K.toast(e.message, 'error'); return; }
-        disconnect(); setCfg({ crew: null }); T.crew = null; T.msgs = []; ls.set(CACHE, []); refresh().finally(route);
+      T.crew && owner ? item('pencil', 'Rename Crew', () => {
+        const box = el('div.menu.glass.tg-ctx', el('small.muted', { text: 'Crew name' }));
+        const inp = el('input.txt', { type: 'text', value: T.crew.name, maxLength: 40 });
+        const save = async () => { const n = inp.value.trim(); if (!n) return; box.remove(); try { const c = await api(`/crews/${T.crew.id}`, { method: 'POST', body: { name: n } }); T.crew.name = c.name; K.toast('Renamed to ' + c.name, 'ok'); await refresh(); route(); } catch (e) { K.toast(e.message, 'error'); } };
+        inp.addEventListener('keydown', e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') box.remove(); });
+        box.append(el('div.tg-rename', inp, el('button.btn.small.primary', { onclick: save }, 'Save')));
+        const r = ev.currentTarget?.getBoundingClientRect?.() || { right: innerWidth - 20, bottom: 80 };
+        placeMenu(box, r.right - 260, r.bottom + 6); setTimeout(() => { inp.focus(); inp.select(); }, 30);
       }) : null,
+      T.crew ? item('x', 'Leave Crew', async () => {
+        const others = T.members.filter(x => x.id !== meId());
+        const msg = !owner ? 'Leave ' + T.crew.name + '? Someone in it can add you again.'
+          : others.length ? 'Leave ' + T.crew.name + '? ' + others[0].name + ' becomes its owner, and the chat stays with them.'
+          : 'Leave ' + T.crew.name + "? You're the only one in it, so the crew and its chat will be deleted.";
+        if (!confirm(msg)) return;
+        T.leaving = true;
+        try { await api(`/crews/${T.crew.id}/members/${meId()}`, { method: 'DELETE' }); } catch (e) { T.leaving = false; K.toast(e.message, 'error'); return; }
+        K.toast('You left ' + T.crew.name);
+        disconnect(); T.leaving = false; setCfg({ crew: null }); T.crew = null; T.crews = null; T.msgs = []; ls.set(CACHE, []); refresh().finally(route);
+      }) : null,
+      T.crew && owner ? item('trash', 'Delete Crew', async () => {
+        if (!confirm('Delete ' + T.crew.name + " for everyone? The chat is deleted too. This can't be undone.")) return;
+        T.leaving = true;
+        try { await api(`/crews/${T.crew.id}`, { method: 'DELETE' }); } catch (e) { T.leaving = false; K.toast(e.message, 'error'); return; }
+        K.toast(T.crew.name + ' deleted');
+        disconnect(); T.leaving = false; setCfg({ crew: null }); T.crew = null; T.crews = null; T.msgs = []; ls.set(CACHE, []); refresh().finally(route);
+      }, '.danger') : null,
       T.crew ? item('plus', 'Make Another Crew', () => { T.makeNew = true; route(); }) : null,
       el('hr'),
       item('back', 'Sign Out', async () => { try { await api('/auth/signout', { method: 'POST' }); } catch {} signOutLocal(); route(); }, '.danger'));
@@ -960,4 +1004,12 @@
 
   window.addEventListener('hashchange', () => { if (!(location.hash.slice(1) || '').startsWith('/chat')) T.view = null; });
   document.addEventListener('koru-ready', () => { if (signedIn()) setTimeout(() => refresh().catch(() => {}), 600); badge(); scheduleReminders(); });
+  // check for crews you've been added to: every minute while Koru is open (one small request)
+  let lastRefresh = 0;
+  setInterval(() => {
+    if (!signedIn() || document.hidden) return;
+    const before = T.crews?.length;
+    lastRefresh = Date.now();
+    refresh().then(j => { if (j && j.crews.length !== before && (location.hash.slice(1) || '').startsWith('/chat')) route(); }).catch(() => {});
+  }, 60000);
 })();
