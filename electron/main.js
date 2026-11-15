@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createBackend } from './backend.js';
 import { updateRoute } from './updater.js';
 import { syncRoute } from './sync.js';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import crypto from 'node:crypto';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -140,6 +140,36 @@ function themeShortcuts(img) {
 }
 app.on('second-instance', () => showWin());
 
+// Taskbar options: a tiny helper (build/koru-taskbar.exe, from native/koru-taskbar.cs) does the work and keeps
+// working without Koru. It's copied to Koru's data folder so updates never have to replace a file that's in use.
+const taskbar = (() => {
+  const fake = process.env.KORU_BG_TEST ? { autohide: false, hide: false, alpha: 255, running: false } : null;   // tests never touch the real taskbar
+  const src = () => app.isPackaged ? path.join(process.resourcesPath, 'koru-taskbar.exe') : path.join(here, '..', 'build', 'koru-taskbar.exe');
+  const dst = () => path.join(app.getPath('userData'), 'taskbar', 'koru-taskbar.exe');
+  const run = (exe, args) => new Promise((res, rej) => execFile(exe, args, { timeout: 15000, windowsHide: true }, (err, out, errOut) => err ? rej(new Error(String(errOut || err.message).trim())) : res(String(out).trim())));
+  const same = (a, b) => { try { return fs.statSync(a).size === fs.statSync(b).size && fs.readFileSync(a).equals(fs.readFileSync(b)); } catch { return false; } };
+  async function ready() {
+    const s = src(), d = dst();
+    if (same(s, d)) return d;
+    if (fs.existsSync(d)) await run(d, ['stop']).catch(() => {});
+    fs.mkdirSync(path.dirname(d), { recursive: true });
+    fs.copyFileSync(s, d);
+    return d;
+  }
+  return {
+    async state() { if (fake) return fake; const d = dst(); return JSON.parse(await run(fs.existsSync(d) ? d : src(), ['state'])); },
+    async set(hide, alpha) {
+      alpha = Math.max(40, Math.min(255, Math.round(alpha) || 255));
+      if (fake) { Object.assign(fake, { hide, alpha, running: hide || alpha < 255 }); return fake; }
+      if (!hide && alpha >= 255) { if (fs.existsSync(dst())) await run(dst(), ['disable']); }
+      else await run(await ready(), ['enable', hide ? '1' : '0', String(alpha)]);
+      return this.state();
+    },
+    // after a Koru update brings a newer helper: swap it in and keep it running with the same settings
+    async refresh() { if (fake) return; try { const st = await this.state(); if (st.running && !same(src(), dst())) await this.set(st.hide, st.alpha); } catch {} }
+  };
+})();
+
 // Closing the window keeps Koru running in the tray (so your crew sees you online and new chapters are still checked).
 // Quit from the tray icon's menu.
 let tray = null, quitting = false;
@@ -193,6 +223,12 @@ app.whenReady().then(() => {
       if (win) win.setFullScreen(on);
       return reply(200, { ok: true });
     }
+    if (url.pathname === '/k/taskbar') {
+      try {
+        if (request.method === 'GET') return reply(200, await taskbar.state());
+        if (request.method === 'POST') { const b = JSON.parse(await request.text() || '{}'); return reply(200, await taskbar.set(!!b.hide, Number(b.alpha))); }
+      } catch (e) { return reply(500, { error: "Couldn't change the taskbar: " + (e.message || e) }); }
+    }
     if (url.pathname === '/k/relaunch' && request.method === 'POST') {
       setTimeout(() => { app.relaunch(); app.exit(0); }, 200);
       return reply(200, { ok: true });
@@ -243,6 +279,7 @@ app.whenReady().then(() => {
     if (!fs.existsSync(told)) { try { fs.writeFileSync(told, '1'); tray.displayBalloon({ iconType: 'info', title: 'Koru is still running', content: 'It stays in the tray so your crew sees you online. Right-click the icon to quit.' }); } catch {} }
   });
   makeTray();
+  setTimeout(() => taskbar.refresh(), 8000);
   win.loadURL('koru://app/index.html');
 });
 

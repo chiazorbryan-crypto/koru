@@ -271,6 +271,25 @@
             toggle('Use the card even if it\'s blocked', saved.blocklist, v => put({ blocklist: v }), 'Some drivers are on Chromium\'s blocklist, which makes everything slow'),
             el('div.row', { style: { marginTop: '8px' } }, restart));
         }).catch(() => stat.replaceChildren(el('span', { text: 'Couldn\'t check the graphics card.' })));
+
+        // Windows taskbar: hides until you move the mouse to the bottom, and/or goes see-through.
+        // A tiny helper does it, so it keeps working when Koru is closed.
+        const tbBox = el('div', el('small.muted', { text: 'Checking the taskbar…' }));
+        grid.append(panel('eye', 'Taskbar', 'Hide the Windows taskbar until you move the mouse to the bottom of the screen, and make it see-through. Works even when Koru is closed.', tbBox));
+        K.api.get('/k/taskbar').then(st => {
+          let hide = !!st.hide, see = Math.round((1 - (st.alpha ?? 255) / 255) * 20) * 5, t = 0;
+          const note = el('small.muted', { style: { display: 'block', marginTop: '6px' } });
+          const paintNote = () => { note.textContent = hide || see > 0 ? 'On: it starts with Windows by itself. Turn both off to put the taskbar back to normal.' : 'Off: your taskbar is as Windows set it.'; };
+          const save = () => { clearTimeout(t); t = setTimeout(async () => {
+            try { const r = await K.api.post('/k/taskbar', { hide, alpha: Math.round(255 * (1 - see / 100)) }); if (r?.error) throw new Error(r.error); paintNote(); }
+            catch (e) { K.toast(e.message || "Couldn't change the taskbar", 'error'); }
+          }, 250); };
+          paintNote();
+          tbBox.replaceChildren(
+            toggle('Hide the taskbar', hide, v => { hide = v; save(); }, "It slides down when the mouse leaves it and back up when you move to the bottom edge (Windows' own smooth animation)"),
+            slider('See-through', see, 0, 80, 5, '%', v => { see = v; save(); }, '0% is normal. The icons fade a little too'),
+            note);
+        }).catch(() => tbBox.replaceChildren(el('small.muted', { text: 'The taskbar options need Windows 10 or 11.' })));
       }
 
       // data

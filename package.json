@@ -1,6 +1,6 @@
 {
   "name": "koru",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "description": "Koru — a personal manga and manhwa reader",
   "type": "module",
   "main": "electron/main.js",
@@ -42,9 +42,16 @@
       "createStartMenuShortcut": true,
       "createDesktopShortcut": true,
       "shortcutName": "Koru",
-      "artifactName": "Koru-Setup-${version}.${ext}"
+      "artifactName": "Koru-Setup-${version}.${ext}",
+      "include": "build/installer.nsh"
     },
     "publish": null,
-    "electronDist": "node_modules/electron/dist"
+    "electronDist": "node_modules/electron/dist",
+    "extraResources": [
+      {
+        "from": "build/koru-taskbar.exe",
+        "to": "koru-taskbar.exe"
+      }
+    ]
   }
 }
