@@ -142,8 +142,9 @@ app.on('second-instance', () => showWin());
 
 // Taskbar options: a tiny helper (build/koru-taskbar.exe, from native/koru-taskbar.cs) does the work and keeps
 // working without Koru. It's copied to Koru's data folder so updates never have to replace a file that's in use.
+const TTB_PKG = '28017CharlesMilette.TranslucentTB_v826wp6bftszj';
 const taskbar = (() => {
-  const fake = process.env.KORU_BG_TEST ? { autohide: false, hide: false, alpha: 255, running: false } : null;   // tests never touch the real taskbar
+  const fake = process.env.KORU_BG_TEST ? { autohide: false, hide: false, alpha: 255, running: false, clear: false } : null;   // tests never touch the real taskbar
   const src = () => app.isPackaged ? path.join(process.resourcesPath, 'koru-taskbar.exe') : path.join(here, '..', 'build', 'koru-taskbar.exe');
   const dst = () => path.join(app.getPath('userData'), 'taskbar', 'koru-taskbar.exe');
   const run = (exe, args) => new Promise((res, rej) => execFile(exe, args, { timeout: 15000, windowsHide: true }, (err, out, errOut) => err ? rej(new Error(String(errOut || err.message).trim())) : res(String(out).trim())));
@@ -164,6 +165,30 @@ const taskbar = (() => {
       if (!hide && alpha >= 255) { if (fs.existsSync(dst())) await run(dst(), ['disable']); }
       else await run(await ready(), ['enable', hide ? '1' : '0', String(alpha)]);
       return this.state();
+    },
+    // Fully clear taskbar (only the icons show): Windows 11 draws the taskbar inside Explorer, so only a tool that
+    // hooks into Explorer can clear it. TranslucentTB (free, Microsoft Store) does that well; Koru sets it up and starts it.
+    ttb() {
+      const pkg = path.join(process.env.LOCALAPPDATA || '', 'Packages', TTB_PKG), file = path.join(pkg, 'RoamingState', 'settings.json');
+      let clear = false;
+      try { clear = /"desktop_appearance"\s*:\s*\{[^}]*"accent"\s*:\s*"clear"/.test(fs.readFileSync(file, 'utf8')); } catch {}
+      return fake ? { installed: true, clear: !!fake.clear } : { installed: fs.existsSync(pkg), clear };
+    },
+    async setClear(on) {
+      if (fake) { fake.clear = on; return; }
+      const pkg = path.join(process.env.LOCALAPPDATA || '', 'Packages', TTB_PKG);
+      if (!fs.existsSync(pkg)) { shell.openExternal('ms-windows-store://pdp/?productid=9PF4KZ2VN4W9'); return { store: true }; }
+      const file = path.join(pkg, 'RoamingState', 'settings.json');
+      let text = ''; try { text = fs.readFileSync(file, 'utf8'); } catch {}
+      const body = text.replace(/^﻿/, '').replace(/^\s*\/\/.*$/gm, '');
+      let j = {}; try { j = JSON.parse(body || '{}'); } catch { j = {}; }
+      j.desktop_appearance = { ...(j.desktop_appearance || {}), accent: on ? 'clear' : 'normal', color: '#00000000', show_line: !on, show_peek: j.desktop_appearance?.show_peek ?? false };
+      // keep it clear with apps open and maximized too (otherwise TranslucentTB would switch styles)
+      for (const k of ['visible_window_appearance', 'maximized_window_appearance']) if (j[k]) j[k].enabled = false;
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, '// See https://TranslucentTB.github.io/config for more information\n' + JSON.stringify(j, null, 2));
+      if (on) spawn('explorer.exe', ['shell:AppsFolder\\' + TTB_PKG + '!TranslucentTB'], { detached: true, stdio: 'ignore' }).unref();   // already running: it just picks up the change
+      return {};
     },
     // after a Koru update brings a newer helper: swap it in and keep it running with the same settings
     async refresh() { if (fake) return; try { const st = await this.state(); if (st.running && !same(src(), dst())) await this.set(st.hide, st.alpha); } catch {} }
@@ -225,8 +250,14 @@ app.whenReady().then(() => {
     }
     if (url.pathname === '/k/taskbar') {
       try {
-        if (request.method === 'GET') return reply(200, await taskbar.state());
-        if (request.method === 'POST') { const b = JSON.parse(await request.text() || '{}'); return reply(200, await taskbar.set(!!b.hide, Number(b.alpha))); }
+        if (request.method === 'GET') return reply(200, { ...(await taskbar.state()), ttb: taskbar.ttb() });
+        if (request.method === 'POST') {
+          const b = JSON.parse(await request.text() || '{}');
+          let extra = {};
+          if ('clear' in b) extra = (await taskbar.setClear(!!b.clear)) || {};
+          if ('hide' in b) await taskbar.set(!!b.hide, 255);   // the old fade is gone: always full strength
+          return reply(200, { ...(await taskbar.state()), ttb: taskbar.ttb(), ...extra });
+        }
       } catch (e) { return reply(500, { error: "Couldn't change the taskbar: " + (e.message || e) }); }
     }
     if (url.pathname === '/k/relaunch' && request.method === 'POST') {
