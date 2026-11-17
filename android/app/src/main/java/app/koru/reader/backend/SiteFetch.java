@@ -29,7 +29,8 @@ final class SiteFetch {
     "comizy.io", "cmzcdn.org", "hivetoons.org", "hivetoon.com",
     "en-thunderscans.com", "madarascans.net", "wp.com", "kingofshojo.com", "violetmanga.com", "drakecomic.net", "ibb.co",
     "qimanga.com", "qiscans.org", "nyxscans.com", "magustoon.org", "rokaricomics.com", "elftoon.net", "elftoon.com",
-    "mangapill.com", "readdetectiveconan.com", "lagoonscans.com", "mangaread.org", "manhuaplus.com", "files.wordpress.com"};
+    "mangapill.com", "readdetectiveconan.com", "lagoonscans.com", "mangaread.org", "manhuaplus.com", "files.wordpress.com",
+    "myanimelist.net"};   // Settings → Import from another app (a public MyAnimeList list)
 
   private static final int ATTEMPT_MS = 45000;
   private static final int[] BUSY = {502, 503, 504, 522, 524};

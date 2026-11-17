@@ -120,6 +120,8 @@
       chapterSlug: l.chapter.slug, chapterName: String(l.chapter.name || '').replace(/ — .*/, ''), page: l.page, total: l.total,
       off: Math.round((s.where?.() || 0) * 1000) / 1000 };
   };
+  // a page of the reader by its place in the strip (the .pg data-i), for the page right-click menu
+  K.readerPage = i => { const p = state?.pageAt?.(i); return p && { provider: state.provider, slug: state.slug, title: state.series?.title || state.slug, cover: state.series?.cover || null, ...p }; };
   K.readerGoto = p => {
     if (!p?.provider || !K.providers[p.provider]) return false;
     if (state && state.provider === p.provider && state.slug === p.slug && state.goto?.(p.chapterSlug, p.page, p.off)) return true;
@@ -155,6 +157,9 @@
       K.readerSettings().clock ? el('span.rclock.inbar', { title: 'The time (Settings → Reader → Show the time)' }) : null,
       s.pages?.length ? mark : null,
       K.together?.readerButton?.() || null,
+      s.pages?.length ? K.chars?.readerButton?.() || null : null,
+      K.miniButton?.() || null,
+      K.translate?.button?.() || null,
       el('button.btn.icon.autob', { title: 'Auto-scroll (S)', onclick: () => K.toggleAuto?.() }, icon('auto')),
       el('button.btn.icon', { title: 'Zen mode (Z)', onclick: () => K.toggleZen?.() }, icon('zen')),
       el('button.btn.icon', { title: 'Chapters', onclick: () => box.querySelector('.drawer')?.classList.toggle('open') }, icon('list')));
@@ -281,7 +286,8 @@
     const freeSlices = wrap => {
       const i = Number(wrap.dataset.i);
       freeJob(job[i]); job[i] = '';
-      wrap.querySelector('.slices')?.remove(); wrap.classList.remove('sliced');
+      if (wrap._oldJob) { freeJob(wrap._oldJob); wrap._oldJob = ''; }   // a page being swapped for a sharpened copy
+      wrap.querySelectorAll('.slices').forEach(b => b.remove()); wrap.classList.remove('sliced');
     };
     const fileOf = async i => {
       if (files.has(i)) return files.get(i);
@@ -305,7 +311,7 @@
         ambCache.set(i, { w: rw, h: rh, d: cx.getImageData(0, 0, rw, rh).data }); setAmb(i);
       }).catch(() => ambCache.delete(i));
     };
-    async function loadStrip(i) {
+    async function loadStrip(i, swapped) {
       const wrap = imgs[i].parentElement;
       const id = 'p' + (++sliceSeq);
       job[i] = id;
@@ -328,9 +334,22 @@
         }
         wrap.append(box); wrap.classList.add('sliced');
         await ask({ type: 'draw', id, canvases: ocs, slice: SLICE }, ocs);              // drawn by the worker, straight to the screen
-        if (live()) st[i] = 'ready';
-      } catch { if (live()) { st[i] = ''; freeSlices(wrap); failed(i); } }
+        if (live()) { st[i] = 'ready'; swapped?.(true); }
+      } catch { if (live()) { if (swapped) { st[i] = 'ready'; swapped(false); } else { st[i] = ''; freeSlices(wrap); failed(i); } } }
     }
+    // Sharpen (reader-extras.js): a better copy of a page. Its new slices are drawn over the old ones, which then go.
+    const swapFile = (i, blob) => {
+      files.set(i, blob);
+      const wrap = pg(i), old = wrap?.querySelector('.slices');
+      if (opt.mode !== 'strip' || st[i] !== 'ready' || !old) return;
+      const oldJob = job[i];
+      old.classList.add('old'); wrap._oldJob = oldJob; st[i] = 'loading';
+      loadStrip(i, ok => {
+        wrap._oldJob = '';
+        if (ok) { old.remove(); freeJob(oldJob); return; }
+        freeJob(job[i]); job[i] = oldJob; wrap.querySelectorAll('.slices:not(.old)').forEach(b => b.remove()); old.classList.remove('old');
+      });
+    };
     const addPage = (p, i) => {
       const im = el('img', { alt: `Page ${i + 1}`, decoding: 'async', referrerPolicy: 'no-referrer', draggable: false });
       im.dataset.src = p.url;
@@ -379,6 +398,8 @@
     const prevBefore = ch => { const i = s.chapters.findIndex(c => c.slug === ch.slug); return i >= 0 ? s.chapters.slice(i + 1).find(c => !c.locked) : null; };
     // two pages on screen: the left-most page number is saved, or the last page once the last pair shows
     s.local = () => { const g = segOf(s.page), p = opt.mode === 'paged' && s.pageEnd === s.pages.length - 1 ? s.pageEnd : s.page; return { chapter: g.chapter, page: p - g.start, total: g.count }; };
+    // one page of the strip (any chapter in it): where it is, and its picture (characters.js, desktop.js)
+    s.pageAt = i => { const g = segOf(i), c = g.chapter; return i >= 0 && i < s.pages.length ? { chapterSlug: c.slug, chapterName: short(c.name), page: i - g.start, total: g.count, url: s.pages[i].url, file: () => fileOf(i) } : null; };
     let appending = false, appendErr = null;
     const short = n => String(n || '').replace(/ — .*/, '');
     // the chapter you finished: read mark + Stats, once
@@ -1030,6 +1051,7 @@
               row(['Z'], 'Zen mode (full screen)'),
               row(combo('Shift', 'N'), 'Night filter on or off'),
               row(['Esc'], 'Leave zen · close the chapter list · close the chapter'),
+              ...(K.rx?.keyRows?.(row) || []),
               row(['?'], 'Show or hide this list')),
             sec('Zoom',
               row(combo('Ctrl', 'Wheel'), 'Zoom at the mouse'),
@@ -1160,12 +1182,16 @@
         tog('Next-chapter countdown', 'countdown', 'Page mode, or with Keep reading off: the next chapter with 3, 2, 1. Click to stay', true),
         tog('Keep reading into the next chapter', 'autoNext', 'Long strip: the next chapter joins underneath. Pages: goes on after the last page', true),
         tog('Tap sides to turn', 'tapZones', ''),
+        K.translate?.settingsRows?.() || null,
+        K.rx?.settingsRows?.() || null,
         el('div.ctl', el('div.lab', 'Zen mode', el('small', { text: 'Full screen, just the pages. Z or Esc to leave' })),
           el('button.btn.small', { onclick: () => K.toggleZen() }, icon('zen'), 'Enter')),
         tog('Show the time', 'clock', 'A small clock in the top bar, and in the corner when the bars hide', true),
         tog('Show frame rate', 'fps', 'A small meter in the corner, to check for lag', true)));
     }
 
+    // panel by panel, sharpen, ambient sound (reader-extras.js)
+    K.rx?.attach?.({ s, opt, box, pagesBox, strip, pg, imgs, st, fileOf, load, swapFile, zm, zKick, zSize });
     pagesBox.focus();
     // already full screen = moving to the next chapter, so no hint again
     if (opt.zen) setZen(true, window.innerHeight >= screen.height - 2);

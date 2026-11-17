@@ -642,6 +642,18 @@
     return api('/media', { method: 'POST', raw: blob, type: type || blob.type });
   }
   T.upload = upload;
+  // the reader's page right-click menu: "Send to <crew>" posts that page into your crew's chat
+  (K.pageMenuItems ||= []).push(info => (inCrew() && T.crew) ? [['send', 'Send to ' + T.crew.name, async () => {
+    const tag = K.toast('Sending the page to ' + T.crew.name + '…');
+    try {
+      let blob = await info.file();
+      if (!/^image\/(png|jpeg|gif|webp)$/.test(blob.type)) blob = new Blob([blob], { type: 'image/jpeg' });
+      const s = await shrink(new File([blob], 'page.' + (blob.type.split('/')[1] || 'jpg'), { type: blob.type }));
+      const u = await upload(s.blob, s.blob.type || blob.type);
+      sendMsg({ kind: 'image', data: { url: u.url, w: s.w, h: s.h, name: `${info.title} · ${String(info.chapterName || '').replace(/ — .*/, '')} · page ${info.page + 1}`.slice(0, 80) } });
+      K.toast('Sent to ' + T.crew.name, 'ok');
+    } catch (e) { K.toast(e.message || "Couldn't send that page", 'error'); }
+  }]] : []);
   async function sendPictures(files) {
     for (const f of files) {
       if (!/^image\/(png|jpeg|gif|webp)$/.test(f.type)) { K.toast('Only pictures and GIFs can be sent.', 'error'); continue; }

@@ -1,0 +1,48 @@
+/* Import from another app (import.js), characters (characters.js), wallpaper picker (desktop.js) */
+
+/* ---------- import ---------- */
+.imp-src { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid rgba(255,255,255,.07); }
+.imp-src .lab small { display: block; color: var(--muted); font-size: .82em; }
+.imp-src .lookbar { margin-top: 0; }
+.imp-status:empty { display: none; }
+.imp-status { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.imp-head { display: flex; flex-direction: column; gap: 8px; }
+.imp-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.imp-line small { flex: 1; }
+.imp-bar { height: 6px; border-radius: 99px; background: rgba(255,255,255,.1); overflow: hidden; }
+.imp-bar i { display: block; height: 100%; border-radius: inherit; background: var(--accent-grad); transition: width var(--t); }
+.imp-err { margin: 0; color: #ff8a8a; font-size: .9em; }
+.imp-group summary { cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 6px 2px; list-style: none; }
+.imp-group summary::-webkit-details-marker { display: none; }
+.imp-group summary::before { content: '›'; display: inline-block; width: 10px; color: var(--muted); transition: transform var(--t-fast); }
+.imp-group[open] summary::before { transform: rotate(90deg); }
+.imp-group .count { color: var(--muted); font-size: .9em; }
+.imp-list { max-height: 320px; overflow-y: auto; }
+.imp-row { cursor: default; }
+.imp-row .n small { color: var(--muted); }
+.imp-handb { align-self: flex-start; }
+.imp-hand { position: fixed; z-index: 360; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 16px;
+  border-radius: 99px; max-width: calc(100% - 24px); animation: rise-in var(--t) var(--ease-move); }
+.imp-hand-t { display: flex; flex-direction: column; min-width: 0; margin-right: 6px; }
+.imp-hand-t b { max-width: 340px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.reading .imp-hand { display: none; }
+
+/* ---------- characters ---------- */
+.chr-list { display: flex; flex-direction: column; gap: 10px; }
+.chr-row { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.chr-head { display: flex; align-items: center; gap: 8px; padding: 0; }
+.chr-head b { font-size: 1.02em; }
+.chr-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chr-chip { height: 28px; font-size: .84em; }
+.chr-del:hover { color: #ff8a8a; }
+.chr-pop .lx-plist { max-height: 260px; overflow-y: auto; }
+
+/* ---------- wallpaper picker ---------- */
+.wp-sheet { width: min(720px, 100%); }
+.wp-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; padding: 4px 18px 18px; }
+.wp-opt { display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: calc(var(--radius) * .8); text-align: left; cursor: pointer; transition: transform var(--t-fast), border-color var(--t-fast); }
+.wp-opt:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--accent); }
+.wp-opt:disabled { opacity: .6; cursor: default; }
+.wp-pic { width: 100%; border-radius: 10px; overflow: hidden; background: rgba(0,0,0,.35); display: grid; place-items: center; margin-bottom: 4px; }
+.wp-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wp-pic .spinner { margin: 0; }

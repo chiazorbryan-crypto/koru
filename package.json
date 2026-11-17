@@ -1,6 +1,6 @@
 {
   "name": "koru",
-  "version": "0.7.8",
+  "version": "0.8.0",
   "description": "Koru — a personal manga and manhwa reader",
   "type": "module",
   "main": "electron/main.js",
@@ -13,7 +13,8 @@
   },
   "devDependencies": {
     "electron": "^45.0.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "tesseract.js": "^7.0.0"
   },
   "build": {
     "appId": "app.koru.reader",

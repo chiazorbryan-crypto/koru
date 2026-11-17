@@ -169,6 +169,7 @@
         toggle('Next-chapter countdown', ro.countdown, v => setR({ countdown: v }), 'In page mode, or in the long strip with “Keep reading into the next chapter” off: the end of a chapter shows the next one and opens it after 3, 2, 1. Click, scroll up or press a key to stay; Enter opens it now'),
         toggle('Keep reading into the next chapter', ro.autoNext, v => setR({ autoNext: v }), 'Long strip: the next chapter joins underneath as you reach the end, like Kotatsu'),
         toggle('Tap sides to turn', ro.tapZones, v => setR({ tapZones: v })),
+        ...(K.rx?.settingsPanel?.({ toggle, select, slider, ro, setR }) || []),   // sharpen, ambient sound (reader-extras.js)
         toggle('Zen mode', ro.zen, v => setR({ zen: v }), 'Chapters open full screen with just the pages. Press Z while reading to switch'),
         select('Two pages side by side', [['off', 'Off'], ['auto', 'Auto: when the window is wider than tall'], ['on', 'Always']], ro.spread, v => setR({ spread: v })),
         toggle('First page alone', ro.spreadCover, v => setR({ spreadCover: v }), 'Two-page view: the cover shows by itself, then pages pair up. Wide pages always show alone'),
@@ -401,6 +402,8 @@
           } }, icon('download'), 'Export backup'),
           el('button.btn.small', { onclick: () => fileIn.click() }, icon('upload'), 'Import backup'), fileIn,
           el('button.btn.small', { onclick: () => { if (!confirm('Clear your reading history? Your library and downloads stay.')) return; K.data.history = {}; K.data.read = {}; K.save('history'); K.save('read'); K.toast('History cleared'); } }, icon('trash'), 'Clear history'))));
+      // Import from another app (import.js), Desktop (desktop.js)
+      for (const f of K.settingsExtras || []) { try { const p = f(); if (p) grid.append(p); } catch {} }
 
       const upd = el('div.updbox');
       const paintUpd = async (force) => {

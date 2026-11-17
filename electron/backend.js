@@ -3,6 +3,7 @@
 //
 // Routes (all under /k/):
 //   GET  /k/fetch?u=<url>        a site request (only the allowed sites), returned as-is
+//   POST /k/fetch {u, body}      a JSON POST to an allowed site's API (AniList's GraphQL), returned as-is
 //   GET  /k/store/<key>          saved JSON (library, history, settings)
 //   PUT  /k/store/<key>          save JSON
 //   POST /k/dl/start             queue a chapter download {provider, seriesSlug, seriesTitle, cover, chapterSlug, chapterName, number, pages:[url]}
@@ -14,6 +15,7 @@
 //   GET  /k/dl/cbz?dir=<series>/<chapter> | ?id=<provider:series:chapter> | ?series=<series folder>
 //                                a downloaded chapter or whole series as a .cbz (an uncompressed ZIP + ComicInfo.xml), streamed
 //   GET  /k/info                 app version, platform, downloads folder
+//   GET  /k/tessdata/<lang>.traineddata   OCR language data for Reader → Translate (downloaded once, then kept)
 import fs from 'node:fs';
 import net from 'node:net';
 import dns from 'node:dns';
@@ -37,13 +39,19 @@ const ALLOWED = ['omegascans.org', 'vortexscans.org', 'asurascans.com', 'flameco
   'comizy.io', 'cmzcdn.org', 'hivetoons.org', 'hivetoon.com',
   'en-thunderscans.com', 'madarascans.net', 'wp.com', 'kingofshojo.com', 'violetmanga.com', 'drakecomic.net', 'ibb.co',
   'qimanga.com', 'qiscans.org', 'nyxscans.com', 'magustoon.org', 'rokaricomics.com', 'elftoon.net', 'elftoon.com',
-  'mangapill.com', 'readdetectiveconan.com', 'lagoonscans.com', 'mangaread.org', 'manhuaplus.com', 'files.wordpress.com'];
+  'mangapill.com', 'readdetectiveconan.com', 'lagoonscans.com', 'mangaread.org', 'manhuaplus.com', 'files.wordpress.com',
+  'myanimelist.net', 'anilist.co'];   // Settings → Import from another app: your public MyAnimeList / AniList lists
 export const allowedUrl = u => {
   try {
     const url = new URL(u);
     return url.protocol === 'https:' && ALLOWED.some(d => url.hostname === d || url.hostname.endsWith('.' + d));
   } catch { return false; }
 };
+// Reader → Translate: Google's free translation endpoint (the page sends the text through /k/fetch).
+ALLOWED.push('translate.googleapis.com');
+// Reader → Translate: OCR language data (tessdata_fast), downloaded once into the data folder, then read from there offline.
+const TESSDATA_URL = 'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/';
+const TESS_LANGS = ['kor', 'kor_vert', 'jpn', 'jpn_vert', 'chi_sim', 'chi_sim_vert', 'chi_tra', 'chi_tra_vert', 'eng'];
 
 const IMG_TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' };
 const MIME = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif', json: 'application/json' };
@@ -323,6 +331,26 @@ export function createBackend({ dataDir, downloadsDir, version = '0.0.0', platfo
       headers: { 'Content-Disposition': `attachment; filename="${name.replace(/[^\x20-\x7E]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}` } };
   }
 
+  // OCR language data for Reader → Translate: fetched once (a few MB per language), then always read from disk.
+  const tessJobs = new Map();
+  async function tessdata(lang) {
+    if (!TESS_LANGS.includes(lang)) return json(404, { error: 'Unknown language' });
+    const file = path.join(dataDir, 'tessdata', lang + '.traineddata');
+    if (!fs.existsSync(file)) {
+      if (!tessJobs.has(lang)) tessJobs.set(lang, (async () => {
+        const r = await fetchImpl(TESSDATA_URL + lang + '.traineddata', { headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(180000), redirect: 'follow' });
+        if (r.url && !/^https:\/\/(raw|objects)\.githubusercontent\.com\//.test(r.url)) throw Object.assign(new Error('The text data download went somewhere unexpected.'), { status: 502 });
+        if (!r.ok) throw Object.assign(new Error(`Couldn't download the ${lang} text data (${r.status}).`), { status: 502 });
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (buf.length < 200000) throw Object.assign(new Error(`The ${lang} text data looks broken.`), { status: 502 });
+        await fsp.mkdir(path.dirname(file), { recursive: true });
+        await writeAtomic(file, buf);
+      })().finally(() => tessJobs.delete(lang)));
+      await tessJobs.get(lang);
+    }
+    return { status: 200, file, type: 'application/octet-stream' };
+  }
+
   // ---------- request handler ----------
   // req: { method, path, query: URLSearchParams, body: string }
   // returns: { status, type, body } where body is a string/Buffer, or { status, file, type } to stream a file.
@@ -330,7 +358,17 @@ export function createBackend({ dataDir, downloadsDir, version = '0.0.0', platfo
     const { method, path: p, query } = req;
     try {
       if (p === '/k/info' && method === 'GET') return json(200, { version, platform, downloadsDir });
+      const tess = p.match(/^\/k\/tessdata\/([a-z_]{3,12})\.traineddata$/);
+      if (tess && method === 'GET') return await tessdata(tess[1]);
 
+      // a JSON query to an allowed site's API, for the few that only answer POST (AniList's GraphQL)
+      if (p === '/k/fetch' && method === 'POST') {
+        const b = JSON.parse(req.body || '{}');
+        if (!allowedUrl(b.u)) return json(403, { error: 'That site is not one of Koru\'s sources.' });
+        const r = await fetchImpl(b.u, { method: 'POST', headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(b.body ?? {}), signal: AbortSignal.timeout(45000), redirect: 'error' });
+        return { status: r.status, type: r.headers.get('content-type') || 'application/json', body: Buffer.from(await r.arrayBuffer()) };
+      }
       if (p === '/k/fetch' && method === 'GET') {
         const r = await siteFetch(query.get('u') || '', query.get('accept') || 'application/json');
         const type = r.headers.get('content-type') || 'application/octet-stream';

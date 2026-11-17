@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: https: http://127.0.0.1:*; media-src 'self' blob: https: http://127.0.0.1:*; connect-src 'self' https://*.workers.dev wss://*.workers.dev http://127.0.0.1:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Koru</title>
+<style>
+  :root { --accent: #8f7dff; --accent2: #38d6ff; --bg: rgba(14, 15, 38, .78); --text: #eef0ff; --muted: rgba(232, 233, 255, .62); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; color: var(--text); font: 13px/1.35 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; overflow: hidden; user-select: none; }
+  /* the whole card drags the window; the rows and buttons stay clickable */
+  .w { -webkit-app-region: drag; margin: 6px; padding: 12px 12px 10px; border-radius: 18px; background: linear-gradient(160deg, rgba(255,255,255,.10), rgba(255,255,255,.02)), var(--bg);
+    border: 1px solid rgba(255,255,255,.16); box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 8px 22px rgba(0,0,0,.35); }
+  .top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .logo { font-weight: 700; letter-spacing: .14em; font-size: 11px; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .top .sp { flex: 1; }
+  button { -webkit-app-region: no-drag; font: inherit; color: var(--muted); background: none; border: 0; border-radius: 8px; padding: 3px 7px; cursor: pointer; }
+  button:hover { color: var(--text); background: rgba(255,255,255,.08); }
+  h4 { margin: 10px 2px 4px; font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .it { -webkit-app-region: no-drag; display: flex; align-items: center; gap: 9px; width: 100%; padding: 5px; border-radius: 11px; text-align: left; color: var(--text); }
+  .it:hover { background: rgba(255,255,255,.08); }
+  .it img, .it .ph { width: 34px; height: 46px; border-radius: 7px; object-fit: cover; flex: none; background: rgba(255,255,255,.08); }
+  .it .tx { min-width: 0; flex: 1; }
+  .it b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .it small { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nb { flex: none; min-width: 22px; height: 20px; padding: 0 6px; border-radius: 99px; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+  .empty { margin: 8px 2px 4px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="w" id="w"><div class="top"><span class="logo">KORU</span><span class="sp"></span></div></div>
+<script src="js/widget.js"></script>
+</body>
+</html>

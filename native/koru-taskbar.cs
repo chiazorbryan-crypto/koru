@@ -5,6 +5,7 @@
 //   koru-taskbar run                                the small background part (started by enable and at sign-in)
 //   koru-taskbar stop                               stops the background part (settings stay)
 //   koru-taskbar state                              prints {"autohide":..,"hide":..,"alpha":..,"running":..}
+//   koru-taskbar wallpaper <file.png> [fill|fit] [dry]   sets the desktop wallpaper ("dry": only checks the arguments, changes nothing)
 //
 // Hiding uses Windows' own taskbar auto-hide, so the slide down and back up is Windows' smooth animation:
 // nothing here draws or animates. "alpha" makes the taskbar see-through (255 = normal).
@@ -29,6 +30,7 @@ static class KoruTaskbar {
   [DllImport("user32.dll")] static extern bool SetLayeredWindowAttributes(IntPtr h, uint k, byte a, uint f);
   [DllImport("user32.dll")] static extern bool GetLayeredWindowAttributes(IntPtr h, out uint k, out byte a, out uint f);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern uint RegisterWindowMessage(string s);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool SystemParametersInfo(uint a, uint u, string p, uint w);
 
   const int GWL_EXSTYLE = -20, WS_EX_LAYERED = 0x80000;
   const string KEY = @"Software\Koru\Taskbar", RUN = @"Software\Microsoft\Windows\CurrentVersion\Run", RUN_NAME = "KoruTaskbar";
@@ -123,6 +125,21 @@ static class KoruTaskbar {
           m.ReleaseMutex();
         }
         return 0;
+      }
+      if (cmd == "wallpaper") {
+        // Fill = 10 (covers the screen, cropped), Fit = 6 (whole picture, bars around it). Koru already sizes the picture to the screen.
+        string file = a.Length > 1 ? a[1] : "", mode = a.Length > 2 ? a[2] : "fill";
+        bool dry = a.Length > 3 && a[3] == "dry";
+        if (mode != "fill" && mode != "fit") { Console.Error.WriteLine("mode must be fill or fit"); return 2; }
+        if (file == "" || !System.IO.Path.IsPathRooted(file)) { Console.Error.WriteLine("give the full path of the picture"); return 2; }
+        if (!System.IO.File.Exists(file)) { Console.Error.WriteLine("picture not found"); return 2; }
+        string style = mode == "fill" ? "10" : "6";
+        if (!dry) {
+          using (var k = Registry.CurrentUser.CreateSubKey(@"Control Panel\Desktop")) { k.SetValue("WallpaperStyle", style); k.SetValue("TileWallpaper", "0"); }
+          // SPI_SETDESKWALLPAPER, saved and announced to every app (SPIF_UPDATEINIFILE | SPIF_SENDCHANGE)
+          if (!SystemParametersInfo(0x14, 0, file, 0x01 | 0x02)) { Console.Error.WriteLine("Windows didn't take the wallpaper (" + Marshal.GetLastWin32Error() + ")"); return 1; }
+        }
+        Console.WriteLine("{\"ok\":true,\"style\":" + style + ",\"dry\":" + (dry ? "true" : "false") + "}"); return 0;
       }
       Console.Error.WriteLine("unknown command"); return 2;
     } catch (Exception e) { Console.Error.WriteLine(e.Message); return 1; }

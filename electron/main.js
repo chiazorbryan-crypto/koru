@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createBackend } from './backend.js';
 import { updateRoute } from './updater.js';
 import { syncRoute } from './sync.js';
+import { screen } from 'electron';   // the wallpaper's size and the widget's spot
 import { spawn, execFile } from 'node:child_process';
 import crypto from 'node:crypto';
 
@@ -195,6 +196,115 @@ const taskbar = (() => {
   };
 })();
 
+// Koru wallpaper: the reader sizes a page to the screen (a PNG), it's saved in Koru's data folder and the taskbar
+// helper sets it as the Windows wallpaper. Test runs (KORU_BG_TEST) save the picture but never touch the real wallpaper.
+async function wallpaperRoute(request, url) {
+  const reply = (status, obj) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+  const d = screen.getPrimaryDisplay();
+  if (request.method === 'GET') return reply(200, { w: Math.round(d.size.width * d.scaleFactor), h: Math.round(d.size.height * d.scaleFactor) });
+  if (request.method !== 'POST') return reply(404, { error: 'Not found' });
+  const mode = url.searchParams.get('mode') === 'fit' ? 'fit' : 'fill';
+  const png = Buffer.from(await request.arrayBuffer());
+  if (png.length < 100 || png.length > 80e6 || png.readUInt32BE(0) !== 0x89504e47) return reply(400, { error: 'That picture didn\'t come through. Try again.' });
+  try {
+    const dir = path.join(app.getPath('userData'), 'wallpaper');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `koru-wallpaper-${Date.now()}.png`);   // a new name each time, so Windows never shows an old cached one
+    fs.writeFileSync(file, png);
+    for (const f of fs.readdirSync(dir)) if (/^koru-wallpaper-\d+\.png$/.test(f) && path.join(dir, f) !== file) { try { fs.unlinkSync(path.join(dir, f)); } catch {} }
+    if (process.env.KORU_BG_TEST) return reply(200, { ok: true, fake: true, file, mode });
+    const exe = app.isPackaged ? path.join(process.resourcesPath, 'koru-taskbar.exe') : path.join(here, '..', 'build', 'koru-taskbar.exe');
+    await new Promise((res, rej) => execFile(exe, ['wallpaper', file, mode], { timeout: 15000, windowsHide: true }, (err, out, errOut) => err ? rej(new Error(String(errOut || err.message).trim())) : res()));
+    return reply(200, { ok: true, file, mode });
+  } catch (e) { return reply(500, { error: 'Couldn\'t set the wallpaper: ' + (e.message || e) }); }
+}
+
+// Desktop widget (Settings, off by default): a small glass window on the desktop with Up next and new chapters.
+// It's a normal window (not always on top, not on the taskbar) that you drag anywhere; Koru remembers where.
+// It reads your library through the usual /k/ routes, and looks again when your library or history is saved.
+const widget = (() => {
+  const FILE = () => path.join(app.getPath('userData'), 'widget.json');
+  const test = !!process.env.KORU_BG_TEST;
+  const W = 300, H = 360;
+  let w = null, cfg = null, refreshT = 0;
+  const conf = () => { if (!cfg) { cfg = { on: false, x: null, y: null }; try { Object.assign(cfg, JSON.parse(fs.readFileSync(FILE(), 'utf8'))); } catch {} } return cfg; };
+  const save = () => { try { fs.writeFileSync(FILE(), JSON.stringify(conf())); } catch {} };
+  function open() {
+    if (w) return;
+    const c = conf(), wa = screen.getPrimaryDisplay().workArea;
+    let { x, y } = c;
+    // a saved spot that's on no screen any more (a screen unplugged): back to the top right
+    const seen = Number.isFinite(x) && Number.isFinite(y) && screen.getAllDisplays().some(d => x > d.workArea.x - W / 2 && x < d.workArea.x + d.workArea.width - W / 2 && y >= d.workArea.y - 10 && y < d.workArea.y + d.workArea.height - 60);
+    if (!seen) { x = wa.x + wa.width - W - 28; y = wa.y + 28; }
+    if (test) { x = -5000; y = 1400; }   // test runs: off-screen
+    w = new BrowserWindow({ width: W, height: H, x, y, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false, resizable: false,
+      minimizable: false, maximizable: false, fullscreenable: false, skipTaskbar: true, alwaysOnTop: false, show: false, title: 'Koru', focusable: !test,
+      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false } });
+    w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    w.webContents.on('will-navigate', e => e.preventDefault());
+    w.once('ready-to-show', () => w?.showInactive());   // never takes the focus from what you're doing
+    w.on('moved', () => { if (!w || test) return; [c.x, c.y] = w.getPosition(); save(); });
+    w.on('closed', () => { w = null; });
+    w.loadURL('koru://app/widget.html');
+  }
+  const close = () => { if (w) { const x = w; w = null; x.destroy(); } };
+  return {
+    restore() { if (conf().on) open(); },
+    close,
+    // your library or history changed: the widget looks again (once, a moment later)
+    changed() { if (!w) return; clearTimeout(refreshT); refreshT = setTimeout(() => w?.webContents.executeJavaScript('window.koruWidgetRefresh && koruWidgetRefresh()').catch(() => {}), 1500); },
+    async route(request, url) {
+      const reply = (status, obj) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+      let b = {}; if (request.method === 'POST') { try { b = JSON.parse(await request.text() || '{}'); } catch {} }
+      if (url.pathname === '/k/widget' && request.method === 'GET') return reply(200, { on: !!conf().on, open: !!w });
+      if (url.pathname === '/k/widget' && request.method === 'POST') {
+        conf().on = !!b.on; save();
+        if (b.on) open(); else close();
+        return reply(200, { on: conf().on });
+      }
+      // the widget's content height, so the window fits it
+      if (url.pathname === '/k/widget/size' && request.method === 'POST') {
+        const h = Math.max(120, Math.min(560, Math.round(Number(b.h) || H)));
+        if (w && w.getSize()[1] !== h) { const [x, y] = w.getPosition(); w.setResizable(true); w.setBounds({ x, y, width: W, height: h }); w.setResizable(false); }   // Windows ignores a new size on a fixed-size window
+        return reply(200, { ok: true });
+      }
+      // a click in the widget: Koru opens at that chapter or series (or the library)
+      if (url.pathname === '/k/widget/open' && request.method === 'POST') {
+        const to = String(b.to || '');
+        if (!(to === '/library' || /^\/(read|series)\/[^\s#"'`\\]+$/.test(to)) || to.length > 600 || !win) return reply(400, { error: 'Bad place' });
+        if (!test) showWin();
+        win.webContents.executeJavaScript(`location.hash = ${JSON.stringify('#' + to)}`).catch(() => {});
+        return reply(200, { ok: true });
+      }
+      return reply(404, { error: 'Not found' });
+    }
+  };
+})();
+
+// Mini reader: the chapter you're reading in a small window that stays on top of everything.
+// When it closes, the main window reloads your saved progress so the two never overwrite each other.
+let mini = null;
+function openMini(hash) {
+  const url = 'koru://app/index.html?mini=1#' + hash;
+  if (mini) { mini.loadURL(url); mini.show(); return; }
+  const test = !!process.env.KORU_BG_TEST;
+  mini = new BrowserWindow({
+    width: 460, height: 780, minWidth: 300, minHeight: 360, alwaysOnTop: !test, title: 'Koru mini reader', backgroundColor: '#07081a',
+    icon: path.join(here, '..', 'build', 'icon.ico'), titleBarStyle: 'hidden', titleBarOverlay: { color: '#00000000', symbolColor: '#e8e9ff', height: 30 },
+    show: false, ...(test ? { x: -5000, y: 0, skipTaskbar: true, focusable: false } : {}),
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, backgroundThrottling: !test }
+  });
+  if (!test) mini.setAlwaysOnTop(true, 'floating');
+  mini.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mini.webContents.on('will-navigate', (e, u) => { if (!u.startsWith('koru://app/')) e.preventDefault(); });
+  mini.once('ready-to-show', () => { if (test) mini.showInactive(); else mini.show(); });
+  mini.on('closed', () => {
+    mini = null;
+    if (win && !win.isDestroyed()) win.webContents.executeJavaScript('K.loadData && K.loadData().then(() => window.dispatchEvent(new HashChangeEvent("hashchange")))').catch(() => {});
+  });
+  mini.loadURL(url);
+}
+
 // Closing the window keeps Koru running in the tray (so your crew sees you online and new chapters are still checked).
 // Quit from the tray icon's menu.
 let tray = null, quitting = false;
@@ -260,6 +370,14 @@ app.whenReady().then(() => {
         }
       } catch (e) { return reply(500, { error: "Couldn't change the taskbar: " + (e.message || e) }); }
     }
+    if (url.pathname === '/k/wallpaper') return wallpaperRoute(request, url);
+    if (url.pathname === '/k/widget' || url.pathname.startsWith('/k/widget/')) return widget.route(request, url);
+    if (url.pathname === '/k/mini' && request.method === 'POST') {
+      let hash = ''; try { hash = String(JSON.parse(await request.text()).hash || ''); } catch {}
+      if (!/^\/read\//.test(hash)) return reply(400, { error: 'Open a chapter first' });
+      openMini(hash);
+      return reply(200, { ok: true });
+    }
     if (url.pathname === '/k/relaunch' && request.method === 'POST') {
       setTimeout(() => { app.relaunch(); app.exit(0); }, 200);
       return reply(200, { ok: true });
@@ -269,6 +387,7 @@ app.whenReady().then(() => {
     if (url.pathname.startsWith('/k/')) {
       const body = request.method === 'GET' || request.method === 'HEAD' ? '' : await request.text();
       const r = await handle({ method: request.method, path: url.pathname, query: url.searchParams, body });
+      if (request.method === 'PUT' && /^\/k\/store\/(library|history|flags)$/.test(url.pathname)) widget.changed();
       const headers = { 'Content-Type': r.type, 'Cache-Control': r.file || r.cache ? 'max-age=86400' : 'no-store', ...(r.headers || {}) };   // e.g. the .cbz file name
       if (r.file) return new Response(Readable.toWeb(fs.createReadStream(r.file)), { status: 200, headers });
       return new Response(r.body, { status: r.status, headers });
@@ -310,6 +429,8 @@ app.whenReady().then(() => {
     if (!fs.existsSync(told)) { try { fs.writeFileSync(told, '1'); tray.displayBalloon({ iconType: 'info', title: 'Koru is still running', content: 'It stays in the tray so your crew sees you online. Right-click the icon to quit.' }); } catch {} }
   });
   makeTray();
+  win.on('closed', () => widget.close());
+  widget.restore();
   setTimeout(() => taskbar.refresh(), 8000);
   win.loadURL('koru://app/index.html');
 });

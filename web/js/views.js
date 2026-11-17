@@ -381,7 +381,8 @@
         body.append(rail);
       }
       let tab = sessionStorage.getItem('koru-libtab') || 'fav';
-      const tabs = [['fav', 'Favourites', 'heart'], ['liked', 'Liked', 'like'], ['marks', 'Bookmarks', 'bookmark'], ['history', 'History', 'clock']];
+      const tabs = [['fav', 'Favourites', 'heart'], ['liked', 'Liked', 'like'], ['marks', 'Bookmarks', 'bookmark'], ['history', 'History', 'clock'], ...(K.disc ? [['cal', 'Release days', 'calendar']] : [])];
+      if (tab === 'cal' && !K.disc) tab = 'fav';
       body.append(el('div.section', segmented(tabs, tab, v => { tab = v; sessionStorage.setItem('koru-libtab', v); drawGrid(); })));
       const chips = el('div.row', { style: { marginBottom: '14px' } });
       const sources = [['all', 'All'], ['new', 'New chapters'], ['completed', 'Completed'], ['hidden', 'Hidden'], ['trash', 'Trash'], ...K.providerList.map(p => [p.id, p.short])];
@@ -394,7 +395,8 @@
       body.append(gridBox);
       const progressOf = x => { const total = x.total || K.data.library[K.key(x.provider, x.slug)]?.total; return total ? Math.min(1, K.readCount(x.provider, x.slug) / total) : null; };
       function drawGrid() {
-        chips.style.display = tab === 'marks' ? 'none' : '';
+        chips.style.display = tab === 'marks' || tab === 'cal' ? 'none' : '';
+        if (tab === 'cal') return K.disc.calendar(gridBox, () => tab === 'cal' && root.isConnected);   // discover.js
         if (tab !== 'fav') return drawOther();
         let list = filter === 'trash' ? Object.keys(K.data.flags).filter(k => K.data.flags[k].trash).map(k => { const [provider, ...rest] = k.split(':'); const slug = rest.join(':'); const h = K.data.flags[k]; return { provider, slug, title: h.title || slug, cover: h.cover || null }; }) : (K.libx?.listFor?.(filter, items) || items.slice());
         list = list.filter(x => K.flagPass(x, filter));
@@ -446,21 +448,25 @@
     let src = sessionStorage.getItem('koru-src') || 'omega';
     if (!K.providerList.some(p => p.id === src)) src = 'omega';
     let sort = sessionStorage.getItem('koru-sort') || 'latest';
+    if (sort === 'trending' && !K.disc) sort = 'latest';
     root.append(el('div.head', el('div', el('h1', { text: 'Explore' }), el('div.sub', { text: 'Browse your sources' })), el('div.sp'), K.lively2?.surpriseButton?.() || ''));
     if (!K.providers[src]) src = 'omega';
     const srcRow = el('div.srcs');
     const drawSrcs = () => srcRow.replaceChildren(...K.providerList.map(p => el('button.chip' + (src === p.id ? '.on' : ''), { onclick: () => { if (src === p.id) return; src = p.id; sessionStorage.setItem('koru-src', src); drawSrcs(); load(true); } }, el('i.dot', { style: { background: p.hue, boxShadow: '0 0 8px ' + p.hue } }), p.name)));
     drawSrcs();
     const bar = el('div.row', { style: { marginBottom: '18px', gap: '12px' } },
-      segmented([['latest', 'Latest', 'clock'], ['popular', 'Popular', 'sparkle']], sort, v => { sort = v; sessionStorage.setItem('koru-sort', v); load(true); }));
-    root.append(srcRow, bar);
+      segmented([['latest', 'Latest', 'clock'], ['popular', 'Popular', 'sparkle'], ...(K.disc ? [['trending', 'Trending', 'chart']] : [])], sort, v => { sort = v; sessionStorage.setItem('koru-sort', v); load(true); }),
+      K.disc?.doneChip?.(() => load(true)) || null);
+    root.append(K.disc?.recsRow?.() || '', srcRow, bar);   // More like this, Trending, Completed only: discover.js
     const grid = el('div.grid'), more = el('div', { style: { height: '60px' } });
     root.append(grid, more);
-    let page = 1, hasMore = true, busy = false, gen = 0, dry = 0;
+    let page = 1, hasMore = true, busy = false, gen = 0, dry = 0, quiet = 0, said = false;   // quiet: pages in a row with nothing to show (Completed only); said: a card on this source had a status
     const seen = new Set();
     async function load(reset) {
-      if (reset) { gen++; page = 1; hasMore = true; seen.clear(); dry = 0; more.replaceChildren(); grid.replaceChildren(...Array.from({ length: 12 }, () => el('div.skel.cover'))); }
+      if (reset) { gen++; page = 1; hasMore = true; seen.clear(); dry = 0; quiet = 0; said = false; more.replaceChildren(); grid.replaceChildren(...Array.from({ length: 12 }, () => el('div.skel.cover'))); srcRow.style.display = sort === 'trending' ? 'none' : ''; }
+      if (sort === 'trending') { if (reset) { hasMore = false; const my = gen; K.disc.trending(grid, () => my === gen && root.isConnected); } return; }
       if (busy && !reset) return;
+      if (!reset && quiet >= 5) return;
       if (!hasMore) return;
       busy = true;
       const my = gen;
@@ -469,20 +475,27 @@
         const res = await K.cached(`l:${src}:${sort}:${page}`, 5 * 60e3, () => P(src).list({ sort, page }));
         if (my !== gen || !root.isConnected) return;
         if (page === 1) grid.replaceChildren();
-        const start = grid.children.length;
         const fresh = res.items.filter(s => s.slug && !seen.has(s.slug) && K.notTrash(s));
         res.items.forEach(s => seen.add(s.slug));
-        fresh.forEach((s, i) => grid.append(card(s, start + i < 24 ? i : i % 12)));
+        const doneOnly = !!K.disc?.doneOnly?.(), show = doneOnly ? fresh.filter(s => K.disc.isDone(s.status)) : fresh;
+        if (show.length) grid.querySelector(':scope > .empty')?.remove();
+        const start = grid.children.length;
+        show.forEach((s, i) => grid.append(card(s, start + i < 24 ? i : i % 12)));
         dry = fresh.length ? 0 : dry + 1;
+        quiet = show.length || !doneOnly ? 0 : quiet + 1;
         hasMore = res.hasMore && dry < 2; page++;
-        if (!grid.children.length) grid.replaceChildren(el('div.empty', { style: { gridColumn: '1/-1' } }, el('p', { text: 'Nothing to show.' })));
+        said ||= fresh.some(s => s.status);
+        const noStatus = doneOnly && page >= 3 && !said;   // two pages and no card says: this source's lists don't
+        if (noStatus) hasMore = false;
+        if (!grid.querySelector(':scope > .card')) grid.replaceChildren(el('div.empty', { style: { gridColumn: '1/-1' } }, el('p', { text: noStatus ? 'This source\'s lists don\'t say which series are completed.' : doneOnly ? (hasMore && quiet < 5 ? 'Looking for completed series…' : 'No completed series on the pages so far.') : 'Nothing to show.' })));
         ok = true;
       } catch (e) {
         if (my === gen) { if (page === 1) grid.replaceChildren(K.errorBox(e)); else more.replaceChildren(el('button.btn', { onclick: () => { more.replaceChildren(); load(); } }, icon('refresh'), 'Load more')); }
       } finally {
         busy = false;
         requestAnimationFrame(measure);
-        if (ok && my === gen && hasMore) requestAnimationFrame(() => { if (near()) setTimeout(() => load(), 60); });
+        if (ok && my === gen && hasMore && quiet >= 5) more.replaceChildren(el('button.btn', { onclick: () => { quiet = 0; more.replaceChildren(); load(); } }, icon('refresh'), 'Look further'));
+        else if (ok && my === gen && hasMore) requestAnimationFrame(() => { if (near()) setTimeout(() => load(), 60); });
       }
     }
     const view = root.closest('.view');
@@ -499,6 +512,7 @@
     const input = el('input', { type: 'search', placeholder: 'Search titles', value: r.query.get('q') || '', spellcheck: false, autocomplete: 'off' });
     root.append(el('div.searchbox.glass', icon('search'), input));
     const out = el('div', { style: { marginTop: '10px' } });
+    if (K.disc?.searchFilter && K.libx?.search) root.append(K.disc.searchFilter(out));   // Completed only (discover.js)
     root.append(out);
     let gen = 0;
     async function run(q) {
@@ -594,7 +608,7 @@
     if (K.flag(provider, slug).trash) root.append(el('div.glass', { style: { padding: '12px 16px', margin: '0 0 14px', display: 'flex', gap: '10px', alignItems: 'center' } },
       icon('trash'), el('span', { style: { flex: 1 }, text: 'You put this in Absolute trash, so it\'s hidden from your feed.' }),
       el('button.btn.small', { onclick: () => { const f = { ...K.data.flags[key] }; delete f.trash; if (f.hidden || f.completed) K.data.flags[key] = f; else delete K.data.flags[key]; K.save('flags'); K.toast('Restored', 'ok'); K.go('/series/' + provider + '/' + encodeURIComponent(slug), true); location.reload(); } }, icon('undo'), 'Restore')));
-    root.append(hero, el('div', { style: { marginTop: '18px' } }, desc), K.libx?.seriesPanel?.(s) || '');
+    root.append(hero, K.rx?.recapCard?.(s, chapters) || '', el('div', { style: { marginTop: '18px' } }, desc), K.libx?.seriesPanel?.(s) || '', K.chars?.section?.(s, chapters) || '', (!offline && K.disc?.similarRow?.(s)) || '');
 
     // chapters — Kotatsu style: long-press or right-click a chapter to start selecting, Shift-click for a range
     let asc = false, selecting = false, view = 'all', anchor = null;
