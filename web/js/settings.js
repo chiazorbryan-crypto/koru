@@ -38,6 +38,74 @@
   }
   const panel = (ic, title, sub, ...kids) => el('section.panel.glass', el('h3', icon(ic), title), sub ? el('p', { text: sub }) : null, ...kids);
 
+  // ---------- sections: the panels, grouped, with a side menu and a search ----------
+  const SECTIONS = [
+    { id: 'look', name: 'Appearance', ic: 'palette', sub: 'Style, colours, glass, wallpaper, motion and the sidebar.', has: ['Style', 'Looks', 'Colours', 'Gradients', 'Wallpaper', 'Glass', 'Glow', 'Motion', 'Shape and text', 'Sidebar'] },
+    { id: 'read', name: 'Reading', ic: 'book', sub: 'How chapters open, scroll and look, plus sounds, sharpening and translation.', has: ['Pages and layout', 'Moving through chapters', 'Ambient light', 'Night filter', 'While you read', 'Reader'] },
+    { id: 'library', name: 'Library & sync', ic: 'folder', sub: 'Your data, backups, importing from other apps and keeping your PCs the same.', has: ['Library and data', 'Import from another app', 'Sync between PCs', 'Sync with your PC', 'Privacy'] },
+    { id: 'pc', name: 'Windows', ic: 'pages', sub: 'Koru on your desktop: the taskbar, the desktop widget and the Now playing player.', has: ['Taskbar', 'Desktop', 'Now playing'] },
+    { id: 'speed', name: 'Performance', ic: 'chart', sub: 'Graphics, smoothness and checking the sources.', has: ['Graphics', 'Sources'] },
+    { id: 'about', name: 'About', ic: 'sparkle', sub: 'Your version and updates.', has: ['About'] }
+  ];
+  let curSection = (() => { try { return localStorage.getItem('koru-set-section') || 'look'; } catch { return 'look'; } })();
+  let setQuery = '';
+  // the Reader panel's many rows, sorted into smaller cards (each row keeps working: it's moved, not rebuilt)
+  const READER_CARDS = [
+    ['Pages and layout', 'pages', 'How pages sit on the screen.', ['Layout', 'Page width', 'Gap between pages', 'Right to left', 'Two pages side by side', 'First page alone', 'Tap sides to turn', 'Zen mode']],
+    ['Moving through chapters', 'scroll', 'Auto-scroll, what comes next, and saving ahead.', ['Auto-scroll speed', 'Auto page turn', 'Start auto-scroll on every chapter', 'Next-chapter countdown', 'Keep reading into the next chapter', 'Pages to load ahead', 'Download next chapters while reading', 'Remove those after reading']],
+    ['Ambient light', 'sparkle', 'The colours of the page glowing around it.', ['Ambient light', 'Ambient follows', 'Ambient strength', 'Ambient softness', 'Ambient colour', 'Ambient smoothness', 'Calm bright pages']],
+    ['Night filter', 'eyeoff', 'Warmer, dimmer pages at night.', ['Night filter', 'Night warmth', 'Night brightness', 'Turn the night filter on by itself', 'Night starts at', 'Night ends at']],
+    ['While you read', 'book', 'Sounds, sharpening, translation and little extras.', []]
+  ];
+  function splitReader(p) {
+    const rows = [...p.querySelectorAll(':scope > .ctl, :scope > *:not(h3):not(p)')];
+    const cards = READER_CARDS.map(([t, ic, sub]) => el('section.panel.glass', el('h3', icon(ic), t), el('p', { text: sub })));
+    for (const r of rows) {
+      const lab = (r.querySelector('.lab')?.firstChild?.textContent || '').trim();
+      let i = READER_CARDS.findIndex(c => c[3].includes(lab));
+      if (i < 0) i = READER_CARDS.length - 1;
+      cards[i].append(r);
+    }
+    return cards.filter(c => c.children.length > 2);
+  }
+  function organize(grid) {
+    const titleOf = p => (p.querySelector('h3')?.textContent || '').trim();
+    const panels = [...grid.children].flatMap(p => titleOf(p) === 'Reader' ? splitReader(p) : [p]);
+    const groups = new Map(SECTIONS.map(s => [s.id, []]));
+    for (const p of panels) {
+      const t = titleOf(p), sec = SECTIONS.find(s => s.has.includes(t)) || SECTIONS.find(s => s.id === 'library');
+      groups.get(sec.id).push(p);
+    }
+    for (const s of SECTIONS) groups.get(s.id).sort((a, b) => { const i = x => { const n = s.has.indexOf(titleOf(x)); return n < 0 ? 99 : n; }; return i(a) - i(b); });
+    const live = SECTIONS.filter(s => groups.get(s.id).length);
+    if (!live.some(s => s.id === curSection)) curSection = live[0]?.id || 'look';
+    const main = el('div.set-main');
+    const nav = el('nav.set-nav');
+    const search = el('input.txt.set-search', { type: 'search', placeholder: 'Search settings', value: setQuery, spellcheck: false });
+    const show = () => {
+      const q = search.value.trim().toLowerCase(); setQuery = search.value;
+      nav.querySelectorAll('.set-nav-btn').forEach(b => b.classList.toggle('on', !q && b.dataset.id === curSection));
+      if (q) {
+        const found = [];
+        for (const s of live) {
+          const hits = groups.get(s.id).filter(p => p.textContent.toLowerCase().includes(q));
+          if (hits.length) found.push(el('div.set-sec', el('h2.set-h', icon(s.ic), s.name), el('div.set-cols', ...hits)));
+        }
+        main.replaceChildren(...(found.length ? found : [el('div.set-empty', { text: 'No setting matches "' + search.value.trim() + '"' })]));
+        return;
+      }
+      const s = live.find(x => x.id === curSection);
+      main.replaceChildren(el('div.set-sec', el('h2.set-h', icon(s.ic), s.name), el('p.set-sub', { text: s.sub }), el('div.set-cols' + (groups.get(s.id).length === 1 ? '.one' : ''), ...groups.get(s.id))));
+    };
+    nav.append(search, ...live.map(s => el('button.set-nav-btn', { dataset: { id: s.id }, onclick: () => {
+      curSection = s.id; search.value = ''; try { localStorage.setItem('koru-set-section', s.id); } catch {}
+      show(); main.closest('.view')?.scrollTo({ top: 0, behavior: 'smooth' });
+    } }, icon(s.ic), el('span', { text: s.name }), el('small', { text: String(groups.get(s.id).length) }))));
+    search.addEventListener('input', show);
+    show();
+    return el('div.set-layout', nav, main);
+  }
+
   K.views.settings = async function (root) {
     root.append(el('div.head', el('div', el('h1', { text: 'Settings' }), el('div.sub', { text: 'Make Koru yours. Every change shows up right away.' }))));
     const body = el('div');
@@ -440,7 +508,7 @@
         upd,
         el('p.muted', { style: { fontSize: '.85em', marginTop: '12px' }, text: 'Koru reads each site\'s public pages. Paid or locked chapters stay locked. Please support the scan groups on their sites.' }),
         el('p', { style: { fontSize: '.85em', marginTop: '10px', fontWeight: 600, opacity: .8 }, text: 'Made by B0nX' })));
-      return grid;
+      return organize(grid);
     }
   };
 })();
