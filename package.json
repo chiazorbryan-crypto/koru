@@ -1,6 +1,6 @@
 {
   "name": "koru",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Koru — a personal manga and manhwa reader",
   "type": "module",
   "main": "electron/main.js",
@@ -52,6 +52,10 @@
       {
         "from": "build/koru-taskbar.exe",
         "to": "koru-taskbar.exe"
+      },
+      {
+        "from": "build/koru-media.exe",
+        "to": "koru-media.exe"
       }
     ]
   }

@@ -727,3 +727,25 @@ html.lite.title-grad .head h1, html.lite.title-grad .hero h1, html.lite.title-gr
 html.mini .sidebar { display: none !important; }
 html.mini .shell { padding: 0 !important; }
 @media (max-width: 700px) { .section > .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; } .section > .seg::-webkit-scrollbar { display: none; } }
+
+/* Now playing (sidebar) */
+.np-btn { position: relative; width: 44px; height: 44px; margin: 6px auto; padding: 0; border: 1px solid rgba(255,255,255,.14); border-radius: 12px; overflow: hidden; background: rgba(255,255,255,.06); cursor: pointer; flex: none; display: grid; place-items: center; color: inherit; }
+.np-btn[hidden] { display: none; }
+.np-btn img { width: 100%; height: 100%; object-fit: cover; }
+.np-note { font-size: 20px; opacity: .8; }
+.np-eq { position: absolute; right: 3px; bottom: 3px; display: none; gap: 2px; align-items: flex-end; height: 12px; padding: 2px 3px; border-radius: 5px; background: rgba(0,0,0,.55); }
+.np-btn.playing .np-eq { display: flex; }
+.np-eq b { width: 2px; height: 4px; background: var(--accent, #8be); border-radius: 1px; animation: np-eq 1s ease-in-out infinite; }
+.np-eq b:nth-child(2) { animation-delay: -.33s; } .np-eq b:nth-child(3) { animation-delay: -.66s; }
+@keyframes np-eq { 0%, 100% { height: 3px; } 50% { height: 9px; } }
+html.lite .np-eq b, html.no-motion .np-eq b { animation: none; height: 6px; }
+.np-pop { position: fixed; z-index: 420; width: 280px; padding: 12px; border-radius: calc(var(--radius) * .9); display: grid; grid-template-columns: 64px 1fr; gap: 10px 12px; align-items: center;
+  background: color-mix(in srgb, var(--bg) 94%, var(--text) 5%) !important; border: 1px solid rgba(255,255,255,.09); box-shadow: 0 16px 40px rgba(0,0,0,.5); animation: menu-in var(--t-fast) ease-out both; }
+.np-art { width: 64px; height: 64px; border-radius: 10px; overflow: hidden; background: rgba(255,255,255,.06); display: grid; place-items: center; }
+.np-art img { width: 100%; height: 100%; object-fit: cover; }
+.np-info { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.np-info b, .np-info span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-info span { font-size: .88em; opacity: .85; }
+.np-info small { color: var(--muted); font-size: .75em; }
+.np-ctl { grid-column: 1 / -1; display: flex; justify-content: center; gap: 10px; }
+.np-ctl .np-main { width: 44px; height: 44px; }

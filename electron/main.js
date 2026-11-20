@@ -281,6 +281,28 @@ const widget = (() => {
   };
 })();
 
+// Now playing: a tiny helper (build/koru-media.exe, from native/koru-media.cs) reads Windows' media controls,
+// so Koru's mini player shows and controls Glasswave, Spotify, a browser... It's started the first time the page
+// asks, waits for Windows to report changes (no polling), and ends when Koru does (its input pipe closes).
+const media = (() => {
+  let child = null, now = { on: false }, lastAsk = 0, fails = 0, retryT = 0;
+  const exe = () => app.isPackaged ? path.join(process.resourcesPath, 'koru-media.exe') : path.join(here, '..', 'build', 'koru-media.exe');
+  function start() {
+    if (child || process.platform !== 'win32' || !fs.existsSync(exe())) return;
+    try { child = spawn(exe(), [], { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] }); } catch { child = null; return; }
+    let buf = '';
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', d => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (line) { try { now = JSON.parse(line); fails = 0; } catch {} } } });
+    child.on('exit', () => { child = null; now = { on: false }; if (++fails < 5 && Date.now() - lastAsk < 60000) retryT = setTimeout(start, 2000 * fails); });
+    child.stdin.on('error', () => {});
+  }
+  app.on('will-quit', () => { clearTimeout(retryT); try { child?.stdin.end(); child?.kill(); } catch {} });
+  return {
+    state() { lastAsk = Date.now(); start(); return now; },
+    send(cmd) { if (!['toggle', 'play', 'pause', 'next', 'prev'].includes(cmd) || !child) return false; try { child.stdin.write(cmd + '\n'); return true; } catch { return false; } }
+  };
+})();
+
 // Mini reader: the chapter you're reading in a small window that stays on top of everything.
 // When it closes, the main window reloads your saved progress so the two never overwrite each other.
 let mini = null;
@@ -372,6 +394,10 @@ app.whenReady().then(() => {
     }
     if (url.pathname === '/k/wallpaper') return wallpaperRoute(request, url);
     if (url.pathname === '/k/widget' || url.pathname.startsWith('/k/widget/')) return widget.route(request, url);
+    if (url.pathname === '/k/media') {
+      if (request.method === 'GET') return reply(200, media.state());
+      if (request.method === 'POST') { let cmd = ''; try { cmd = String(JSON.parse(await request.text()).cmd || ''); } catch {} return reply(media.send(cmd) ? 200 : 400, { ok: true }); }
+    }
     if (url.pathname === '/k/mini' && request.method === 'POST') {
       let hash = ''; try { hash = String(JSON.parse(await request.text()).hash || ''); } catch {}
       if (!/^\/read\//.test(hash)) return reply(400, { error: 'Open a chapter first' });

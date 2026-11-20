@@ -581,7 +581,7 @@ gl_FragColor=vec4(clamp((c+(a+b+d+e)*w)/(1.0+4.0*w),0.0,1.0),1.0);}`;
   // Every sound is made once with the Web Audio API (no audio files): noise, filters and short generated
   // clicks and notes are rendered ahead into a 14 to 24 second clip, whose end is blended into its start so it
   // loops without a seam. Playing it is then one looping clip and a volume, which costs almost nothing.
-  const SOUNDS = [['off', 'Off'], ['rain', 'Rain'], ['wind', 'Night wind'], ['cafe', 'Café'], ['fire', 'Fireplace'], ['lofi', 'Lo-fi chords']];
+  const SOUNDS = [['off', 'Off'], ['rain', 'Rain'], ['wind', 'Night wind'], ['cafe', 'Café'], ['fire', 'Fireplace'], ['lofi', 'Lo-fi (never repeats)']];
   const SR = 32000;
   const Sound = {
     ctx: null, master: null, bufs: {}, cur: 'off', node: null, gen: 0, sleepT: 0,
@@ -602,6 +602,7 @@ gl_FragColor=vec4(clamp((c+(a+b+d+e)*w)/(1.0+4.0*w),0.0,1.0),1.0);}`;
         }
         clearTimeout(this.sleepT);
         if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+        if (RECIPES[name].stream) { await this.stream(name, my); return; }
         const buf = await (this.bufs[name] ||= make(name).catch(e => { delete this.bufs[name]; throw e; }));
         if (my !== this.gen || !this.ctx) return;
         const src = this.ctx.createBufferSource(), g = this.ctx.createGain(), t = this.ctx.currentTime;
@@ -611,13 +612,32 @@ gl_FragColor=vec4(clamp((c+(a+b+d+e)*w)/(1.0+4.0*w),0.0,1.0),1.0);}`;
         this.node = { src, g };
       } catch { if (my === this.gen) { this.cur = 'off'; paintButtons(); } }
     },
+    // endless music: plays a piece with the next one already lined up behind it. Each piece that finishes makes and
+    // lines up another (an audio event, so it keeps going even when Koru is minimized and its timers are slowed).
+    async stream(name, my) {
+      let last = await make(name);
+      if (my !== this.gen || !this.ctx) return;
+      const ctx = this.ctx, g = ctx.createGain(), t0 = ctx.currentTime + 0.05;
+      g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(1, t0 + 1.8); g.connect(this.master);
+      const node = this.node = { g, srcs: [] };
+      const alive = () => this.node === node && my === this.gen;
+      let end = t0;
+      const start = piece => {
+        const at = Math.max(end, ctx.currentTime + 0.05), s = ctx.createBufferSource();
+        s.buffer = piece.buf; s.connect(g); s.start(at); end = at + piece.len; node.srcs.push(s);
+        s.onended = () => { const i = node.srcs.indexOf(s); if (i >= 0) node.srcs.splice(i, 1); if (alive()) more(); };
+      };
+      const more = () => make(name).then(p => { last = p; }).catch(() => {}).then(() => { if (alive()) start(last); });   // if making fails, the last piece plays again
+      start(last);
+      more();
+    },
     fadeOut() {
       this.gen++;
       const n = this.node; this.node = null;
       if (!n) return;
       const t = this.ctx.currentTime;
       n.g.gain.cancelScheduledValues(t); n.g.gain.setValueAtTime(n.g.gain.value, t); n.g.gain.linearRampToValueAtTime(0, t + 0.9);
-      n.src.stop(t + 1);
+      for (const s of n.src ? [n.src] : n.srcs || []) { try { s.stop(t + 1); } catch {} }
     },
     stop() {
       this.fadeOut(); this.cur = 'off'; paintButtons();
@@ -629,13 +649,22 @@ gl_FragColor=vec4(clamp((c+(a+b+d+e)*w)/(1.0+4.0*w),0.0,1.0),1.0);}`;
   };
   X.sound = Sound;   // for checking
 
+  const noiseKeep = {};
   async function make(name) {
-    const spec = RECIPES[name];
-    const L = spec.len, tail = spec.tail, oc = new OfflineAudioContext(2, Math.ceil((L + tail) * SR), SR);
+    const spec = RECIPES[name], v = spec.stream ? lofiVariation() : null;
+    const L = v ? v.len : spec.len, tail = spec.tail, oc = new OfflineAudioContext(2, Math.ceil((L + tail) * SR), SR);
     oc.nz = {};
-    for (const c of spec.uses) oc.nz[c] = await noise(oc, L + tail, c);   // made in small steps, between frames
-    spec.build(oc, L);
+    // made in small steps, between frames; the endless lo-fi reuses one long hiss for every piece
+    for (const c of spec.uses) oc.nz[c] = v ? await (noiseKeep[c] ||= noise(oc, 40, c)) : await noise(oc, L + tail, c);
+    spec.build(oc, L, v);
     const r = await oc.startRendering(), n = Math.round(L * SR), x = Math.round(tail * SR);
+    if (v) {   // a piece of the endless lo-fi: kept whole (with its ringing tail), levelled, played once
+      let sum = 0, peak = 0;
+      for (let ch = 0; ch < 2; ch++) { const o = r.getChannelData(ch); for (let i = 0; i < o.length; i += 4) { sum += o[i] * o[i]; peak = Math.max(peak, Math.abs(o[i])); } }
+      const k = Math.min(0.09 / Math.max(1e-4, Math.sqrt(sum / (r.length / 2))), 0.95 / Math.max(1e-4, peak));
+      for (let ch = 0; ch < 2; ch++) { const o = r.getChannelData(ch); for (let i = 0; i < o.length; i++) o[i] *= k; }
+      return { buf: r, len: L };
+    }
     const out = new AudioBuffer({ numberOfChannels: 2, length: n, sampleRate: SR });
     for (let ch = 0; ch < 2; ch++) {
       const d = r.getChannelData(ch), o = out.getChannelData(ch);
@@ -748,47 +777,87 @@ gl_FragColor=vec4(clamp((c+(a+b+d+e)*w)/(1.0+4.0*w),0.0,1.0),1.0);}`;
       const pops = poisson(0.25, T).map(t => { const a = 0.2 + Math.random() * 0.3; return { t, len: 0.06, f: s => rnd() * a * Math.exp(-s / 0.012) }; });
       chain(play(oc, events(oc, T, pops)), filt(oc, 'lowpass', 900), gain(oc, 0.9), out);
     } },
-    lofi: { len: 4 * 4 * 60 / 70, tail: 3, add: true, uses: ['pink'], build(oc, L) {
-      const out = oc.destination, beat = 60 / 70, hz = m => 440 * Math.pow(2, (m - 69) / 12);
-      const tone = filt(oc, 'lowpass', 2100, 0.5), room = reverb(oc, 2.2), wet = gain(oc, 0.22), dry = gain(oc, 0.8);
+    // Lo-fi: never the same twice. Each piece is 8 bars with its own chord progression, key, tempo, chord rhythm,
+    // drum groove, melody and tone; the player makes the next piece while this one plays and lets them flow into each other.
+    lofi: { stream: true, tail: 3, uses: ['pink'], build(oc, L, v) {
+      const out = oc.destination, beat = 60 / v.bpm, hz = m => 440 * Math.pow(2, (m - 69) / 12);
+      const tone = filt(oc, 'lowpass', v.cutoff, 0.5), room = reverb(oc, 2.2), wet = gain(oc, v.wet), dry = gain(oc, 0.8);
       tone.connect(dry); dry.connect(out); tone.connect(room); room.connect(wet); wet.connect(out);
-      const wow = oc.createOscillator(); wow.frequency.value = 0.45; const wowG = gain(oc, 7); wow.connect(wowG); wow.start();   // tape wobble, in cents
-      // Dm9, G13, Cmaj9, Am9: [bass, chord notes]
-      const prog = [[38, [53, 57, 60, 64]], [43, [53, 57, 59, 64]], [36, [52, 55, 59, 62]], [45, [55, 59, 60, 64]]];
-      const note = (m, at, dur, vel, bass) => {
+      const wow = oc.createOscillator(); wow.frequency.value = 0.3 + Math.random() * 0.4; const wowG = gain(oc, 5 + Math.random() * 6); wow.connect(wowG); wow.start();   // tape wobble, in cents
+      const note = (m, at, dur, vel, kind) => {
         const g = gain(oc, 0); g.connect(tone);
-        g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(vel, at + (bass ? 0.03 : 0.012));
-        g.gain.setTargetAtTime(vel * 0.35, at + 0.05, 0.6); g.gain.setTargetAtTime(0, at + dur, 0.35);
-        const parts = bass ? [[1, 1, 'sine']] : [[1, 1, 'sine'], [2.002, 0.18, 'sine'], [1, 0.12, 'triangle']];
+        g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(vel, at + (kind === 'bass' ? 0.03 : kind === 'pad' ? 0.25 : 0.012));
+        g.gain.setTargetAtTime(vel * (kind === 'pad' ? 0.8 : 0.35), at + 0.05, 0.6); g.gain.setTargetAtTime(0, at + dur, kind === 'pad' ? 0.6 : 0.35);
+        const parts = kind === 'bass' ? [[1, 1, 'sine']] : kind === 'lead' ? [[1, 1, 'triangle'], [2, 0.08, 'sine']]
+          : kind === 'pad' ? [[1, 0.7, 'triangle'], [1.004, 0.5, 'triangle']] : [[1, 1, 'sine'], [2.002, 0.18, 'sine'], [1, 0.12, 'triangle']];
         for (const [mul, a, type] of parts) {
           const o = oc.createOscillator(), og = gain(oc, a); o.type = type; o.frequency.value = hz(m) * mul; wowG.connect(o.detune);
           o.connect(og); og.connect(g); o.start(at); o.stop(at + dur + 2.5);
         }
       };
-      prog.forEach(([b, ch], bar) => {
+      v.chords.forEach(([bass, ch], bar) => {
         const t = bar * 4 * beat;
-        ch.forEach((m, n) => { note(m, t + n * 0.028, 3.6 * beat, 0.06, false); note(m, t + 2.5 * beat + n * 0.02, 1.3 * beat, 0.03, false); });
-        note(b, t, 2.4 * beat, 0.16, true); note(b + 12, t + 2.5 * beat, 1.3 * beat, 0.08, true);
+        for (const [st, len, vel] of v.comp) ch.forEach((m, n) => note(m, t + st * beat + n * (0.015 + Math.random() * 0.02), len * beat, vel * v.keysVel, v.keys));
+        for (const [st, len, oct] of v.bassLine) note(bass + oct, t + st * beat, len * beat, oct ? 0.08 : 0.16, 'bass');
       });
-      // soft drums: kick on 1 and 3, a brushed snare on 2 and 4, quiet swung hats
+      for (const [m, st, len] of v.melody) note(m, st * beat, len * beat, 0.045, 'lead');
+      // drums
       const kick = oc.createBuffer(1, Math.ceil(0.35 * SR), SR), kd = kick.getChannelData(0);
-      for (let i = 0, ph = 0; i < kd.length; i++) { const s = i / SR; ph += 2 * Math.PI * (45 + 70 * Math.exp(-s / 0.03)) / SR; kd[i] = Math.sin(ph) * Math.exp(-s / 0.12) * 0.32; }
+      for (let i = 0, ph = 0; i < kd.length; i++) { const t = i / SR; ph += 2 * Math.PI * (45 + 70 * Math.exp(-t / 0.03)) / SR; kd[i] = Math.sin(ph) * Math.exp(-t / 0.12) * 0.32; }
       const snare = oc.createBuffer(1, Math.ceil(0.25 * SR), SR), sd = snare.getChannelData(0);
-      for (let i = 0; i < sd.length; i++) sd[i] = rnd() * Math.exp(-i / SR / 0.06) * 0.1;
+      for (let i = 0; i < sd.length; i++) sd[i] = rnd() * Math.exp(-i / SR / (v.rim ? 0.025 : 0.06)) * 0.1;
       const hat = oc.createBuffer(1, Math.ceil(0.05 * SR), SR), hd = hat.getChannelData(0);
       for (let i = 0; i < hd.length; i++) hd[i] = rnd() * Math.exp(-i / SR / 0.012) * 0.05;
-      const snF = filt(oc, 'bandpass', 1900, 0.7), hatF = filt(oc, 'highpass', 7000); snF.connect(dry); hatF.connect(dry);
-      for (let b = 0; b < 16; b++) {
-        const t = b * beat;
-        if (b % 2 === 0) play(oc, kick, t).connect(dry); else play(oc, snare, t).connect(snF);
-        play(oc, hat, t).connect(hatF); play(oc, hat, t + beat * 0.6).connect(hatF);
+      const snF = filt(oc, 'bandpass', v.rim ? 3200 : 1900, v.rim ? 2 : 0.7), hatF = filt(oc, 'highpass', 7000); snF.connect(dry); hatF.connect(dry);
+      for (let bar = v.drumsFrom; bar < v.chords.length; bar++) for (let st = 0; st < 8; st++) {
+        const t = bar * 4 * beat + (st + (st % 2 ? v.swing : 0)) * beat / 2;
+        if (v.kick[st]) play(oc, kick, t).connect(dry);
+        if (v.snare[st]) play(oc, snare, t).connect(snF);
+        if (v.hats[st] && Math.random() < 0.92) { const h = gain(oc, st % 2 ? 0.6 : 1); play(oc, hat, t).connect(h); h.connect(hatF); }
       }
-      // vinyl: a little hiss and crackle, only inside the loop so the seam stays clean
-      chain(play(oc, nz(oc, 'pink'), 0, L), filt(oc, 'lowpass', 5000), gain(oc, 0.014), out);
-      const cr = poisson(4, L - 0.05).map(t => { const a = 0.01 + Math.pow(Math.random(), 3) * 0.08; return { t, len: 0.004, f: s => rnd() * a * Math.exp(-s / 0.0007) }; });
+      // vinyl: a little hiss and crackle
+      chain(play(oc, nz(oc, 'pink'), 0, L), filt(oc, 'lowpass', 5000), gain(oc, v.vinyl), out);
+      const cr = poisson(4, L - 0.05).map(t => { const a = 0.01 + Math.pow(Math.random(), 3) * 0.08; return { t, len: 0.004, f: x => rnd() * a * Math.exp(-x / 0.0007) }; });
       chain(play(oc, events(oc, L, cr), 0, L), filt(oc, 'highpass', 1500), out);
     } }
   };
+
+  // a new lo-fi piece's ingredients, picked at random
+  function lofiVariation() {
+    const pick = a => a[Math.floor(Math.random() * a.length)];
+    const Q = { m9: [3, 7, 10, 14], maj9: [4, 7, 11, 14], 9: [4, 10, 14, 7], maj7: [4, 7, 11], m7: [3, 7, 10], 7: [4, 7, 10], '7sus': [5, 7, 10, 14], m6: [3, 7, 9], m11: [3, 10, 14, 17], '6/9': [4, 9, 14, 7] };
+    const PROGS = [
+      [[2, 'm9'], [7, '9'], [0, 'maj9'], [9, 'm9']], [[5, 'maj7'], [4, 'm7'], [2, 'm7'], [0, 'maj7']], [[9, 'm9'], [5, 'maj9'], [0, 'maj7'], [7, '9']],
+      [[0, 'maj9'], [9, 'm7'], [2, 'm9'], [7, '7sus']], [[5, 'maj9'], [7, '9'], [4, 'm7'], [9, 'm9']], [[2, 'm7'], [4, 'm7'], [5, 'maj7'], [7, '9']],
+      [[9, 'm9'], [2, 'm11'], [7, '9'], [0, '6/9']], [[0, 'maj7'], [4, '7'], [9, 'm9'], [5, 'm6']], [[4, 'm7'], [9, 'm9'], [2, 'm9'], [7, '7sus']],
+      [[5, 'maj9'], [5, 'm6'], [0, 'maj9'], [9, 'm7']]
+    ];
+    const key = Math.floor(Math.random() * 12) - 5, prog = pick(PROGS), prog2 = Math.random() < 0.45 ? pick(PROGS) : prog;
+    const voice = (root, q) => {   // chord tones folded into a warm middle range; the bass plays the root
+      const notes = Q[q].map(i => { let m = 48 + ((root + key + i) % 12 + 12) % 12; while (m < 53) m += 12; while (m > 70) m -= 12; return m; });
+      return [...new Set(notes)].sort((x, y) => x - y);
+    };
+    const bassOf = root => { let m = 36 + ((root + key) % 12 + 12) % 12; if (m > 45) m -= 12; return m; };
+    const chords = [...prog, ...prog2].map(([r, q]) => [bassOf(r), voice(r, q)]);
+    const COMPS = [[[0, 3.6, 0.06], [2.5, 1.3, 0.03]], [[0, 1.8, 0.055], [2, 1.8, 0.045]], [[0, 0.9, 0.05], [1.5, 0.9, 0.04], [3, 0.9, 0.04]],
+      [[0, 3.9, 0.065]], [[0.5, 1.4, 0.05], [2.5, 1.4, 0.045]], [[0, 2.6, 0.06], [3, 0.9, 0.035]]];
+    const BASS = [[[0, 2.4, 0], [2.5, 1.3, 12]], [[0, 3.6, 0]], [[0, 1.4, 0], [1.5, 0.9, 0], [3, 0.9, 7]], [[0, 1.8, 0], [2, 1.8, 0]]];
+    const KICKS = [[1, 0, 0, 0, 1, 0, 0, 0], [1, 0, 0, 1, 0, 0, 1, 0], [1, 0, 0, 0, 0, 1, 1, 0], [1, 0, 1, 0, 0, 0, 1, 0], [1, 0, 0, 0, 1, 0, 0, 1]];
+    const SNARES = [[0, 0, 1, 0, 0, 0, 1, 0], [0, 0, 1, 0, 0, 0, 1, 1], [0, 0, 1, 0, 0, 1, 1, 0]];
+    const HATS = [[1, 1, 1, 1, 1, 1, 1, 1], [1, 0, 1, 0, 1, 0, 1, 0], [1, 1, 1, 0, 1, 1, 1, 1], [0, 1, 0, 1, 0, 1, 0, 1]];
+    const bpm = 64 + Math.floor(Math.random() * 20), bars = chords.length;
+    // a few soft notes from the key's pentatonic scale, sometimes none
+    const melody = [];
+    if (Math.random() < 0.75) {
+      const scale = [0, 2, 4, 7, 9].map(i => ((i + key) % 12 + 12) % 12);
+      const pool = []; for (let m = 70; m <= 86; m++) if (scale.includes(m % 12)) pool.push(m);
+      let at = pool.length >> 1; const dens = 0.15 + Math.random() * 0.2;
+      for (let st = 4; st < bars * 8; st++) if (Math.random() < dens) { at = Math.max(0, Math.min(pool.length - 1, at + pick([-2, -1, -1, 1, 1, 2, 0]))); melody.push([pool[at], st / 2, pick([0.5, 1, 1, 1.5])]); }
+    }
+    return { bpm, chords, comp: pick(COMPS), bassLine: pick(BASS), kick: pick(KICKS), snare: pick(SNARES), hats: pick(HATS), swing: 0.08 + Math.random() * 0.14,
+      drumsFrom: Math.random() < 0.3 ? 2 : 0, rim: Math.random() < 0.35, keys: Math.random() < 0.3 ? 'pad' : 'keys', keysVel: 0.9 + Math.random() * 0.3,
+      cutoff: 1500 + Math.random() * 1200, wet: 0.16 + Math.random() * 0.14, vinyl: 0.008 + Math.random() * 0.012, melody, len: bars * 4 * 60 / bpm };
+  }
 
   let soundBox = null, soundOff = null;
   const soundRow = () => {

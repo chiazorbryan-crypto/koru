@@ -129,3 +129,11 @@ html.nogpu:not(.lite) .cele.out, html.nogpu:not(.lite) .foxpop.out { animation: 
 .perfrows { display: grid; gap: 6px; }
 .perfrow { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; padding: 8px 12px; border-radius: 12px; background: rgba(255, 255, 255, .05); }
 .perfrow small { grid-column: 1 / -1; }
+/* streak keeping: restore and pause */
+.streak-box { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; vertical-align: middle; }
+.streak-box .streak { margin-left: 0; font: inherit; font-size: 12.5px; cursor: pointer; }
+.streak-box .streak:first-child { margin-left: 10px; }
+.streak.paused { background: rgba(120, 170, 255, .16); border-color: rgba(120, 170, 255, .4); }
+.streak.restore { background: linear-gradient(90deg, rgba(80, 220, 160, .2), rgba(60, 160, 255, .18)); border-color: rgba(90, 210, 170, .45); }
+.streak.pausebtn { background: rgba(255, 255, 255, .05); border-color: var(--edge, rgba(255, 255, 255, .16)); font-weight: 500; opacity: .85; }
+.streak.pausebtn:hover, .streak.restore:hover { opacity: 1; filter: brightness(1.15); }

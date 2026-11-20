@@ -51,13 +51,63 @@
   // ---------- streaks ----------
   const day = d => K.dayKey(d);
   const readDay = (days, d) => (days[day(d)]?.ms || 0) >= 60000 || (days[day(d)]?.ch || 0) > 0;
+  // Keeping a streak: 5 restores a month fill in days you missed, and a pause freezes it (days while paused don't break it).
+  // Saved with your stats: stats.keep = { restored: { day: true }, pauses: [[fromDay, toDay|null]], used: { 'YYYY-MM': n } }
+  const RESTORES = 5;
+  const keep = () => { const k = (K.data.stats.keep ||= {}); k.restored ||= {}; k.pauses ||= []; k.used ||= {}; return k; };
+  const monthKey = (d = new Date()) => day(d).slice(0, 7);
+  const isPaused = k => keep().pauses.some(([a, b]) => k >= a && (!b || k <= b));
+  const kept = (days, d) => readDay(days, d) || !!keep().restored[day(d)];
   function streak() {
     const days = (K.statsAll?.() || K.data.stats)?.days || {};   // with GitHub sync: both PCs
     const d = new Date(); d.setHours(12, 0, 0, 0);
-    const today = readDay(days, d);
+    const today = kept(days, d);
     if (!today) d.setDate(d.getDate() - 1);
-    let n = 0; while (readDay(days, d)) { n++; d.setDate(d.getDate() - 1); }
-    return { n, today };
+    let n = 0;
+    for (let guard = 0; guard < 5000; guard++) {
+      if (kept(days, d)) n++;
+      else if (!isPaused(day(d))) break;   // a paused day: skipped, the streak carries on past it
+      d.setDate(d.getDate() - 1);
+    }
+    const pausedNow = keep().pauses.some(([, b]) => !b);
+    // days missed since the streak (yesterday backwards), which restores can fill in
+    const missed = [];
+    const m = new Date(); m.setHours(12, 0, 0, 0); m.setDate(m.getDate() - 1);
+    while (missed.length < 8 && !kept(days, m) && !isPaused(day(m))) { missed.push(day(m)); m.setDate(m.getDate() - 1); }
+    let before = 0; { const b = new Date(m); while (before < 5000 && (kept(days, b) || isPaused(day(b)))) { if (kept(days, b)) before++; b.setDate(b.getDate() - 1); } }
+    const left = Math.max(0, RESTORES - (keep().used[monthKey()] || 0));
+    const canRestore = missed.length > 0 && missed.length <= 7 && before > 0 && missed.length <= left;
+    return { n, today, paused: pausedNow, missed, lost: before, left, canRestore };
+  }
+  function restoreStreak() {
+    const s = streak();
+    if (!s.canRestore) { K.toast(s.missed.length > s.left ? `You'd need ${s.missed.length} restores, and you have ${s.left} left this month.` : 'Nothing to restore.', 'error'); return; }
+    const k = keep();
+    for (const d of s.missed) k.restored[d] = true;
+    k.used[monthKey()] = (k.used[monthKey()] || 0) + s.missed.length;
+    K.save('stats');
+    const now = streak();
+    K.toast(`Streak restored: ${now.n} ${now.n === 1 ? 'day' : 'days'} 🔥 (${now.left} ${now.left === 1 ? 'restore' : 'restores'} left this month)`, 'ok');
+    document.dispatchEvent(new CustomEvent('koru-streak'));
+  }
+  function pauseStreak(on) {
+    const k = keep(), t = day(new Date());
+    if (on) { if (!k.pauses.some(([, b]) => !b)) k.pauses.push([t, null]); K.toast('Streak paused ⏸ Days you skip won\'t break it until you resume.', 'ok'); }
+    else {
+      const p = k.pauses.find(([, b]) => !b);
+      if (p) { const y = new Date(); y.setDate(y.getDate() - 1); if (p[0] >= t) k.pauses.splice(k.pauses.indexOf(p), 1); else p[1] = day(y); }
+      K.toast('Streak resumed. Read today to keep it going 🔥', 'ok');
+    }
+    K.save('stats');
+    document.dispatchEvent(new CustomEvent('koru-streak'));
+  }
+  function streakMenu(ev) {
+    const s = streak();
+    K.popMenu(ev, s.n ? `${s.n}-day streak` : 'Streak', [
+      s.canRestore ? ['refresh', `Restore streak (uses ${s.missed.length} of ${s.left} left this month)`, restoreStreak] : null,
+      s.paused ? ['play', 'Resume streak', () => pauseStreak(false)] : ['pause', 'Pause streak', () => pauseStreak(true)],
+      !s.canRestore ? ['refresh', `${s.left} of ${RESTORES} restores left this month`, () => {}, 'muted'] : null
+    ]);
   }
   function bestStreak(days, from, to) {
     const keys = Object.keys(days).filter(k => (!from || k >= from) && (!to || k <= to) && readDay(days, new Date(k + 'T12:00'))).sort();
@@ -70,10 +120,25 @@
     return best;
   }
   function streakChip() {
-    const { n, today } = streak();
-    if (!n) return null;
-    return el('span.streak' + (today ? '' : '.cold'), { title: today ? 'Days in a row you\'ve read' : 'Read today to keep it going' },
-      el('span.fl', { text: '🔥' }), el('span', { text: today ? `${n}-day streak` : `${n}-day streak · read today to keep it` }));
+    const box = el('span.streak-box');
+    const paint = () => {
+      const s = streak();
+      const kids = [];
+      if (s.n || s.paused) {
+        const label = s.paused ? `${s.n}-day streak · paused` : s.today ? `${s.n}-day streak` : `${s.n}-day streak · read today to keep it`;
+        kids.push(el('button.streak' + (s.today || s.paused ? '' : '.cold') + (s.paused ? '.paused' : ''), { title: 'Your streak: restore or pause it', onclick: streakMenu },
+          el('span.fl', { text: s.paused ? '⏸' : '🔥' }), el('span', { text: label })));
+      }
+      if (s.canRestore) kids.push(el('button.streak.restore', { title: `Fill in the ${s.missed.length === 1 ? 'day' : s.missed.length + ' days'} you missed`, onclick: restoreStreak },
+        el('span.fl', { text: '🩹' }), el('span', { text: `Restore your ${s.lost}-day streak (${s.left} left)` })));
+      if (s.n || s.paused) kids.push(el('button.streak.pausebtn', { title: s.paused ? 'Resume your streak' : 'Pause your streak: days you skip won\'t break it', onclick: () => pauseStreak(!s.paused) },
+        el('span', { text: s.paused ? '▶ Resume streak' : '⏸ Pause streak' })));
+      box.replaceChildren(...kids);
+    };
+    paint();
+    const on = () => { if (box.isConnected) paint(); else document.removeEventListener('koru-streak', on); };
+    document.addEventListener('koru-streak', on);
+    return box;
   }
 
   // ---------- badges ----------
@@ -185,7 +250,7 @@
   };
 
   const applyOn = () => document.documentElement.classList.toggle('no-lively', !on());
-  K.lively = { BADGES, queue, mood, sleep, wake, streak, streakChip, bestStreak, badgesCard, checkBadges, celebrateBadge, foxPop, applyOn };
+  K.lively = { BADGES, queue, mood, sleep, wake, streak, streakChip, restoreStreak, pauseStreak, streakMenu, bestStreak, badgesCard, checkBadges, celebrateBadge, foxPop, applyOn };
 
   // the fox needs its z's; added once the sidebar logo exists
   const start = () => {

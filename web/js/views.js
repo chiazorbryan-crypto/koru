@@ -971,6 +971,7 @@
       const dayCount = Math.max(1, Math.round((spanEnd - spanStart) / 864e5) + 1);
       // current streak: days in a row (ending today or yesterday) with at least a minute of reading
       let streak = 0; { const d = new Date(today); if (!((days[dk(d)]?.ms || 0) >= 60000)) d.setDate(d.getDate() - 1); while ((days[dk(d)]?.ms || 0) >= 60000) { streak++; d.setDate(d.getDate() - 1); } }
+      if (K.lively?.streak) streak = K.lively.streak().n;   // the same streak as the Library's (restores and pauses count)
       const tiles = el('div.tiles',
         tile('Reading time', fmt(total), period === 'all' ? 'since ' + new Date(firstDay + 'T00:00').toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : r.label),
         tile('Chapters read', String(chapters), chapters ? (chapters / dayCount).toFixed(1) + ' a day' : 'finish a chapter to count it'),
