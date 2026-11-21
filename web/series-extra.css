@@ -1,0 +1,24 @@
+/* Series colours (series-colors.js) and the quiet source check (source-check.js).
+   The colours are plain variables set once per series; the glow is a still gradient that only fades in. */
+
+/* ---------- series colours ---------- */
+.view[data-sc] { isolation: isolate; }
+/* under the hero (which already shows the cover itself): two soft lights behind the description, panels and chapters */
+.view > .sc-glow { position: absolute; left: 0; right: 0; top: 260px; height: 1100px; z-index: -1; pointer-events: none; contain: strict;
+  background: radial-gradient(58% 420px at 18% 340px, var(--sc-glow), transparent 72%), radial-gradient(48% 400px at 88% 560px, var(--sc-glow2), transparent 70%);
+  animation: sc-in calc(800ms / var(--spd)) ease both; }
+.view[data-sc=strong] > .sc-glow { height: 1500px; background: radial-gradient(62% 460px at 18% 340px, var(--sc-glow), transparent 74%), radial-gradient(52% 440px at 88% 600px, var(--sc-glow2), transparent 72%), radial-gradient(60% 420px at 40% 1100px, var(--sc-glow2), transparent 70%); }
+@keyframes sc-in { from { opacity: 0; } }
+html.no-anim .view > .sc-glow { animation: none; }
+.reader[data-sc] { transition: background-color calc(600ms / var(--spd)) ease; }
+.ctl.sc-amt[hidden], .sx-note [hidden] { display: none !important; }
+
+/* ---------- a moved series: the line on its page, and the list in Settings ---------- */
+.sx-note { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; margin: 14px 0 0; max-width: 900px; }
+.sx-note > .ic { width: 18px; height: 18px; color: var(--accent-solid); flex: none; }
+.sx-t { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.sx-t small { font-size: .8em; }
+.sx-moves { display: grid; gap: 6px; margin-top: 8px; }
+.sx-mv { display: grid; gap: 2px; padding: 8px 10px; color: inherit; text-decoration: none; border-radius: calc(var(--radius) * .6); background: rgba(255,255,255,.04); transition: background var(--t-fast); }
+.sx-mv:hover { background: rgba(255,255,255,.08); }
+.sx-mv small { font-size: .8em; }

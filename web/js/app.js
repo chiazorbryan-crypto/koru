@@ -9,6 +9,7 @@
     ['downloads', 'Downloads', 'download'],
     ['stats', 'Stats', 'chart'],
     ['chat', 'Chat', 'chat'],
+    ['music', 'Music', 'music'],
     ['settings', 'Settings', 'settings']
   ];
 
@@ -18,7 +19,7 @@
     $('#tb-fox').append(K.fox());
     const nav = $('.nav');
     for (const [id, label, ic] of NAV) {
-      nav.append(el('a.nav-btn', { href: '#/' + id, dataset: { nav: id }, title: label }, icon(ic), el('span', { text: label })));
+      nav.append(el('a.nav-btn', { href: '#/' + id, dataset: { nav: id }, title: label, hidden: id === 'music' && !K.music?.navShown() }, icon(ic), el('span', { text: label })));
     }
     const inc = el('button.side-inc', { title: 'Incognito: nothing you read is saved', 'aria-label': 'Incognito' }, icon('incognito'));
     const paintInc = () => { inc.classList.toggle('on', K.incognito()); document.documentElement.classList.toggle('incognito', K.incognito()); };

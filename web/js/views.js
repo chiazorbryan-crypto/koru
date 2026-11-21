@@ -548,6 +548,7 @@
       s = await K.getSeries(provider, slug);
       // the site moved this series to a new address: open it there, so favourites and progress line up
       if (s?.slug && s.slug !== slug) { K.go(`/series/${provider}/${encodeURIComponent(s.slug)}`, true); return; }
+      K.seriesColors?.warm(s);   // the cover's colours, worked out while the chapters load (series-colors.js)
       chapters = await K.getChapters(provider, slug);
     } catch (e) {
       // No connection: show what's downloaded.
@@ -561,6 +562,7 @@
     }
     if (!alive()) return;
     root.replaceChildren();
+    K.seriesColors?.paint(root, s);
     const lib = K.data.library[key];
     if (lib) { lib.newCount = 0; if (chapters[0]) lib.known = chapters[0].slug; lib.total = chapters.length; lib.title = s.title; lib.cover = s.cover || lib.cover; K.save('library'); }
     const hist = K.data.history[key];
@@ -608,7 +610,7 @@
     if (K.flag(provider, slug).trash) root.append(el('div.glass', { style: { padding: '12px 16px', margin: '0 0 14px', display: 'flex', gap: '10px', alignItems: 'center' } },
       icon('trash'), el('span', { style: { flex: 1 }, text: 'You put this in Absolute trash, so it\'s hidden from your feed.' }),
       el('button.btn.small', { onclick: () => { const f = { ...K.data.flags[key] }; delete f.trash; if (f.hidden || f.completed) K.data.flags[key] = f; else delete K.data.flags[key]; K.save('flags'); K.toast('Restored', 'ok'); K.go('/series/' + provider + '/' + encodeURIComponent(slug), true); location.reload(); } }, icon('undo'), 'Restore')));
-    root.append(hero, K.rx?.recapCard?.(s, chapters) || '', el('div', { style: { marginTop: '18px' } }, desc), K.libx?.seriesPanel?.(s) || '', K.chars?.section?.(s, chapters) || '', (!offline && K.disc?.similarRow?.(s)) || '');
+    root.append(hero, K.srcCheck?.seriesNote?.(s) || '', K.rx?.recapCard?.(s, chapters) || '', K.music?.seriesRow?.(s) || '', el('div', { style: { marginTop: '18px' } }, desc), K.libx?.seriesPanel?.(s) || '', K.chars?.section?.(s, chapters) || '', (!offline && K.disc?.similarRow?.(s)) || '');
 
     // chapters — Kotatsu style: long-press or right-click a chapter to start selecting, Shift-click for a range
     let asc = false, selecting = false, view = 'all', anchor = null;

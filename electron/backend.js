@@ -3,7 +3,7 @@
 //
 // Routes (all under /k/):
 //   GET  /k/fetch?u=<url>        a site request (only the allowed sites), returned as-is
-//   POST /k/fetch {u, body}      a JSON POST to an allowed site's API (AniList's GraphQL), returned as-is
+//   POST /k/fetch {u, body}      a JSON POST to an allowed site's API (AniList's GraphQL, YouTube Music), returned as-is
 //   GET  /k/store/<key>          saved JSON (library, history, settings)
 //   PUT  /k/store/<key>          save JSON
 //   POST /k/dl/start             queue a chapter download {provider, seriesSlug, seriesTitle, cover, chapterSlug, chapterName, number, pages:[url]}
@@ -49,6 +49,11 @@ export const allowedUrl = u => {
 };
 // Reader → Translate: Google's free translation endpoint (the page sends the text through /k/fetch).
 ALLOWED.push('translate.googleapis.com');
+// Music: YouTube Music's catalogue API (search, albums, artists, radio, lyrics). It only answers its own site's
+// Origin/Referer, so POSTs there carry those. Playback is YouTube's own embed player, not Koru's backend.
+ALLOWED.push('music.youtube.com');
+const POST_HEADERS = { 'music.youtube.com': { Origin: 'https://music.youtube.com', Referer: 'https://music.youtube.com/' } };
+const postHeadersFor = u => { try { return POST_HEADERS[new URL(u).hostname] || {}; } catch { return {}; } };
 // Reader → Translate: OCR language data (tessdata_fast), downloaded once into the data folder, then read from there offline.
 const TESSDATA_URL = 'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/';
 const TESS_LANGS = ['kor', 'kor_vert', 'jpn', 'jpn_vert', 'chi_sim', 'chi_sim_vert', 'chi_tra', 'chi_tra_vert', 'eng'];
@@ -365,7 +370,7 @@ export function createBackend({ dataDir, downloadsDir, version = '0.0.0', platfo
       if (p === '/k/fetch' && method === 'POST') {
         const b = JSON.parse(req.body || '{}');
         if (!allowedUrl(b.u)) return json(403, { error: 'That site is not one of Koru\'s sources.' });
-        const r = await fetchImpl(b.u, { method: 'POST', headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'application/json', Accept: 'application/json' },
+        const r = await fetchImpl(b.u, { method: 'POST', headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'application/json', Accept: 'application/json', ...postHeadersFor(b.u) },
           body: JSON.stringify(b.body ?? {}), signal: AbortSignal.timeout(45000), redirect: 'error' });
         return { status: r.status, type: r.headers.get('content-type') || 'application/json', body: Buffer.from(await r.arrayBuffer()) };
       }

@@ -7,10 +7,10 @@
 // Settings (look, graphics) stay per PC on purpose: your two PCs may want different ones.
 'use strict';
 (function () {
-  const TYPES = ['library', 'liked', 'bookmarks', 'history', 'read', 'flags', 'notes', 'shelves', 'chars'];   // chars: character tags per series (characters.js)
+  const TYPES = ['library', 'liked', 'bookmarks', 'history', 'read', 'flags', 'notes', 'shelves', 'chars', 'mliked', 'mlists'];   // chars: character tags per series (characters.js); mliked/mlists: Music likes and playlists
   const SNAP = 'koru-sync-snap', GONE = 'koru-sync-removed', LAST = 'koru-sync-last';
   const ls = { get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
-  const when = (t, it) => (t === 'library' ? it.addedAt || it.at : t === 'liked' || t === 'bookmarks' || t === 'history' || t === 'notes' || t === 'shelves' || t === 'chars' ? it.at : 0) || 0;
+  const when = (t, it) => (t === 'library' ? it.addedAt || it.at : t === 'liked' || t === 'bookmarks' || t === 'history' || t === 'notes' || t === 'shelves' || t === 'chars' || t === 'mliked' || t === 'mlists' ? it.at : 0) || 0;
   const clone = v => JSON.parse(JSON.stringify(v));
   let info = null, busy = null, merging = false, timer = 0, lastRun = 0;
 
@@ -57,7 +57,7 @@
           const gone = mineGone[k];
           if (gone && gone >= when(t, v)) continue;   // removed here after it was added there
           mine[k] = clone(v); delete mineGone[k]; changed.add(t);
-        } else if (t === 'history' || t === 'notes' || t === 'chars') {
+        } else if (t === 'history' || t === 'notes' || t === 'chars' || t === 'mlists') {
           if ((v.at || 0) > (cur.at || 0)) { mine[k] = clone(v); changed.add(t); }   // the newest wins
         } else if (t === 'read') {
           for (const ch of Object.keys(v)) if (!cur[ch]) { cur[ch] = v[ch]; changed.add(t); }

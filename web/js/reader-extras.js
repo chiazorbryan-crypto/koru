@@ -581,7 +581,7 @@ gl_FragColor=vec4(clamp((c+(a+b+d+e)*w)/(1.0+4.0*w),0.0,1.0),1.0);}`;
   // Every sound is made once with the Web Audio API (no audio files): noise, filters and short generated
   // clicks and notes are rendered ahead into a 14 to 24 second clip, whose end is blended into its start so it
   // loops without a seam. Playing it is then one looping clip and a volume, which costs almost nothing.
-  const SOUNDS = [['off', 'Off'], ['rain', 'Rain'], ['wind', 'Night wind'], ['cafe', 'Café'], ['fire', 'Fireplace'], ['lofi', 'Lo-fi (never repeats)']];
+  const SOUNDS = [['off', 'Off'], ['rain', 'Rain'], ['wind', 'Night wind'], ['cafe', 'Café'], ['fire', 'Fireplace'], ['lofi', 'Lo-fi']];
   const SR = 32000;
   const Sound = {
     ctx: null, master: null, bufs: {}, cur: 'off', node: null, gen: 0, sleepT: 0,

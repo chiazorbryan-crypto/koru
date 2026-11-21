@@ -85,6 +85,7 @@
     const newer = idx > 0 ? chapters.slice(0, idx).reverse().find(c => !c.locked) : null;   // next chapter
     const older = idx >= 0 ? chapters.slice(idx + 1).find(c => !c.locked) : null;           // previous chapter
     Object.assign(state, { series, chapters, chapter, next: newer, prev: older });
+    K.seriesColors?.paint(box, { provider, slug, cover: series?.cover });   // the series' own colours (series-colors.js)
 
     // Pages: downloaded copy first, then the site.
     const id = `${provider}:${slug}:${chapterSlug}`;
