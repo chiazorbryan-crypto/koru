@@ -14,12 +14,11 @@ A personal manga and manhwa reader for Windows, with a liquid glass look you can
 - **Discover:** a Trending tab that merges every source's popular list, a "Completed only" filter, "More like this" picks from what you read and rate, and Release days: a weekly calendar of when your favourites usually update
 - **Reader extras:** panel-by-panel mode (G), sharpen blurry pages (E), ambient sounds made on the fly (rain, night wind, café, fireplace, lo-fi), translate raw Korean/Japanese/Chinese chapters (OCR + translation, overlaid on the bubbles), and a spoiler-free "Previously on…" card when you come back to a series
 - **Your own touches:** tag characters on pages and see where they appear, set any page as your desktop wallpaper, send a page to your crew, a mini reader window that stays on top, Ctrl+K to jump anywhere, a desktop widget with Up next and new chapters, and import your list from Mihon/Tachiyomi, MyAnimeList, AniList or a MangaDex list
-- **Music:** search and play songs, albums, artists and playlists from YouTube Music inside Koru (`web/js/music*.js`): a player bar, Now playing with Up next and lyrics, liked songs and your own playlists (synced), endless radio, Windows media keys, mood music and a remembered soundtrack per series, a hidden reveal corner while reading, a "Mini player only" mode, and your Glasswave playlists (read only)
 - **Series colours:** each series page and its reader take their accent colours from the cover (Subtle / Normal / Strong, or off)
 - **Quiet source check:** if a source stays down, Koru moves your favourites to another source that has the same series (history, read marks and ratings follow), and offers to move them back when it works again
 - **Now playing:** a little player in the sidebar for music on your PC (Glasswave, Spotify, a browser…), through Windows' media controls (`native/koru-media.cs`)
 - **Taskbar:** hide the Windows taskbar until the mouse reaches the bottom edge (a tiny helper, `native/koru-taskbar.cs`, keeps it working with Koru closed), and make it fully clear so only the icons show (sets up TranslucentTB)
-- **Appearance:** every colour with its own transparency, gradients, your own wallpaper, saved looks, glass blur, glow, animations, fonts, sidebar on any edge (minimizable), and a light mode for PCs without a working graphics card
+- **Appearance:** a live preview of your look while you make it (hover a preset to try it first), every colour with its own transparency, gradients, your own wallpaper, saved looks, glass blur, glow, animations, fonts, sidebar on any edge (minimizable), and a light mode for PCs without a working graphics card
 
 Paid or locked chapters stay locked. Please support the scan groups on their sites.
 

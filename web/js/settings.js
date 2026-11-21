@@ -44,7 +44,6 @@
     { id: 'read', name: 'Reading', ic: 'book', sub: 'How chapters open, scroll and look, plus sounds, sharpening and translation.', has: ['Pages and layout', 'Moving through chapters', 'Ambient light', 'Night filter', 'While you read', 'Reader'] },
     { id: 'library', name: 'Library & sync', ic: 'folder', sub: 'Your data, backups, importing from other apps and keeping your PCs the same.', has: ['Library and data', 'When a source goes down', 'Import from another app', 'Sync between PCs', 'Sync with your PC', 'Privacy'] },
     { id: 'pc', name: 'Windows', ic: 'pages', sub: 'Koru on your desktop: the taskbar, the desktop widget and the Now playing player.', has: ['Taskbar', 'Desktop', 'Now playing'] },
-    { id: 'music', name: 'Music', ic: 'music', sub: 'Songs from YouTube Music inside Koru: how the player shows, volume and your Glasswave library.', has: ['Music'] },
     { id: 'speed', name: 'Performance', ic: 'chart', sub: 'Graphics, smoothness and checking the sources.', has: ['Graphics', 'Sources'] },
     { id: 'about', name: 'About', ic: 'sparkle', sub: 'Your version and updates.', has: ['About'] }
   ];
@@ -123,15 +122,17 @@
       const set = patch => T().set(patch);
       const grid = el('div.set-grid');
 
-      // presets
+      // presets (hovering one shows it in the preview first)
+      const lp = K.lookPreview?.box();
+      const hov = (node, look) => lp ? lp.hoverable(node, look) : node;
       const presetBox = el('div.presets', T().PRESETS.map(p => {
         const c = p.theme.colors;
         const same = JSON.stringify(c) === JSON.stringify(t.colors);
-        return el('button.preset' + (same ? '.on' : ''), { onclick: () => { T().usePreset(p); draw(); setTimeout(K.movePill, 400); } },
+        return hov(el('button.preset' + (same ? '.on' : ''), { onclick: () => { T().usePreset(p); draw(); setTimeout(K.movePill, 400); } },
           el('div.pv', { style: { background: `linear-gradient(135deg, ${c.bg[0]}, ${c.bg2[0]})` } },
             el('i', { style: { background: c.glow1[0], left: '-10px', top: '-14px' } }), el('i', { style: { background: c.glow2[0], right: '-12px', bottom: '-20px' } }),
             el('i', { style: { background: c.glow3[0], left: '40%', top: '20%', width: '36px', height: '36px' } }), el('b')),
-          el('span', { text: p.name }));
+          el('span', { text: p.name })), { name: p.name, theme: { colors: p.theme.colors, accentGlow: p.theme.accentGlow, coverGlow: p.theme.coverGlow, textGlow: p.theme.textGlow } });
       }));
       grid.append(panel('palette', 'Style', 'Liquid glass, or a plain, fast, normal app look. Your colours carry over.',
         el('div.ctl', el('div.lab', { text: 'App style' }),
@@ -146,14 +147,14 @@
       const mineBox = el('div.presets', mine.map(l => {
         const c = l.theme.colors || {};
         const g = k => (c[k] || T().BASE.colors[k])[0];
-        return el('div.preset.mine', { role: 'button', tabIndex: 0, onclick: () => { T().useLook(l); draw(); setTimeout(K.movePill, 400); } },
+        return hov(el('div.preset.mine', { role: 'button', tabIndex: 0, onclick: () => { T().useLook(l); draw(); setTimeout(K.movePill, 400); } },
           el('div.pv', { style: { background: `linear-gradient(135deg, ${g('bg')}, ${g('bg2')})` } },
             el('i', { style: { background: g('glow1'), left: '-10px', top: '-14px' } }), el('i', { style: { background: g('glow2'), right: '-12px', bottom: '-20px' } }),
             el('i', { style: { background: g('accent'), left: '40%', top: '20%', width: '36px', height: '36px' } }), el('b')),
           el('span', { text: l.name }),
-          el('button.del', { title: 'Delete this look', onclick: e => { e.stopPropagation(); T().deleteLook(l.name); draw(); } }, icon('x')));
+          el('button.del', { title: 'Delete this look', onclick: e => { e.stopPropagation(); T().deleteLook(l.name); draw(); } }, icon('x'))), l);
       }));
-      grid.append(panel('sparkle', 'Looks', 'Picking a look only changes colours and glows. Your layout and other settings stay.', presetBox,
+      grid.append(panel('sparkle', 'Looks', 'Picking a look only changes colours and glows. Your layout and other settings stay. Hover a look to preview it; the preview also follows your colour changes as you make them.', lp?.el || null, presetBox,
         el('div.lookbar', lookName, el('button.btn.small.primary', { onclick: saveMine }, icon('plus'), 'Save my look')),
         mine.length ? el('div.sub-h', { text: 'My looks' }) : null, mine.length ? mineBox : null,
         el('div.row', { style: { marginTop: '14px' } },

@@ -46,3 +46,57 @@ html.reading .imp-hand { display: none; }
 .wp-pic { width: 100%; border-radius: 10px; overflow: hidden; background: rgba(0,0,0,.35); display: grid; place-items: center; margin-bottom: 4px; }
 .wp-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .wp-pic .spinner { margin: 0; }
+
+/* ---------- Look preview (look-preview.js): a little Koru in the colours you're making ---------- */
+.lp-spot { margin: 2px 0 14px; }
+.lp-card { position: relative; }
+.lp-label { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; font-size: .82em; }
+.lp-label b { font-weight: 700; }
+.lp-label span { color: var(--muted); }
+.lp-card.peek .lp-label span { color: var(--text); }
+.lp-hide { display: none; position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 50%; place-items: center; background: rgba(0,0,0,.35); color: #fff; border: 0; cursor: pointer; }
+.lp-hide svg { width: 13px; height: 13px; }
+.lp-app { position: relative; height: 210px; display: grid; grid-template-columns: 40px 1fr 74px; gap: 9px; padding: 9px; overflow: hidden; isolation: isolate;
+  border-radius: var(--lp-r); background: var(--lp-bg); color: var(--lp-text); font-family: var(--lp-font); font-size: 12px; line-height: 1.25;
+  border: 1px solid rgba(255,255,255,.08); box-shadow: 0 10px 30px var(--lp-shadow); transition: background .25s; }
+.lp-orb { position: absolute; z-index: -1; width: 210px; height: 210px; border-radius: 50%; filter: blur(40px); pointer-events: none; }
+.lp-orb.o1 { background: var(--lp-g1); left: -30px; top: -50px; }
+.lp-orb.o2 { background: var(--lp-g2); right: 40px; bottom: -70px; }
+.lp-orb.o3 { background: var(--lp-g3); left: 45%; top: 30%; width: 90px; height: 90px; }
+.lp-side, .lp-panel, .lp-cap { background: var(--lp-glass); border: 1px solid var(--lp-edge); backdrop-filter: blur(var(--lp-blur)); }
+.lp-side { background: var(--lp-side); border-radius: var(--lp-r); display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 9px 0; }
+.lp-logo { width: 20px; height: 20px; border-radius: 7px; background: var(--lp-grad); margin-bottom: 3px; }
+.lp-ic { width: 16px; height: 16px; border-radius: 5px; background: var(--lp-muted); opacity: .55; }
+.lp-ic.on { background: var(--lp-accent); opacity: 1; box-shadow: 0 0 var(--lp-glow) var(--lp-accent); }
+.lp-main { min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.lp-head { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; overflow: hidden; }
+.lp-title { font-family: var(--lp-tfont); font-weight: 800; font-size: 16px; }
+.lp-sub { color: var(--lp-muted); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; }
+.lp-covers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; flex: 1; min-height: 0; }
+.lp-cover { position: relative; border-radius: calc(var(--lp-r) * .7); overflow: hidden; display: flex; align-items: flex-end; min-height: 0; }
+.lp-badge { position: absolute; top: 4px; left: 4px; padding: 1px 5px; border-radius: 6px; font-size: 8.5px; font-weight: 800; background: var(--lp-badge); color: #0b0b14; }
+.lp-cap { background: var(--lp-card); border-width: 1px 0 0; width: 100%; padding: 4px 5px; display: flex; flex-direction: column; min-width: 0; }
+.lp-cap b, .lp-cap small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lp-cap b { font-size: 9.5px; } .lp-cap small { font-size: 8.5px; color: var(--lp-muted); }
+.lp-panel { position: relative; border-radius: var(--lp-r); padding: 7px 9px; display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; align-items: center; overflow: hidden; }
+.lp-panel::before { content: ''; position: absolute; inset: 0 auto 0 -30%; width: 40%; background: linear-gradient(100deg, transparent, var(--lp-shine), transparent); opacity: .5; pointer-events: none; }
+.lp-ptext { display: flex; flex-direction: column; min-width: 0; }
+.lp-ptext b { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .lp-ptext small { color: var(--lp-muted); font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lp-bar { grid-column: 1; height: 4px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
+.lp-bar i { display: block; width: 35%; height: 100%; background: var(--lp-line); }
+.lp-btns { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 5px; }
+.lp-btn, .lp-btn2 { padding: 5px 10px; border-radius: calc(var(--lp-r) * .7); font-size: 10px; font-weight: 700; white-space: nowrap; }
+.lp-btn { background: var(--lp-grad); color: var(--lp-on); box-shadow: 0 0 var(--lp-glow) var(--lp-accent); }
+.lp-btn2 { background: var(--lp-glass); border: 1px solid var(--lp-edge); }
+.lp-reader { border-radius: var(--lp-r); background: var(--lp-reader); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 0; overflow: hidden; border: 1px solid rgba(255,255,255,.06); }
+.lp-reader small { font-size: 8.5px; color: var(--lp-muted); }
+.lp-page { width: 52px; flex: 1; border-radius: 3px; background: linear-gradient(170deg, #e9e4da, #cfc8ba); }
+.lp-page.p2 { flex: .5; background: linear-gradient(170deg, #cfc8ba, #b7b0a2); }
+/* floating in the corner while you scroll through the colour controls */
+.lp-card.float { position: fixed; right: 20px; bottom: 20px; width: 340px; z-index: 900; padding: 9px 10px 10px; border-radius: calc(var(--radius) * .8);
+  background: rgba(12,12,20,.72); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 18px 50px rgba(0,0,0,.45);
+  animation: lp-in .28s var(--ease-move, ease) both; }
+.lp-card.float .lp-label { color: #fff; } .lp-card.float .lp-label span { color: rgba(255,255,255,.7); }
+.lp-card.float .lp-hide { display: grid; }
+.lp-card.float .lp-app { height: 178px; grid-template-columns: 30px 1fr 56px; gap: 7px; padding: 7px; }
+@keyframes lp-in { from { opacity: 0; transform: translateY(14px) scale(.97); } }
