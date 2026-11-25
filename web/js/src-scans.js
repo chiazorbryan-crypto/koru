@@ -282,4 +282,5 @@
   const elftoon = drakePlatform({ id: 'elftoon', name: 'Elf Toon', short: 'Elf', site: 'https://elftoon.net', hue: '#d7f75b' });
 
   for (const p of [thunder, madarascans, kingofshojo, violet, rokari, lagoon, drake, elftoon]) K.addProvider(p);
+  K.srcKinds = { ...(K.srcKinds || {}), themesia };   // for sources you add yourself (src-custom.js)
 })();

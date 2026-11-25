@@ -184,6 +184,15 @@ public final class KoruBackend {
     if (p.equals("/k/open-downloads") && method.equals("POST")) return Res.ok();
     if (p.equals("/k/fullscreen") && method.equals("POST")) return Res.ok();
     if (p.equals("/k/relaunch") && method.equals("POST")) return Res.ok();
+    if (p.equals("/k/sources/hosts") && method.equals("POST")) {
+      org.json.JSONArray hs = Js.parseBody(body).optJSONArray("hosts");
+      SiteFetch.EXTRA.clear();
+      for (int i = 0; hs != null && i < Math.min(hs.length(), 400); i++) {
+        String h = Js.lower(hs.optString(i, ""));
+        if (h.matches("^(?=.{3,200}$)[a-z0-9-]+(\\.[a-z0-9-]+)+$") && !h.matches("^(localhost|\\d+\\.\\d+\\.\\d+\\.\\d+)$")) SiteFetch.EXTRA.add(h);
+      }
+      return Res.json(200, Js.obj("ok", true, "hosts", SiteFetch.EXTRA.size()));
+    }
     if (p.equals("/k/open-external") && method.equals("POST")) {
       Object u = Js.parseBody(body).opt("url");
       String s = u instanceof String ? (String) u : "";

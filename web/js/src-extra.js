@@ -257,7 +257,15 @@
           for (const el of doc.querySelectorAll('.post-content_item, .post-status .post-content_item')) if (txt(el.querySelector('.summary-heading')).toLowerCase().startsWith(label)) return el.querySelector('.summary-content');
           return null;
         };
-        const chapters = [...doc.querySelectorAll('li.wp-manga-chapter')].map(li => {
+        // newer Madara sites load the chapter list afterwards with a POST to <series>/ajax/chapters/
+        let chDoc = doc;
+        if (!doc.querySelector('li.wp-manga-chapter') && doc.querySelector('#manga-chapters-holder, .c-page__content')) {
+          try {
+            const r = await fetch('/k/fetch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ u: `${url}ajax/chapters/`, body: {} }) });
+            if (r.ok) chDoc = parse(await r.text());
+          } catch {}
+        }
+        const chapters = [...chDoc.querySelectorAll('li.wp-manga-chapter')].map(li => {
           const a = li.querySelector('a[href]');
           const ch = (String(a?.getAttribute('href') || '').match(chRe) || [])[1];
           const label = txt(a);
@@ -298,4 +306,5 @@
   const manhuaplus = madara({ id: 'manhuaplus', name: 'ManhuaPlus', short: 'ManhuaPlus', site: 'https://manhuaplus.com', hue: '#9c6b30' });
 
   for (const p of [qiscans, nyx, magus, mangapill, mangaread, manhuaplus]) K.addProvider(p);
+  K.srcKinds = { ...(K.srcKinds || {}), madara };   // for sources you add yourself (src-custom.js)
 })();

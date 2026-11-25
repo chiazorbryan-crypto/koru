@@ -100,3 +100,31 @@ html.reading .imp-hand { display: none; }
 .lp-card.float .lp-hide { display: grid; }
 .lp-card.float .lp-app { height: 178px; grid-template-columns: 30px 1fr 56px; gap: 7px; padding: 7px; }
 @keyframes lp-in { from { opacity: 0; transform: translateY(14px) scale(.97); } }
+
+/* Settings → Performance → Add a source (src-custom.js) */
+.cs-out:empty { display: none; }
+.cs-out { margin-top: 12px; }
+.cs-step { display: flex; align-items: center; gap: 10px; }
+.cs-step .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--accent-solid, #8b5cf6); border-right-color: transparent; animation: cs-spin .8s linear infinite; }
+@keyframes cs-spin { to { transform: rotate(360deg); } }
+.cs-found { display: grid; gap: 10px; padding: 12px; border-radius: 12px; background: var(--bg2, rgba(255,255,255,.04)); }
+.cs-head { display: flex; align-items: center; gap: 10px; }
+.cs-head small { display: block; }
+.cs-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.cs-covers { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+.cs-cover { display: grid; gap: 4px; font-size: 11px; min-width: 0; }
+.cs-cover img { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 8px; background: rgba(127,127,127,.15); }
+.cs-cover span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .8; }
+.cs-checks { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: 13px; }
+.cs-checks li.ok::marker { content: '✓  '; color: #3ccf8e; }
+.cs-checks li.bad::marker { content: '✕  '; color: #ef476f; }
+.cs-err { color: #ef476f; margin: 0; }
+.cs-done { display: flex; align-items: center; gap: 8px; margin: 0; }
+.cs-list { display: grid; gap: 6px; margin-top: 12px; }
+.cs-list:empty { display: none; }
+.cs-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--bg2, rgba(255,255,255,.04)); }
+.cs-txt { flex: 1; min-width: 0; }
+.cs-txt small { display: block; opacity: .7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-row .btn.sure { color: #ef476f; }
+.cs-h { margin: 6px 0 2px; font-size: 13px; opacity: .75; font-weight: 600; }
+.cs-row.off { opacity: .55; }

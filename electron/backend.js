@@ -41,10 +41,13 @@ const ALLOWED = ['omegascans.org', 'vortexscans.org', 'asurascans.com', 'flameco
   'qimanga.com', 'qiscans.org', 'nyxscans.com', 'magustoon.org', 'rokaricomics.com', 'elftoon.net', 'elftoon.com',
   'mangapill.com', 'readdetectiveconan.com', 'lagoonscans.com', 'mangaread.org', 'manhuaplus.com', 'files.wordpress.com',
   'myanimelist.net', 'anilist.co'];   // Settings → Import from another app: your public MyAnimeList / AniList lists
+// sources you added yourself (Settings → Performance → Add a source): the page tells the backend their sites on start
+export const EXTRA_HOSTS = new Set();
 export const allowedUrl = u => {
   try {
     const url = new URL(u);
-    return url.protocol === 'https:' && ALLOWED.some(d => url.hostname === d || url.hostname.endsWith('.' + d));
+    const ok = d => url.hostname === d || url.hostname.endsWith('.' + d);
+    return url.protocol === 'https:' && (ALLOWED.some(ok) || [...EXTRA_HOSTS].some(ok));
   } catch { return false; }
 };
 // Reader → Translate: Google's free translation endpoint (the page sends the text through /k/fetch).
@@ -452,6 +455,12 @@ export function createBackend({ dataDir, downloadsDir, version = '0.0.0', platfo
         return json(200, { ok: true });
       }
       if (p === '/k/open-downloads' && method === 'POST') { onOpenPath?.(downloadsDir); return json(200, { ok: true }); }
+      if (p === '/k/sources/hosts' && method === 'POST') {
+        const { hosts } = JSON.parse(req.body || '{}');
+        EXTRA_HOSTS.clear();
+        for (const h of Array.isArray(hosts) ? hosts.slice(0, 400) : []) if (typeof h === 'string' && /^(?=.{3,200}$)[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(h) && !/^(localhost|\d+\.\d+\.\d+\.\d+)$/i.test(h)) EXTRA_HOSTS.add(h.toLowerCase());
+        return json(200, { ok: true, hosts: EXTRA_HOSTS.size });
+      }
       if (p === '/k/open-external' && method === 'POST') {
         const { url } = JSON.parse(req.body || '{}');
         if (!allowedUrl(url) && !/^https:\/\/github\.com\//.test(url)) return json(400, { error: 'Not allowed' });

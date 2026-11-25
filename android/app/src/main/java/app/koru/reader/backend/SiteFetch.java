@@ -63,10 +63,14 @@ final class SiteFetch {
 
   static boolean hostIn(String host, String d) { return host.equals(d) || host.endsWith("." + d); }
 
+  /** Sources you added yourself (Settings → Performance → Add a source); the page sends their sites on start. */
+  static final java.util.Set<String> EXTRA = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
   static boolean allowedUrl(String u) {
     String h = httpsHost(u);
     if (h == null) return false;
     for (String d : ALLOWED) if (hostIn(h, d)) return true;
+    for (String d : EXTRA) if (hostIn(h, d)) return true;
     return false;
   }
 

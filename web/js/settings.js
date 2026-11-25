@@ -44,7 +44,7 @@
     { id: 'read', name: 'Reading', ic: 'book', sub: 'How chapters open, scroll and look, plus sounds, sharpening and translation.', has: ['Pages and layout', 'Moving through chapters', 'Ambient light', 'Night filter', 'While you read', 'Reader'] },
     { id: 'library', name: 'Library & sync', ic: 'folder', sub: 'Your data, backups, importing from other apps and keeping your PCs the same.', has: ['Library and data', 'When a source goes down', 'Import from another app', 'Sync between PCs', 'Sync with your PC', 'Privacy'] },
     { id: 'pc', name: 'Windows', ic: 'pages', sub: 'Koru on your desktop: the taskbar, the desktop widget and the Now playing player.', has: ['Taskbar', 'Desktop', 'Now playing'] },
-    { id: 'speed', name: 'Performance', ic: 'chart', sub: 'Graphics, smoothness and checking the sources.', has: ['Graphics', 'Sources'] },
+    { id: 'speed', name: 'Performance', ic: 'chart', sub: 'Graphics, smoothness, adding a source and checking the sources.', has: ['Graphics', 'Add or remove sources', 'Sources'] },
     { id: 'music', name: 'Music', ic: 'music', sub: 'Songs from YouTube Music inside Koru: how the player shows, volume and your Glasswave library.', has: ['Music'] },
     { id: 'about', name: 'About', ic: 'sparkle', sub: 'Your version and updates.', has: ['About'] }
   ];
@@ -411,6 +411,7 @@
         when.textContent = 'Checked just now · ' + (bad ? bad + ' need attention' : 'all working');
         checkBtn.disabled = false;
       } }, icon('refresh'), 'Check all sources');
+      if (K.customSources) grid.append(K.customSources.panel(panel));
       grid.append(panel('sparkle', 'Sources', 'Tests every source: its list, a series, its chapters and a page picture. Takes under a minute.',
         el('div.row', { style: { marginBottom: '10px', alignItems: 'center' } }, checkBtn, when), rows));
 

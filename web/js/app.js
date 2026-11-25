@@ -204,6 +204,7 @@
     try { const info = await K.api.get('/k/info'); K.info = info; if (info.platform === 'desktop') document.documentElement.classList.add('desktop'); }
     catch { K.info = { platform: 'web' }; }
     await K.loadData();
+    await K.customSources?.start();   // sources you added yourself, before anything asks them for series
     // 0.5.1: ambient light is far lighter now, so turn it back on where the old smooth guard switched it off
     const rs = K.data.settings.reader;
     if (rs && !rs.v4) {
