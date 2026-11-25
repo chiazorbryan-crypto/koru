@@ -159,7 +159,7 @@
   // ---------- the voice: every reply goes through this ----------
   const PRESETS = {
     friendly: { name: 'Friendly', blurb: 'Warm, upbeat, helpful', emoji: 1, slang: 0, em: ['🦊', '✨', '📚', '💫'], t: {
-      hi: ['Hey{n}! What are we reading today?', 'Hi{n}! Want a pick, a stat, or help finding something?', 'Hello{n}! Ask me anything about your reading.'],
+      hi: ['Hey{n}! What\'s up?', 'Hi{n}! How\'s it going?', 'Hello{n}! What\'s on your mind?'],
       recs: ['Here are a few I think you\'ll like.', 'These look right up your alley.', 'I picked these for you.'],
       recsAsk: ['Here\'s some {what} I think you\'ll enjoy.', 'Got some {what} for you.'],
       more: ['Here\'s another batch.', 'A few more for you.'],
@@ -181,7 +181,7 @@
       ok: ['Done!', 'All set.']
     } },
     hype: { name: 'Hype', blurb: 'Loud, excited, all caps energy', emoji: 2, slang: 1, em: ['🔥', '⚡', '🚀', '💥', '🙌'], t: {
-      hi: ['YO{n}! What are we bingeing today?!', 'Heyyy{n}! Ready for something EPIC?'],
+      hi: ['YO{n}! What\'s good?!', 'Heyyy{n}! How we doing?!'],
       recs: ['Okay these are straight FIRE:', 'Buckle up, these go HARD:', 'You NEED these in your life:'],
       recsAsk: ['{what}? Say less. These are BANGERS:', 'Oh you want {what}? I got the GOOD stuff:'],
       more: ['LET\'S GO, more heat incoming!', 'Round two, even better:'],
@@ -202,7 +202,7 @@
       ok: ['DONE!', 'Boom, done!']
     } },
     chill: { name: 'Chill', blurb: 'Laid-back, few words', emoji: 1, slang: 1, em: ['🌙', '🍵', '😌', '🌿'], t: {
-      hi: ['hey{n}. what are we reading?', 'hi{n}. need a pick or something?'],
+      hi: ['hey{n}. what\'s up?', 'hi{n}. how\'s it going?'],
       recs: ['here\'s a few, no rush.', 'these might be your vibe.', 'some picks for you.'],
       recsAsk: ['some {what} for you.', 'here\'s a bit of {what}.'],
       more: ['a few more.', 'here, some others.'],
@@ -223,7 +223,7 @@
       ok: ['done.', 'there you go.']
     } },
     sarcastic: { name: 'Sarcastic but kind', blurb: 'Teasing, but always helps', emoji: 1, slang: 0, em: ['🙄', '😏', '💅', '🦊'], t: {
-      hi: ['Oh look, it\'s you{n}. Need another manhwa? Shocking.', 'Back again{n}? I\'m flattered. What do you need?'],
+      hi: ['Oh look, it\'s you{n}. To what do I owe the pleasure?', 'Back again{n}? I\'m flattered. What\'s up?'],
       recs: ['Fine, here are some I definitely didn\'t pick just for you.', 'Brace yourself, these are actually good:', 'Here. Try not to binge them all tonight. (You will.)'],
       recsAsk: ['{what}? Bold choice. Fine, these are good:', 'You want {what}. Of course you do. Here:'],
       more: ['More? Your backlog is crying. Okay:', 'Greedy. I respect it. Here:'],
@@ -244,7 +244,7 @@
       ok: ['Done. Obviously.', 'Handled.']
     } },
     formal: { name: 'Formal', blurb: 'Polite and precise', emoji: 0, slang: 0, em: ['📚'], t: {
-      hi: ['Good day{n}. How may I assist you with your reading?', 'Welcome{n}. How may I help?'],
+      hi: ['Good day{n}. How are you?', 'Welcome{n}. How may I help?'],
       recs: ['Here are my recommendations.', 'I would suggest the following titles.'],
       recsAsk: ['Here are my recommendations for {what}.', 'Certainly. The following titles offer {what}.'],
       more: ['Certainly. Here are further suggestions.', 'Here are additional titles.'],
@@ -1221,11 +1221,32 @@
     if (kw.length && kw.length <= 6 && !/\?$/.test(t) && !/^(?:why|how|what|when|who|is|are|do|does|can)\b/.test(t)) return S1('find_title', false, 'guess');
     return S1('unknown', false);
   }
+  // ---------- just talking: Kitsu only brings up reading, picks or Koru when you do ----------
+  const GREET_RE = /^(?:(?:hi+|hey+|hello+|helo|yo+|sup|wassup|wsg|wsp|wys|hiya|howdy|heya|hola|gm|morning|evening|what'?s ?up|whats ?good|what'?s good|what is good|what is up|wagwan|good (?:morning|afternoon|evening|day))\b[!.,?~ ]*(?:kitsu|there|bro|bruh|man|dude|fam|g|bestie|my (?:g|guy|friend))?[!.,?~ ]*){1,3}$/;
+  const SMALL_RE = /\b(how are (?:you|u|ya)|how r u|how(?:'s| is) (?:it going|life|your day|ur day)|how you doing|how u doin\w*|how you been|how have you been|\bhru\b|what are you (?:doing|up to)|what u doing|\bwyd\b|you good|are you okay)\b/;
+  const CORRECT_RE = /\b(it was (?:just )?a greeting|(?:it'?s|that'?s|that was) (?:just )?a greeting|i (?:was )?just (?:saying|said) (?:hi|hello|hey|what'?s (?:good|up))|i didn'?t ask (?:for|you|about)|i did not ask|not asking (?:for|about)|i wasn'?t asking|didn'?t want (?:recommendations|recs|suggestions|picks)|just (?:chatting|talking|saying hi)|i (?:just )?wanna (?:talk|chat)|let'?s (?:just )?(?:talk|chat)|can we (?:just )?(?:talk|chat))\b/;
+  const isChat = t => GREET_RE.test(t) || CORRECT_RE.test(t) || ((SMALL_RE.test(t) || /^(?:tell me|say|teach me|share|give me) (?:something|anything|a (?:fun |random |cool )?fact|a story|a riddle)\b/.test(t)) && !READ_CUE.test(t));
+  // words that mean the message is about reading, a series, Koru or your data
+  const READ_CUE = /\b(read|reading|reads|reader|manhwa|manga|manhua|webtoons?|toons?|series|comics?|novels?|chapters?|ch\.?\s?\d+|recommend\w*|suggest\w*|recs?|picks?|genres?|tropes?|stor(?:y|ies)|plot|mc|fmc|ml|protagonist|isekai|romance|action|fantasy|regress\w*|reincarnat\w*|villain\w*|murim|cultivation|leveling|koru|library|shel(?:f|ves)|fav\w*|stats?|streak|wrapped|history|anilist|sources?|settings?|theme|download\w*|backup|sync|bookmark\w*|rated?|ratings?|stars?|completed|ongoing|finished|dropped)\b/;
+  const meWords = /\b(i|im|i'm|me|my|you|u|ur|your|we|us|lol|lmao|haha|bro|bruh)\b/;
+  function cueOf(t, raw) { return READ_CUE.test(t) || READ_CUE.test(raw) || !!resolveOwn(t) || (conceptsIn(t).length > 0 && !meWords.test(raw)); }
   // KitsuNet's labels that map onto the same handlers
   const NET_ALIAS = { app_help_theme: 'app_help', app_help_reader: 'app_help', app_help_downloads: 'app_help', app_help_backup_sync: 'app_help', app_help_import: 'app_help', app_help_incognito: 'app_help',
     app_help_shelves_ratings: 'app_help', app_help_performance: 'app_help', app_help_updates: 'app_help', app_help_shortcuts: 'app_help', app_help_music: 'app_help', app_help_other: 'app_help' };
   const NEEDS_CTX = new Set(['refine_not_that', 'more_results', 'refine_shorter', 'refine_longer', 'refine_completed', 'explain_why', 'open_item', 'item_details', 'item_status']);
   function pickIntent(raw, t, ctx) {
+    const low = lc(raw).replace(/[’‘`]/g, '\'').replace(/\s+/g, ' ').trim();
+    if (isChat(low) || isChat(t)) return { intent: 'chat', strong: true };
+    const p = pickIntent0(raw, t, ctx);
+    if (p.intent === 'chat') return p;
+    // "hmm" with nothing suggested yet is just talking
+    if (p.intent === 'hesitant' && !ctx.last?.pool?.length) return { intent: 'chat', strong: false };
+    if (p.intent === 'unknown') return { intent: 'chat', strong: false };
+    // a guess (not a clear request) about picks or a series needs the message to actually be about reading
+    if (!p.strong && !cueOf(t, low) && !(p.intent === 'find_title' && !meWords.test(low) && !/\?$/.test(low))) return { intent: 'chat', strong: false };
+    return p;
+  }
+  function pickIntent0(raw, t, ctx) {
     const rule = ruleIntent(t, ctx);
     if (ctx.awaitFind) { ctx.awaitFind = false; if (!rule.strong || rule.intent === 'unknown') return { intent: 'find_by_description', strong: true }; }
     if (ACT_INTENTS.has(rule.intent) || rule.intent === 'hesitant' || rule.intent === 'surprise') return rule;
@@ -1256,6 +1277,22 @@
     if (parts.length > 3) parts = parts.slice(0, 3);
     if (parts.length > 1) { const ints = parts.map(p => ruleIntent(p, ctx)); if (ints.some(x => x.intent === 'unknown') || new Set(ints.map(x => x.intent)).size < parts.length) return [t]; }
     return parts;
+  }
+
+  // the built-in words for plain conversation; with the AI voice, the model answers instead
+  function chatReply(r, t, raw, chat) {
+    r.chat = true; r.keepCards = 0;
+    const x = lc(raw || t), n = chat.msgs.length + hash(x);
+    if (CORRECT_RE.test(x)) { r.add(pick(['My bad, I jumped ahead there! Hey! How\'s it going?', 'Oops, got a little too eager. Hi! What\'s up with you?', 'Ah, sorry about that! Hey, how are you doing?'], n)); return; }
+    if (SMALL_RE.test(x)) { r.add(pick(/what are you|what u|wyd/.test(x) ? ['Just hanging out here in Koru. What about you?', 'Not much, just chilling. You?'] : ['I\'m good, thanks for asking! How about you?', 'Doing great! How\'s your day going?', 'All good here! What about you?'], n)); return; }
+    if (GREET_RE.test(x)) { r.say('hi'); return; }
+    if (!(chat.ctx ||= {}).toldVoice) {
+      chat.ctx.toldVoice = true;
+      const st = brain.st, d = st?.dl;
+      if (brainHost() && (!st || st.runtime) && S().llm) { r.add(d?.state === 'downloading' || d?.state === 'verifying' ? `I'm still getting my AI voice (${Math.round((d.done / (d.total || 1)) * 100)}% downloaded), so I can't really chat about everything yet. Give me a few minutes!` : 'I can\'t chat about everything until my AI voice is on. It downloads by itself when Kitsu is open, or turn it on in Settings → Kitsu.'); return; }
+      r.add(brainHost() && !S().llm ? 'My AI voice is off, so I can only chat a little. Turn it on in Settings → Kitsu → Write replies with the brain.' : 'I can only chat a little on this device. Ask me anything about your reading, though!'); return;
+    }
+    r.add(pick(['Ha, fair. Tell me more?', 'I hear you. What else is going on?', 'Got it. Anything on your mind?'], n));
   }
 
   // ---------- the brain: which answer fits ----------
@@ -1344,7 +1381,7 @@
         if (ctx.last?.like) return moreLike(r, ctx, ctx.last.like, say, '', f);
         return recommend(r, ctx, (ctx.last?.t || '') + ' ' + t, say, { filters: f, ask: (ctx.last?.ask || []).map(id => CBY[id]).filter(Boolean) });
       }
-      case 'smalltalk_greeting': r.say('hi').chip('What should I read next?', 'What have I been reading?', 'What\'s my streak?'); return;
+      case 'smalltalk_greeting': case 'chat': return chatReply(r, t, raw, chat);
       case 'smalltalk_thanks': r.say('thanks'); return;
       case 'smalltalk_bye': r.say('bye'); return;
       case 'about_kitsu': r.say('me'); r.detail('No AI service and no account: I work out what you mean on this PC, and look things up on AniList and your sources.'); r.chip('What can you do?'); return;
@@ -1541,6 +1578,7 @@
   // The built-in engine works out the answer and its facts; the model only words it, in Kitsu's personality.
   // Titles and numbers come from the facts (the cards are built from the same results), never from the model.
   const brain = { st: null, at: 0 };
+  const autoDl = { tried: false };
   const brainHost = () => K.info?.platform === 'desktop';
   async function brainStatus(force) {
     if (!brainHost()) return null;
@@ -1563,6 +1601,20 @@
       s.about ? `About the user: ${s.about.slice(0, 300)}` : '',
       s.talk ? `The user wants you to talk like this: ${s.talk.slice(0, 240)}` : '',
       `Write ${len}. Only use facts from FACTS. Never invent titles, numbers or plot details. Name at most two titles; cards show the rest. No lists. Put titles in **double asterisks**. If nothing was found, say so honestly.`
+    ].filter(Boolean).join('\n');
+  }
+  function chatPrompt() {
+    const s = S(), pr = PRESETS[s.preset] || PRESETS.friendly, tr = talkRules(s.talk), me = aboutMe(s.about);
+    const amt = tr.noEmoji ? 0 : tr.moreEmoji ? 2 : Number(s.emojiAmt ?? pr.emoji), slang = s.preset === 'formal' ? 0 : Number(s.slang ?? pr.slang);
+    const len = { short: 'one or two sentences', normal: 'one to four sentences', detailed: 'a short paragraph or two' }[lenOf()] || 'one to four sentences';
+    return [`You are ${s.name || 'Kitsu'}, a friendly AI companion that lives inside Koru, a manhwa and manga reader app. Personality: ${STYLE[s.preset] || STYLE.friendly}. ${amt === 0 ? 'Never use emoji.' : amt === 1 ? 'At most one emoji.' : 'A few emoji.'} ${slang === 0 ? '' : slang === 1 ? 'A little casual slang.' : 'Lots of casual slang.'}`,
+      'You are having a normal, relaxed conversation. Reply to what the user actually said, like a good friend would: be warm, curious and talkative, share opinions, joke around, and often ask a question back. You can talk about anything: their day, feelings, school, work, games, music, life, general knowledge.',
+      'Slang greetings like "what is good", "what\'s good", "wsg", "wagwan", "sup" just mean "hey, what\'s up?": greet them back casually.',
+      'Do NOT recommend series, mention their library, reading or the app unless the user brings it up. Never claim to know things about the user that they have not told you. If the user corrects you, apologise briefly and go along with what they meant.',
+      me.name || tr.call ? `Call the user ${tr.call || me.name}.` : '',
+      s.about ? `Background about the user (only to know them better; never use it to steer the chat to reading): ${s.about.slice(0, 300)}` : '',
+      s.talk ? `The user wants you to talk like this: ${s.talk.slice(0, 240)}` : '',
+      `Write ${len}. No lists or headings.`
     ].filter(Boolean).join('\n');
   }
   // the house rules the model sometimes forgets (no emoji, lowercase, sign-off), applied to its text
@@ -1591,9 +1643,12 @@
     cardsOut.push(...r.cards);
     return factsOf(r).slice(0, 1500) || 'Nothing found.';
   }
-  async function speak(msg, userText, chat, { onTok, signal, tools }) {
-    const hist = chat.msgs.slice(-7, -1).map(m => ({ role: m.role === 'me' ? 'user' : 'model', text: String(m.text || '').slice(0, 400) })).filter(h => h.text);
-    const body = { model: brainModel(), system: systemPrompt(), history: hist, prompt: `${userText}\n\nFACTS:\n${msg.facts || '- (no facts)'}`, maxTokens: lenOf() === 'detailed' ? 260 : lenOf() === 'short' ? 90 : 170, temperature: 0.45, tools: tools ? TOOLS : [], fg: document.visibilityState === 'visible' && /^#\/kitsu/.test(location.hash) };
+  async function speak(msg, userText, chat, { onTok, signal, tools, talk }) {
+    const hist = chat.msgs.slice(talk ? -13 : -7, -1).map(m => ({ role: m.role === 'me' ? 'user' : 'model', text: String(m.text || '').slice(0, talk ? 700 : 400) })).filter(h => h.text);
+    const L = lenOf();
+    const hint = CORRECT_RE.test(lc(userText)) ? '\n\n(They are telling you they were just greeting you or chatting, not asking for anything. Apologise in a few words, then just chat about them or their day. Do not mention reading.)' : '';
+    const body = talk ? { model: brainModel(), system: chatPrompt(), history: hist, prompt: userText + hint, maxTokens: L === 'detailed' ? 380 : L === 'short' ? 110 : 230, temperature: 0.75, tools: [], fg: true }
+      : { model: brainModel(), system: systemPrompt(), history: hist, prompt: `${userText}\n\nFACTS:\n${msg.facts || '- (no facts)'}`, maxTokens: L === 'detailed' ? 260 : L === 'short' ? 90 : 170, temperature: 0.45, tools: tools ? TOOLS : [], fg: document.visibilityState === 'visible' && /^#\/kitsu/.test(location.hash) };
     const res = await fetch('/k/kitsu/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
     if (!res.ok || !res.body) throw new Error('brain ' + res.status);
     const rd = res.body.getReader(), dec = new TextDecoder();
@@ -1767,13 +1822,23 @@
     // the on-device model: kept warm while Kitsu is in front, closed a few minutes after; the download is offered on the page, once
     let warmAt = 0;
     const warm = () => { if (!brainReady() || Date.now() - warmAt < 30e3) return; warmAt = Date.now(); K.api.post('/k/kitsu/warm', { model: brainModel(), system: systemPrompt() }).catch(() => {}); };
-    brainStatus(true).then(st => {
+    brainStatus(true).then(async st => {
       if (!page.isConnected || !st?.runtime || !S().llm) return;
       idle();
       if (st.models[brainModel()]?.have) { warm(); return; }
-      if (pop) return;
-      const later = ls.get('koru-kitsu-brain-later', 0);
-      if (st.dl?.state === 'downloading' || st.dl?.state === 'verifying' || Date.now() - later > 3 * DAY) foot.prepend(brainCard(() => { brainStatus(true).then(() => { idle(); warmAt = 0; warm(); }); }));
+      const busyDl = st.dl?.state === 'downloading' || st.dl?.state === 'verifying';
+      if (!busyDl && !autoDl.tried && !(st.dl?.state === 'cancelled')) { autoDl.tried = true; await K.api.post('/k/kitsu/download', { model: brainModel() }).catch(() => {}); await brainStatus(true); }
+      if (!pop) { foot.prepend(brainCard(() => { brainStatus(true).then(() => { idle(); warmAt = 0; warm(); }); })); return; }
+      // the pop-up: progress in the status line, then the voice switches on by itself
+      const tick = setInterval(async () => {
+        if (!page.isConnected) { clearInterval(tick); return; }
+        const s2 = await brainStatus(true), d = s2?.dl;
+        if (s2?.models?.[brainModel()]?.have) { clearInterval(tick); idle(); warmAt = 0; warm(); return; }
+        if (busy) return;
+        if (d?.state === 'downloading') status(`Getting my AI voice · ${Math.round(d.done / (d.total || 1) * 100)}%`);
+        else if (d?.state === 'verifying') status('Checking my AI voice…');
+        else { clearInterval(tick); idle(); }
+      }, 2000);
     });
     if (!pop) {
       const warmT = setInterval(() => { if (page.isConnected && document.visibilityState === 'visible') { warmAt = 0; warm(); } }, 60e3);
@@ -1809,7 +1874,7 @@
       const s = S();
       if (pop) return el('div.ks-hello.ks-hello-p', avatar('ks-ava-p'),
         el('h2', { text: voice(line('hi', {}, new Date().getDate()), { key: 'hi', last: false }) }),
-        el('p.muted', { text: 'Ask about this page, your reading, or Koru. I can open things for you, and I ask before changing anything.' }));
+        el('p.muted', { text: 'Talk to me about anything. When you want, I can help with your reading, this page or Koru too.' }));
       return el('div.ks-hello',
         avatar('ks-ava-l'),
         el('h2', { text: voice(line('hi', {}, new Date().getDate()), { key: 'hi', last: false }) }),
@@ -1879,14 +1944,16 @@
         const ctrl = new AbortController();
         let first = 0, box = null;
         let slow = false;
-        const giveUp = setTimeout(() => { if (!first) { slow = true; ctrl.abort(); } }, brainModel() === 'fast' ? 5000 : 7000);
+        const cold = brain.st?.loaded !== brainModel();
+        const giveUp = setTimeout(() => { if (!first) { slow = !cold; ctrl.abort(); } }, cold ? 25000 : brainModel() === 'fast' ? 6000 : 9000);
         live = msgNode({ ...reply, text: '' }, api, { animate: true }); live.classList.add('ks-live');
         box = live.querySelector('.ks-text'); box.append(el('span.ks-dots', el('i'), el('i'), el('i')));
         talk(live.querySelector('.ks-ava'), true);
         typing.replaceWith(live); if (nearBottom()) toBottom(true);
         try {
           reply.facts = facts;
-          const res = await speak(reply, text, c, { signal: ctrl.signal, tools: (rb.intents || []).every(i => i === 'unknown'), onTok: t => {
+          const talkMode = (rb.intents || []).length > 0 && rb.intents.every(i => i === 'chat' || i === 'smalltalk_greeting' || i === 'smalltalk_thanks' || i === 'smalltalk_bye' || i === 'smalltalk_joke' || i === 'about_kitsu');
+          const res = await speak(reply, text, c, { signal: ctrl.signal, talk: talkMode, tools: (rb.intents || []).every(i => i === 'unknown'), onTok: t => {
             if (!first) { first = performance.now(); reply.ttft = Math.round(first - t0); }
             const nb = richText(polish(t)); nb.classList.add('ks-caret'); box.replaceWith(nb); box = nb;
             if (nearBottom()) scroller.scrollTop = scroller.scrollHeight;
@@ -1897,6 +1964,7 @@
         } catch { if (live && !first) { live.replaceWith(typing); live = null; } }
         delete reply.facts;
         clearTimeout(giveUp);
+        if (cold) brainStatus(true);
         if (slow || (reply.tps && reply.tps < 2.5)) { ls.set(SLOW_KEY, Date.now() + 10 * 60e3); note.hidden = false; note.replaceChildren(icon('sparkle'), el('span', { text: 'Kitsu’s brain is slow on this PC right now, so Kitsu answers with its quick replies for a while.' }), el('button.ks-ri', { title: 'Hide', 'aria-label': 'Hide note', onclick: () => { note.hidden = true; } }, icon('x'))); }
       }
       // going somewhere is free (no approval); changing your data waits for a Yes
