@@ -5,22 +5,27 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
+import android.graphics.drawable.Animatable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Base64;
 import android.view.HapticFeedbackConstants;
+import android.view.Gravity;
 import android.view.View;
-import android.view.ViewTreeObserver;
+import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.webkit.JavascriptInterface;
@@ -33,6 +38,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 
 import androidx.core.content.FileProvider;
 
@@ -65,8 +71,12 @@ public class MainActivity extends Activity implements KoruBackend.Opener {
     private boolean imeShown = false;
     // the system bars sit over the app's own bars: their space is painted in the colours the page asks for
     private final BarsDrawable bars = new BarsDrawable();
-    // the splash screen stays up until the page has drawn its first screen (or a few seconds pass)
-    private volatile boolean pageReady = false;
+    // Koru's splash (the line-art fox drawing itself in, in the last theme's colours) stays up until the page has
+    // drawn its first screen, or 3 seconds pass
+    private View splash;
+    private long splashAt;
+    private boolean splashDone = false;
+    private static final long SPLASH_MIN = 950, SPLASH_MAX = 3000;
     // a file picker the page opened (<input type=file>: restoring a backup, a wallpaper, importing), waiting for its answer
     private ValueCallback<Uri[]> fileWait;
     private static final int PICK_FILE = 41;
@@ -130,18 +140,7 @@ public class MainActivity extends Activity implements KoruBackend.Opener {
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
         if (Build.VERSION.SDK_INT >= 29) { getWindow().setNavigationBarContrastEnforced(false); getWindow().setStatusBarContrastEnforced(false); }
         setContentView(frame);
-        // keep the splash screen (Android 12+) or the plain background up until the page is ready
-        final long shown = System.currentTimeMillis();
-        frame.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
-            @Override public boolean onPreDraw() {
-                if (pageReady || System.currentTimeMillis() - shown > 3000) {
-                    frame.getViewTreeObserver().removeOnPreDrawListener(this);
-                    return true;
-                }
-                frame.postDelayed(frame::invalidate, 50);
-                return false;
-            }
-        });
+        if (state == null) showSplash();
 
         if (state != null) web.restoreState(state);
         else web.loadUrl(ORIGIN + "/index.html");
@@ -296,8 +295,24 @@ public class MainActivity extends Activity implements KoruBackend.Opener {
             if (path == null || !path.startsWith("/k/")) return;
             saveUrl(ORIGIN + path, "attachment; filename=\"" + (name == null ? "Koru file" : name.replace("\"", "")) + "\"", null);
         }
-        // the page has drawn its first screen: the splash screen can go
-        @JavascriptInterface public void ready() { pageReady = true; runOnUiThread(() -> frame.invalidate()); }
+        // the page has drawn its first screen: the splash can go (once its animation has had its moment)
+        @JavascriptInterface public void ready() {
+            runOnUiThread(() -> frame.postDelayed(MainActivity.this::hideSplash, Math.max(0, SPLASH_MIN - (SystemClock.uptimeMillis() - splashAt))));
+        }
+        // the theme's key colours (#rrggbb: bg, bg2, accent, text, and light true/false), kept for the next splash
+        @JavascriptInterface public void setTheme(String json) {
+            if (json == null || json.length() > 2000) return;
+            SharedPreferences p = getSharedPreferences("koru", MODE_PRIVATE);
+            if (json.equals(p.getString("theme", null))) return;
+            p.edit().putString("theme", json).apply();
+            // Android 13+: the system's own (plain) splash before Koru's matches light or dark too, from the next launch
+            if (Build.VERSION.SDK_INT >= 33) {
+                boolean light = false;
+                try { light = new org.json.JSONObject(json).optBoolean("light"); } catch (Exception ignored) {}
+                final int style = light ? R.style.Koru_SplashLight : R.style.Koru;
+                runOnUiThread(() -> { try { getSplashScreen().setSplashScreenTheme(style); } catch (Exception ignored) {} });
+            }
+        }
         // the colours behind the status bar (top) and the navigation bar (bottom), as #rrggbb
         @JavascriptInterface public void setBars(String top, String bottom) { runOnUiThread(() -> paintBars(top, bottom)); }
         // a short buzz: tick (a tap or a switch), long (a long-press), confirm, reject
@@ -343,17 +358,72 @@ public class MainActivity extends Activity implements KoruBackend.Opener {
         }
     }
 
+    // ---------- the splash: the line-art fox drawing itself in, in the colours of the theme used last ----------
+    private void showSplash() {
+        // Koru's Liquid glass until a theme has been seen
+        int bg = Color.parseColor("#07081a"), bg2 = Color.parseColor("#140a2a"), accent = Color.parseColor("#8f7dff"), ink = Color.parseColor("#f3f4ff");
+        try {
+            String saved = getSharedPreferences("koru", MODE_PRIVATE).getString("theme", null);
+            if (saved != null) {
+                org.json.JSONObject t = new org.json.JSONObject(saved);
+                bg = parseColor(t.optString("bg"), bg); bg2 = parseColor(t.optString("bg2"), bg2);
+                accent = parseColor(t.optString("accent"), accent); ink = parseColor(t.optString("text"), ink);
+            }
+        } catch (Exception ignored) {}
+        float dp = getResources().getDisplayMetrics().density;
+        FrameLayout box = new FrameLayout(this);
+        box.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[] { bg, bg2 }));
+        box.setClickable(true);   // taps don't reach the page underneath
+        // the soft glow behind the fox, in the accent colour
+        View glow = new View(this);
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+        g.setColors(new int[] { withAlpha(accent, 0x99), withAlpha(accent, 0x40), withAlpha(accent, 0) });
+        g.setGradientRadius(124 * dp);
+        glow.setBackground(g);
+        glow.setAlpha(0f);
+        box.addView(glow, new FrameLayout.LayoutParams((int) (248 * dp), (int) (248 * dp), Gravity.CENTER));
+        // the fox, its lines in the theme's text colour (dark lines on a light theme)
+        Drawable fox = getDrawable(R.drawable.splash_fox_anim).mutate();
+        fox.setTint(ink);
+        ImageView foxView = new ImageView(this);
+        foxView.setImageDrawable(fox);
+        box.addView(foxView, new FrameLayout.LayoutParams((int) (288 * dp), (int) (288 * dp), Gravity.CENTER));
+        // over everything, the system bars' space included
+        ((ViewGroup) getWindow().getDecorView()).addView(box, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        bars.set(bg, bg2);
+        // dark status bar icons on a light theme (once the window is up, or the theme's own setting wins)
+        final int top = bg, bottom = bg2;
+        getWindow().getDecorView().post(() -> barLook(top, bottom));
+        splash = box;
+        splashAt = SystemClock.uptimeMillis();
+        foxView.post(() -> { if (fox instanceof Animatable) ((Animatable) fox).start(); });
+        // the glow rises as the lines finish (540 ms in, as in splash_fox_anim.xml), then settles
+        glow.animate().alpha(1f).setStartDelay(540).setDuration(180)
+                .withEndAction(() -> glow.animate().alpha(0.55f).setStartDelay(0).setDuration(260).start()).start();
+        frame.postDelayed(this::hideSplash, SPLASH_MAX);
+    }
+    private void hideSplash() {
+        if (splashDone || splash == null) return;
+        splashDone = true;
+        final View s = splash;
+        s.animate().alpha(0f).setDuration(220).withEndAction(() -> { ViewGroup p = (ViewGroup) s.getParent(); if (p != null) p.removeView(s); splash = null; }).start();
+    }
+    private static int withAlpha(int c, int a) { return (c & 0x00ffffff) | (a << 24); }
+
     // ---------- the system bars ----------
     private void paintBars(String top, String bottom) {
         int t = parseColor(top, bars.top), b = parseColor(bottom, bars.bottom);
         bars.set(t, b);
-        if (Build.VERSION.SDK_INT >= 30) {
-            WindowInsetsController c = getWindow().getInsetsController();
-            if (c != null) {
-                int look = (light(t) ? WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS : 0) | (light(b) ? WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS : 0);
-                c.setSystemBarsAppearance(look, WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
-            }
-        }
+        barLook(t, b);
+    }
+    private void barLook(int t, int b) {
+        if (Build.VERSION.SDK_INT < 30) return;
+        WindowInsetsController c = getWindow().getInsetsController();
+        if (c == null) return;
+        int look = (light(t) ? WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS : 0) | (light(b) ? WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS : 0);
+        c.setSystemBarsAppearance(look, WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
     }
     private static int parseColor(String s, int fallback) { try { return Color.parseColor(s); } catch (Exception e) { return fallback; } }
     private static boolean light(int c) { return (0.299 * Color.red(c) + 0.587 * Color.green(c) + 0.114 * Color.blue(c)) > 150; }

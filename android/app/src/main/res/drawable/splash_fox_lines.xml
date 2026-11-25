@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from web/img/icon.svg (the line-art fox: its hatch lines clipped to the head). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp" android:height="288dp" android:viewportWidth="256" android:viewportHeight="256">
+    <group android:name="fox" android:pivotX="128" android:pivotY="132" android:scaleX="0.82" android:scaleY="0.82">
+        <group android:name="hatch">
+            <clip-path android:pathData="M62,50 L108,96 L148,96 L194,50 L190,120 L214,144 L128,214 L42,144 L66,120 Z M102,154 L112,144 L82,138 Z M174,138 L144,144 L154,154 Z M78,112 L100,108 L82,90 Z M174,90 L156,108 L178,112 Z"/>
+            <path android:name="s0" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M40.81,141.59 L43.65,148.62"/>
+            <path android:name="s1" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M47.34,135.06 L57.31,159.74"/>
+            <path android:name="s2" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M53.87,128.53 L70.97,170.86"/>
+            <path android:name="s3" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M60.4,122 L84.63,181.98"/>
+            <path android:name="s4" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M62.81,105.27 L98.29,193.1"/>
+            <path android:name="s5" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M61.3,78.84 L111.95,204.22"/>
+            <path android:name="s6" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M59.79,52.41 L125.61,215.33"/>
+            <path android:name="s7" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M69.7,54.25 L133.65,212.55"/>
+            <path android:name="s8" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M85.08,69.63 L140.55,206.93"/>
+            <path android:name="s9" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M100.46,85.01 L147.45,201.32"/>
+            <path android:name="s10" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M113.05,93.47 L154.35,195.7"/>
+            <path android:name="s11" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M122.21,93.47 L161.25,190.09"/>
+            <path android:name="s12" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M131.38,93.47 L168.15,184.47"/>
+            <path android:name="s13" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M140.55,93.47 L175.05,178.85"/>
+            <path android:name="s14" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M148.91,91.49 L181.95,173.24"/>
+            <path android:name="s15" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M155.44,84.96 L188.84,167.62"/>
+            <path android:name="s16" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M161.97,78.43 L195.74,162.01"/>
+            <path android:name="s17" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M168.5,71.9 L202.64,156.39"/>
+            <path android:name="s18" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M175.03,65.37 L209.54,150.78"/>
+            <path android:name="s19" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M181.56,58.84 L194.19,90.1"/>
+            <path android:name="s20" android:strokeColor="#FFFFFFFF" android:strokeWidth="3.6" android:strokeLineCap="butt" android:trimPathEnd="0" android:pathData="M188.09,52.31 L195.33,70.22"/>
+        </group>
+        <path android:name="nose" android:fillAlpha="0" android:fillColor="#FFFFFFFF" android:pathData="M116.5,193.5 L138.5,193.5 L127.5,207.5 Z"/>
+    </group>
+</vector>

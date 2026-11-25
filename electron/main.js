@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createBackend } from './backend.js';
 import { updateRoute } from './updater.js';
 import { syncRoute } from './sync.js';
+import { kitsuRoute } from './kitsu-llm.js';   // Kitsu's on-device model (Kitsu page)
 import { screen } from 'electron';   // the wallpaper's size and the widget's spot
 import { spawn, execFile } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -509,6 +510,7 @@ app.whenReady().then(() => {
     }
     if (url.pathname.startsWith('/k/app-update/')) return updateRoute(request, url);
     if (url.pathname.startsWith('/k/sync/')) return syncRoute(request, url);
+    if (url.pathname.startsWith('/k/kitsu/')) return kitsuRoute(request, url);
     if (url.pathname.startsWith('/k/')) {
       const body = request.method === 'GET' || request.method === 'HEAD' ? '' : await request.text();
       const r = await handle({ method: request.method, path: url.pathname, query: url.searchParams, body });

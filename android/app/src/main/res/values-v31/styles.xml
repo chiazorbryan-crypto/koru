@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Android 12 and later: the system splash screen, in Koru's background with the fox. It stays up until
-         the page has drawn its first screen (MainActivity holds it). -->
+    <!-- Android 12 and later: the system splash screen is only a plain background, gone as soon as Koru draws.
+         Koru's own splash (MainActivity) then draws the line-art fox in the saved theme's colours. -->
     <style name="Koru" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/bg</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowSplashScreenBackground">@color/bg</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_fox</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_blank</item>
+    </style>
+    <!-- for a light theme: Android 13+ shows this one at the next launch (MainActivity picks it) -->
+    <style name="Koru.SplashLight">
+        <item name="android:windowSplashScreenBackground">@color/bg_light</item>
     </style>
 </resources>

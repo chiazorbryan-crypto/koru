@@ -169,7 +169,18 @@
     palKey = key;
     const bg = rgb('var(--bg)') || [7, 8, 26, 1];
     pal = { bg, bar: over(rgb('var(--an-bar)'), bg), c1: over(rgb('var(--an-c1)'), bg), reader: over(rgb('var(--readerBg)'), bg) };
+    saveTheme(bg);
     return pal;
+  }
+  // The app keeps the theme's key colours, so its splash (shown before this page loads) draws in them next time.
+  // Sent a moment after the theme settles, so a look being tried out isn't saved.
+  let themeT = 0;
+  function saveTheme(bg) {
+    if (!N.setTheme) return;
+    const solid = c => c ? hex(c) : null;   // see-through colours count as solid: the splash wants plain ones
+    const t = { bg: hex(bg), bg2: solid(over(rgb('var(--bg2)'), bg)), accent: solid(rgb('var(--accent-solid)')), text: solid(rgb('var(--text)')), light: html.classList.contains('light') };
+    clearTimeout(themeT);
+    themeT = setTimeout(() => { try { N.setTheme(JSON.stringify(t)); } catch {} }, 1500);
   }
   function heroTint(v, hero) {
     if (v._anTint && v._anTintKey === palKey) return v._anTint;

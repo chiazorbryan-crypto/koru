@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from web/img/icon.svg (the line-art fox: its hatch lines clipped to the head). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp" android:viewportWidth="256" android:viewportHeight="256">
+    <path android:pathData="M0,0 H256 V256 H0 Z">
+        <aapt:attr name="android:fillColor"><gradient android:type="linear" android:startX="0" android:startY="0" android:endX="256" android:endY="256">
+            <item android:offset="0" android:color="#FF1A1240"/><item android:offset="1" android:color="#FF07081A"/></gradient></aapt:attr>
+    </path>
+    <path android:pathData="M0,0 H256 V256 H0 Z">
+        <aapt:attr name="android:fillColor"><gradient android:type="radial" android:centerX="51" android:centerY="38" android:gradientRadius="179">
+            <item android:offset="0" android:color="#F27A6BFF"/><item android:offset="1" android:color="#007A6BFF"/></gradient></aapt:attr>
+    </path>
+    <path android:pathData="M0,0 H256 V256 H0 Z">
+        <aapt:attr name="android:fillColor"><gradient android:type="radial" android:centerX="230" android:centerY="243" android:gradientRadius="179">
+            <item android:offset="0" android:color="#CC00C8FF"/><item android:offset="1" android:color="#0000C8FF"/></gradient></aapt:attr>
+    </path>
+    <path android:pathData="M0,0 H256 V256 H0 Z">
+        <aapt:attr name="android:fillColor"><gradient android:type="radial" android:centerX="218" android:centerY="26" android:gradientRadius="128">
+            <item android:offset="0" android:color="#99FF4F9A"/><item android:offset="1" android:color="#00FF4F9A"/></gradient></aapt:attr>
+    </path>
+</vector>

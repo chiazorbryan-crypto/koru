@@ -18,8 +18,6 @@ android {
     }
     // The page is the same web/ folder the desktop app uses.
     sourceSets { main { assets.srcDirs = ['../../web'] } }
-    // Kitsu isn't released yet: its files stay out of the app until it is
-    androidResources { ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~:!kitsu.js:!kitsu.css:!kitsunet.js:!<dir>kitsunet' }
     signingConfigs {
         release {
             // the permanent Koru key lives outside the repo (%USERPROFILE%\.koru), or wherever KORU_KEYSTORE says

@@ -1,6 +1,6 @@
 {
   "name": "koru",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Koru — a personal manga and manhwa reader",
   "type": "module",
   "main": "electron/main.js",
@@ -32,12 +32,14 @@
       "web/**/*",
       "build/icon.ico",
       "package.json",
-      "!web/js/kitsu.js",
-      "!web/kitsu.css",
-      "!web/js/kitsunet.js",
-      "!web/kitsunet/**",
-      "!electron/kitsu-llm.js",
-      "!electron/kitsu-llm-worker.js"
+      "!node_modules/node-llama-cpp/llama/gitRelease.bundle",
+      "!node_modules/node-llama-cpp/llama/llama.cpp/**",
+      "!node_modules/node-llama-cpp/llama/localBuilds/**",
+      "!node_modules/node-llama-cpp/templates/**",
+      "!node_modules/@node-llama-cpp/!(win-x64)/**",
+      "!node_modules/**/*.{d.ts,map,md,lib,h}",
+      "!node_modules/**/yarn.lock",
+      "!web/kitsunet/golden.json"
     ],
     "win": {
       "target": "nsis",
@@ -64,6 +66,14 @@
         "to": "koru-media.exe"
       }
     ],
-    "afterPack": "build/after-pack.cjs"
+    "afterPack": "build/after-pack.cjs",
+    "asarUnpack": [
+      "node_modules/@node-llama-cpp/win-x64/**",
+      "node_modules/node-llama-cpp/bins/**"
+    ]
+  },
+  "dependencies": {
+    "@node-llama-cpp/win-x64": "3.22.3",
+    "node-llama-cpp": "3.22.3"
   }
 }

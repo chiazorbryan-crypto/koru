@@ -52,7 +52,7 @@
     const paint = () => {
       const q = input.value.trim().toLowerCase();
       shown = all.map(x => ({ x, s: score(x.title + ' ' + (x.sub || ''), q) })).filter(r => r.s > 0).sort((a, b) => b.s - a.s).slice(0, 12).map(r => r.x);
-      if (q.length >= 2 && K.kitsu) shown.push({ kind: 'Kitsu', title: `Ask Kitsu: "${input.value.trim()}"`, ic: 'fox', go: () => K.kitsu.ask(input.value.trim()) });
+      if (q.length >= 2 && K.kitsu) shown.push({ kind: 'Kitsu', title: `Ask Kitsu: "${input.value.trim()}"`, cover: 'img/icon.svg', go: () => K.kitsu.ask(input.value.trim()) });
       if (q.length >= 2) shown.push({ kind: 'Search', title: `Search every source for "${input.value.trim()}"`, ic: 'search', go: () => K.go('/search?q=' + encodeURIComponent(input.value.trim())) });
       cur = Math.min(cur, Math.max(0, shown.length - 1));
       list.replaceChildren(...shown.map((x, i) => el('button.pal-item' + (i === cur ? '.on' : ''), { onmouseenter: () => { cur = i; mark(); }, onclick: () => pick(i) },

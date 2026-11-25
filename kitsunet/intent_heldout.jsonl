@@ -1,0 +1,145 @@
+{"intent": "recommend", "text": "i finished everything on my list, what now"}
+{"intent": "recommend", "text": "got any good isekai you'd suggest"}
+{"intent": "recommend", "text": "bored. give me something to read"}
+{"intent": "recommend", "text": "can u pick a romance webtoon for me"}
+{"intent": "recommend", "text": "need a new manga to binge this weekend"}
+{"intent": "find_by_description", "text": "there's this manhwa where a girl wakes up as the villainess's maid in a game"}
+{"intent": "find_by_description", "text": "looking for the one where the swordsman loses his arm and learns to fight left handed"}
+{"intent": "find_by_description", "text": "whats that webtoon about a chef who goes back in time"}
+{"intent": "find_by_description", "text": "the manga where the dude can see everyone's level floating above their heads"}
+{"intent": "find_title", "text": "do you have omniscient reader's viewpoint"}
+{"intent": "find_title", "text": "search nano machine"}
+{"intent": "find_title", "text": "where can i find the s-classes that i raised"}
+{"intent": "find_title", "text": "look up return of the mount hua sect for me"}
+{"intent": "more_like", "text": "anything with the same energy as solo leveling"}
+{"intent": "more_like", "text": "recs similar to lookism?"}
+{"intent": "more_like", "text": "i loved tower of god, what's close to it"}
+{"intent": "more_like", "text": "find me something like the 2nd one you showed"}
+{"intent": "refine_shorter", "text": "those are way too long, under 50 chapters maybe"}
+{"intent": "refine_shorter", "text": "something short pls"}
+{"intent": "refine_shorter", "text": "too many chapters, i want a quick one"}
+{"intent": "refine_longer", "text": "i want something that lasts, 200+ chapters"}
+{"intent": "refine_longer", "text": "give me a long one this time"}
+{"intent": "refine_longer", "text": "these are too short"}
+{"intent": "refine_completed", "text": "only ones that already ended"}
+{"intent": "refine_completed", "text": "i don't want to wait for updates, finished series only"}
+{"intent": "refine_completed", "text": "exclude the ongoing stuff"}
+{"intent": "refine_not_that", "text": "nah not feeling those"}
+{"intent": "refine_not_that", "text": "already read all of these"}
+{"intent": "refine_not_that", "text": "none of those, show different ones"}
+{"intent": "refine_not_that", "text": "nope, not those"}
+{"intent": "more_results", "text": "show me a few more"}
+{"intent": "more_results", "text": "next page"}
+{"intent": "more_results", "text": "gimme more options"}
+{"intent": "explain_why", "text": "why'd you recommend that"}
+{"intent": "explain_why", "text": "how come you picked the third one"}
+{"intent": "explain_why", "text": "what makes it a good fit for me"}
+{"intent": "open_item", "text": "pull up the final one on that list"}
+{"intent": "open_item", "text": "let's read number 2"}
+{"intent": "open_item", "text": "take me to the first result"}
+{"intent": "item_details", "text": "what's the plot of nano machine"}
+{"intent": "item_status", "text": "is the second one finished?"}
+{"intent": "item_details", "text": "give me a synopsis of lookism"}
+{"intent": "item_details", "text": "who wrote it"}
+{"intent": "my_stats", "text": "how much have i read this week"}
+{"intent": "my_stats", "text": "how many hours did i spend reading this month"}
+{"intent": "my_stats", "text": "show my reading stats"}
+{"intent": "my_history", "text": "what was the last manhwa i opened"}
+{"intent": "my_history", "text": "what have i read over the past few days"}
+{"intent": "my_history", "text": "list the stuff i read yesterday"}
+{"intent": "stopped_reading", "text": "which series did i abandon"}
+{"intent": "stopped_reading", "text": "stuff i haven't touched in a while"}
+{"intent": "stopped_reading", "text": "what did i start but never finish"}
+{"intent": "whats_new", "text": "any new chapters today?"}
+{"intent": "whats_new", "text": "did solo leveling ragnarok get a new chapter"}
+{"intent": "whats_new", "text": "what updated in my library"}
+{"intent": "streak", "text": "how many days in a row have i read"}
+{"intent": "streak", "text": "is my streak still alive"}
+{"intent": "streak", "text": "did my reading streak break"}
+{"intent": "continue_reading", "text": "continue where i left off"}
+{"intent": "continue_reading", "text": "pick up omniscient reader where i stopped"}
+{"intent": "continue_reading", "text": "which chapter was i at in nano machine"}
+{"intent": "my_genres", "text": "what genres do i read the most"}
+{"intent": "my_genres", "text": "what's my favourite type of story"}
+{"intent": "my_genres", "text": "do i read more action or romance"}
+{"intent": "my_ratings", "text": "which series did i give 5 stars"}
+{"intent": "my_ratings", "text": "show what i rated low"}
+{"intent": "my_ratings", "text": "list my ratings from best to worst"}
+{"intent": "my_shelves", "text": "which titles did i put on my to-read shelf"}
+{"intent": "my_shelves", "text": "show me all my shelves"}
+{"intent": "my_shelves", "text": "what's in my later shelf"}
+{"intent": "my_notes", "text": "what did i write about tower of god"}
+{"intent": "my_notes", "text": "pull up the notes i wrote"}
+{"intent": "my_notes", "text": "read me my note on lookism"}
+{"intent": "my_library", "text": "how many series did i favourite"}
+{"intent": "my_library", "text": "show my library"}
+{"intent": "my_library", "text": "how many manhwa have i finished"}
+{"intent": "wrapped", "text": "give me my yearly recap"}
+{"intent": "wrapped", "text": "show my koru wrapped"}
+{"intent": "wrapped", "text": "how was my reading year"}
+{"intent": "app_help_theme", "text": "can i get a light theme"}
+{"intent": "app_help_theme", "text": "how do i pick a different accent color"}
+{"intent": "app_help_theme", "text": "i want to change the background image"}
+{"intent": "app_help_reader", "text": "how do i read right to left"}
+{"intent": "app_help_reader", "text": "can i make pages fit the width"}
+{"intent": "app_help_reader", "text": "switch to vertical scrolling"}
+{"intent": "app_help_downloads", "text": "how do i save chapters for offline"}
+{"intent": "app_help_downloads", "text": "where do downloaded chapters go"}
+{"intent": "app_help_downloads", "text": "remove all my downloads"}
+{"intent": "app_help_backup_sync", "text": "how do i keep my phone and pc in sync"}
+{"intent": "app_help_backup_sync", "text": "can i make a backup of my favourites"}
+{"intent": "app_help_backup_sync", "text": "how to transfer my data to a new laptop"}
+{"intent": "app_help_import", "text": "can i bring my list over from mangadex"}
+{"intent": "app_help_import", "text": "how do i import my tachiyomi backup"}
+{"intent": "app_help_import", "text": "transfer my myanimelist list into koru"}
+{"intent": "app_help_incognito", "text": "how do i read without it showing up in history"}
+{"intent": "app_help_incognito", "text": "is there a private reading mode"}
+{"intent": "app_help_incognito", "text": "turn off history saving"}
+{"intent": "app_help_shelves_ratings", "text": "how do i put a series on a shelf"}
+{"intent": "app_help_shelves_ratings", "text": "how do i give a series stars"}
+{"intent": "app_help_shelves_ratings", "text": "how can i trash a series i hate"}
+{"intent": "app_help_performance", "text": "everything in koru feels sluggish today"}
+{"intent": "app_help_performance", "text": "scrolling feels slow, how to fix"}
+{"intent": "app_help_performance", "text": "the app uses too much cpu"}
+{"intent": "app_help_updates", "text": "where do i get the newest koru"}
+{"intent": "app_help_updates", "text": "what version is this"}
+{"intent": "app_help_updates", "text": "is koru up to date"}
+{"intent": "app_help_shortcuts", "text": "what keys can i use in the reader"}
+{"intent": "app_help_shortcuts", "text": "is there a shortcut to search"}
+{"intent": "app_help_shortcuts", "text": "list the hotkeys"}
+{"intent": "app_help_music", "text": "can i listen to music while reading"}
+{"intent": "app_help_music", "text": "stop the lofi"}
+{"intent": "app_help_music", "text": "how do i pick music for a series"}
+{"intent": "app_help_other", "text": "how do i add a new source"}
+{"intent": "app_help_other", "text": "how do i read together with a friend"}
+{"intent": "app_help_other", "text": "the site isn't loading chapters"}
+{"intent": "smalltalk_greeting", "text": "yo kitsu"}
+{"intent": "smalltalk_greeting", "text": "evening kitsu!"}
+{"intent": "smalltalk_greeting", "text": "hii there kitsu"}
+{"intent": "smalltalk_thanks", "text": "thanks a lot"}
+{"intent": "smalltalk_thanks", "text": "ty that helps"}
+{"intent": "smalltalk_thanks", "text": "you're the best, thanks"}
+{"intent": "smalltalk_bye", "text": "gotta go, see ya"}
+{"intent": "smalltalk_bye", "text": "goodnight kitsu"}
+{"intent": "smalltalk_bye", "text": "talk later"}
+{"intent": "smalltalk_joke", "text": "know any good manga puns"}
+{"intent": "smalltalk_joke", "text": "got any jokes?"}
+{"intent": "smalltalk_joke", "text": "make me smile"}
+{"intent": "about_kitsu", "text": "who built you kitsu"}
+{"intent": "about_kitsu", "text": "am i talking to a real person"}
+{"intent": "about_kitsu", "text": "what is kitsu"}
+{"intent": "capabilities", "text": "what are you good for"}
+{"intent": "capabilities", "text": "what kind of questions can i ask you"}
+{"intent": "capabilities", "text": "what stuff can you help with"}
+{"intent": "recommend", "text": "surprise me with a good manhwa"}
+{"intent": "find_by_description", "text": "theres a webtoon where a hunter gets a system that only he can see, what is it called"}
+{"intent": "more_like", "text": "more stuff in the vein of omniscient reader please"}
+{"intent": "my_stats", "text": "what's my chapter count for today"}
+{"intent": "whats_new", "text": "have any of my favourites updated since yesterday"}
+{"intent": "continue_reading", "text": "take me back to the chapter i was reading"}
+{"intent": "app_help_reader", "text": "how do i turn on the blue light filter"}
+{"intent": "app_help_downloads", "text": "can i download a whole series at once"}
+{"intent": "refine_completed", "text": "only show me completed manhwa"}
+{"intent": "item_status", "text": "how long is the first one"}
+{"intent": "open_item", "text": "read the second one"}
+{"intent": "smalltalk_bye", "text": "ok i'm off to bed"}

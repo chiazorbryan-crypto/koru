@@ -1,0 +1,126 @@
+{"intent": "recommend", "text": "what's worth reading these days"}
+{"intent": "recommend", "text": "hook me up with a good series"}
+{"intent": "recommend", "text": "i'm in a reading slump, help me pick something"}
+{"intent": "find_by_description", "text": "what's the webtoon where a guy wakes up in a novel as a side character who dies early"}
+{"intent": "find_by_description", "text": "the one where the princess has a time limit before she gets executed"}
+{"intent": "find_by_description", "text": "there was a manga about a girl who opens a bakery in a fantasy town, what was it"}
+{"intent": "find_title", "text": "do they have the god of high school here"}
+{"intent": "find_title", "text": "pull up eleceed"}
+{"intent": "find_title", "text": "is solo max level newbie on any of my sources"}
+{"intent": "more_like", "text": "give me titles that feel like nano machine"}
+{"intent": "more_like", "text": "what should i read after finishing omniscient reader"}
+{"intent": "more_like", "text": "similar vibes to the first card please"}
+{"intent": "refine_shorter", "text": "can it be a short one"}
+{"intent": "refine_shorter", "text": "less than 30 chapters please"}
+{"intent": "refine_shorter", "text": "i don't have time for long series"}
+{"intent": "refine_longer", "text": "i want a really long one to sink into"}
+{"intent": "refine_longer", "text": "something with hundreds of chapters"}
+{"intent": "refine_longer", "text": "more chapters than that"}
+{"intent": "refine_completed", "text": "has to be finished already"}
+{"intent": "refine_completed", "text": "no ongoing series please"}
+{"intent": "refine_completed", "text": "just ones with an ending"}
+{"intent": "refine_not_that", "text": "nope, none of those work for me"}
+{"intent": "refine_not_that", "text": "i've seen all of those already"}
+{"intent": "refine_not_that", "text": "something else, not these"}
+{"intent": "more_results", "text": "show a couple more"}
+{"intent": "more_results", "text": "got anything else?"}
+{"intent": "more_results", "text": "keep them coming"}
+{"intent": "explain_why", "text": "why'd you go with that one"}
+{"intent": "explain_why", "text": "what's the reason you suggested it"}
+{"intent": "explain_why", "text": "what makes you think it's my type"}
+{"intent": "open_item", "text": "start reading the third card"}
+{"intent": "open_item", "text": "let me read the first one"}
+{"intent": "open_item", "text": "go to number one"}
+{"intent": "item_details", "text": "what's the second one about"}
+{"intent": "item_details", "text": "how many chapters does solo leveling have"}
+{"intent": "item_status", "text": "is it completed?"}
+{"intent": "my_stats", "text": "how many chapters did i get through today"}
+{"intent": "my_stats", "text": "what are my reading numbers this month"}
+{"intent": "my_stats", "text": "how many chapters this year"}
+{"intent": "my_history", "text": "what did i read last"}
+{"intent": "my_history", "text": "my recently read series"}
+{"intent": "my_history", "text": "show what i've been reading lately"}
+{"intent": "stopped_reading", "text": "which series have i given up on"}
+{"intent": "stopped_reading", "text": "anything i stopped halfway through"}
+{"intent": "stopped_reading", "text": "what am i neglecting"}
+{"intent": "whats_new", "text": "anything updated?"}
+{"intent": "whats_new", "text": "are there new chapters in my favourites"}
+{"intent": "whats_new", "text": "did eleceed come out with a new chapter"}
+{"intent": "streak", "text": "how long is my streak now"}
+{"intent": "streak", "text": "what's my reading streak at"}
+{"intent": "streak", "text": "am i still on a streak"}
+{"intent": "continue_reading", "text": "resume where i stopped"}
+{"intent": "continue_reading", "text": "what chapter was i on in eleceed"}
+{"intent": "continue_reading", "text": "keep reading my last series"}
+{"intent": "my_genres", "text": "what are my top genres"}
+{"intent": "my_genres", "text": "which genres do i like most"}
+{"intent": "my_genres", "text": "what kind of manhwa do i usually read"}
+{"intent": "my_ratings", "text": "what's my highest rated series"}
+{"intent": "my_ratings", "text": "show my 1 star ratings"}
+{"intent": "my_ratings", "text": "which ones did i rate"}
+{"intent": "my_shelves", "text": "what's on my reading shelf"}
+{"intent": "my_shelves", "text": "list everything on my favourites shelf"}
+{"intent": "my_shelves", "text": "what shelves do i have"}
+{"intent": "my_notes", "text": "do i have any notes on eleceed"}
+{"intent": "my_notes", "text": "what notes have i written"}
+{"intent": "my_notes", "text": "show the note i left on lookism"}
+{"intent": "my_library", "text": "count my favourites"}
+{"intent": "my_library", "text": "what's in my library"}
+{"intent": "my_library", "text": "how many series have i completed so far"}
+{"intent": "wrapped", "text": "show me my wrapped"}
+{"intent": "wrapped", "text": "how did my month of reading go"}
+{"intent": "wrapped", "text": "my koru year in review"}
+{"intent": "app_help_theme", "text": "how do i switch to dark mode"}
+{"intent": "app_help_theme", "text": "can i change the colours"}
+{"intent": "app_help_theme", "text": "how do i set my own wallpaper"}
+{"intent": "app_help_reader", "text": "how do i change to page by page reading"}
+{"intent": "app_help_reader", "text": "can i zoom into pages"}
+{"intent": "app_help_reader", "text": "how do i change the reader layout"}
+{"intent": "app_help_downloads", "text": "how do i download a series"}
+{"intent": "app_help_downloads", "text": "can i read without internet"}
+{"intent": "app_help_downloads", "text": "how do i clear my downloads"}
+{"intent": "app_help_backup_sync", "text": "how do i sync koru between devices"}
+{"intent": "app_help_backup_sync", "text": "how do i export my library"}
+{"intent": "app_help_backup_sync", "text": "how do i restore my backup"}
+{"intent": "app_help_import", "text": "can i import my anilist list"}
+{"intent": "app_help_import", "text": "how do i move over from mihon"}
+{"intent": "app_help_import", "text": "import my myanimelist"}
+{"intent": "app_help_incognito", "text": "how do i turn on incognito"}
+{"intent": "app_help_incognito", "text": "can i read without it saving"}
+{"intent": "app_help_incognito", "text": "how does private mode work"}
+{"intent": "app_help_shelves_ratings", "text": "how do shelves work in koru"}
+{"intent": "app_help_shelves_ratings", "text": "how do i rate something"}
+{"intent": "app_help_shelves_ratings", "text": "how do i make a new shelf"}
+{"intent": "app_help_performance", "text": "koru keeps freezing"}
+{"intent": "app_help_performance", "text": "how do i make the app run faster"}
+{"intent": "app_help_performance", "text": "pages load really slowly and it lags"}
+{"intent": "app_help_updates", "text": "is there an update for koru"}
+{"intent": "app_help_updates", "text": "which version do i have"}
+{"intent": "app_help_updates", "text": "how do i check for updates"}
+{"intent": "app_help_shortcuts", "text": "are there keyboard shortcuts"}
+{"intent": "app_help_shortcuts", "text": "what's the shortcut for the next chapter"}
+{"intent": "app_help_shortcuts", "text": "show me the hotkeys"}
+{"intent": "app_help_music", "text": "how do i turn the music off"}
+{"intent": "app_help_music", "text": "can koru play lofi"}
+{"intent": "app_help_music", "text": "how do i change the music"}
+{"intent": "app_help_other", "text": "how do i change the source of a series"}
+{"intent": "app_help_other", "text": "how do i invite friends to read together"}
+{"intent": "app_help_other", "text": "where is the settings page"}
+{"intent": "smalltalk_greeting", "text": "hey there"}
+{"intent": "smalltalk_greeting", "text": "good morning kitsu"}
+{"intent": "smalltalk_greeting", "text": "hello hello"}
+{"intent": "smalltalk_thanks", "text": "thank you so much"}
+{"intent": "smalltalk_thanks", "text": "cheers kitsu"}
+{"intent": "smalltalk_thanks", "text": "thanks, that's perfect"}
+{"intent": "smalltalk_bye", "text": "see you later"}
+{"intent": "smalltalk_bye", "text": "bye for now"}
+{"intent": "smalltalk_bye", "text": "nighty night kitsu"}
+{"intent": "smalltalk_joke", "text": "tell me something funny"}
+{"intent": "smalltalk_joke", "text": "do you know any jokes"}
+{"intent": "smalltalk_joke", "text": "cheer me up with a joke"}
+{"intent": "about_kitsu", "text": "what are you exactly"}
+{"intent": "about_kitsu", "text": "are you a person"}
+{"intent": "about_kitsu", "text": "what's your name again"}
+{"intent": "capabilities", "text": "what can i ask you"}
+{"intent": "capabilities", "text": "what are your features"}
+{"intent": "capabilities", "text": "what do you do"}
