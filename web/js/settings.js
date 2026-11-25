@@ -46,7 +46,6 @@
     { id: 'pc', name: 'Windows', ic: 'pages', sub: 'Koru on your desktop: the taskbar, the desktop widget and the Now playing player.', has: ['Taskbar', 'Desktop', 'Now playing'] },
     { id: 'speed', name: 'Performance', ic: 'chart', sub: 'Graphics, smoothness and checking the sources.', has: ['Graphics', 'Sources'] },
     { id: 'music', name: 'Music', ic: 'music', sub: 'Songs from YouTube Music inside Koru: how the player shows, volume and your Glasswave library.', has: ['Music'] },
-    { id: 'kitsu', name: 'Kitsu', ic: 'kitsu', sub: 'Your assistant: where it lives, the pop-up and how it answers.', has: ['Kitsu'] },
     { id: 'about', name: 'About', ic: 'sparkle', sub: 'Your version and updates.', has: ['About'] }
   ];
   let curSection = (() => { try { return localStorage.getItem('koru-set-section') || 'look'; } catch { return 'look'; } })();
