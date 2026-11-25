@@ -128,3 +128,30 @@ html.reading .imp-hand { display: none; }
 .cs-row .btn.sure { color: #ef476f; }
 .cs-h { margin: 6px 0 2px; font-size: 13px; opacity: .75; font-weight: 600; }
 .cs-row.off { opacity: .55; }
+
+/* The update screen (update-screen.js): the Android opening animation, on PC, while an update installs */
+.us-screen { --us-a: var(--accent-solid, #8b5cf6); --us-b: var(--text, #fff); position: fixed; left: 50%; top: 50%; z-index: 99999; width: min(380px, calc(100vw - 32px));
+  display: grid; justify-items: center; gap: 12px; padding: 22px 24px 20px; border-radius: 22px; color: var(--text, #fff);
+  background: color-mix(in srgb, var(--bg, #0b0b12) 88%, transparent); border: 1px solid color-mix(in srgb, var(--us-b) 12%, transparent);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .45), 0 0 0 100vmax rgba(0, 0, 0, .28); backdrop-filter: blur(18px) saturate(1.4);
+  opacity: 0; transform: translate(-50%, -46%) scale(.96); transition: opacity .4s ease, transform .45s cubic-bezier(.3, 1.3, .5, 1); }
+.us-screen.on { opacity: 1; transform: translate(-50%, -50%); }
+.us-mark { width: 150px; height: 150px; margin: -10px 0 -18px; filter: drop-shadow(0 0 22px color-mix(in srgb, var(--us-a) 55%, transparent)); }
+.us-mark svg { width: 100%; height: 100%; overflow: visible; }
+.us-hatch path { fill: none; stroke: url(#us-grad); stroke-width: 3.6; stroke-dasharray: 1; stroke-dashoffset: 1; }
+.us-nose { fill: var(--us-a); opacity: 0; }
+.us-mark.draw .us-hatch path { animation: us-draw .33s cubic-bezier(.4, 0, .2, 1) forwards; animation-delay: calc(var(--i) * 18ms); }
+.us-mark.draw .us-nose { animation: us-fade .2s ease forwards .42s; }
+.us-mark.draw .us-fox { animation: us-pop .38s cubic-bezier(.3, 1.4, .5, 1) .5s; transform-origin: 128px 132px; transform-box: view-box; }
+@keyframes us-draw { to { stroke-dashoffset: 0; } }
+@keyframes us-fade { to { opacity: 1; } }
+@keyframes us-pop { 50% { scale: 1.06; } }
+.us-title { font-size: 17px; font-weight: 700; letter-spacing: .2px; margin-top: 4px; }
+.us-bar { width: 100%; height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--us-b) 12%, transparent); overflow: hidden; }
+.us-bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--us-a), color-mix(in srgb, var(--us-a) 60%, var(--us-b))); transition: width .5s ease; }
+.us-busy .us-bar i { width: 100% !important; background-size: 200% 100%; background-image: linear-gradient(90deg, var(--us-a), color-mix(in srgb, var(--us-a) 40%, var(--us-b)), var(--us-a)); animation: us-slide 1.2s linear infinite; }
+@keyframes us-slide { to { background-position: -200% 0; } }
+.us-row { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.us-msg { opacity: .7; }
+.us-pct { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .us-hatch path { stroke-dashoffset: 0; } .us-nose { opacity: 1; } .us-mark.draw * { animation: none !important; } }

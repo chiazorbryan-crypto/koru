@@ -105,6 +105,11 @@ export async function updateRoute(request, url) {
       return json(200, { ok: true, hasKey: !!k });
     }
     if (sub === '/status') return json(200, job || { state: 'idle' });
+    if (sub === '/finished') {
+      const f = path.join(app.getPath('userData'), 'just-updated.json');
+      let j = null; try { j = JSON.parse(fs.readFileSync(f, 'utf8')); fs.rmSync(f, { force: true }); } catch {}
+      return json(200, j && j.to === app.getVersion() && Date.now() - (j.at || 0) < 30 * 60e3 ? j : {});
+    }
     if (sub === '/install' && request.method === 'POST') {
       if (!app.isPackaged || process.platform !== 'win32') return json(400, { error: 'Updates install from the installed Koru only.' });
       if (job?.state === 'downloading' || job?.state === 'installing') return json(200, { ok: true });
@@ -114,6 +119,9 @@ export async function updateRoute(request, url) {
         try {
           const file = await download(info);
           job.state = 'installing';
+          // the new Koru shows the update screen finishing once when it opens (GET /finished), never on a normal start
+          try { fs.writeFileSync(path.join(app.getPath('userData'), 'just-updated.json'), JSON.stringify({ from: app.getVersion(), to: info.version, at: Date.now() })); } catch {}
+          await new Promise(r => setTimeout(r, 1200));   // the page shows "Installing" on the update screen first
           // /S: silent install over the current one (same folder). --force-run: open Koru when it's done.
           spawn(file, ['/S', '--force-run'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
           setTimeout(() => app.quit(), 800);

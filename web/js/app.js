@@ -190,12 +190,25 @@
     if (btn) btn.disabled = true;
     try { await K.api.post('/k/app-update/install'); }
     catch (e) { K.toast(e.message, 'error'); if (btn) btn.disabled = false; return; }
+    // on a PC: the update screen (the fox drawing itself, with how much has downloaded) until Koru closes to install
+    const pc = K.info?.platform === 'desktop' && K.updateScreen;
+    if (pc) K.updateScreen.show('Updating Koru');
+    const mb = n => (n / 1048576).toFixed(1) + ' MB';
     const tick = async () => {
       const s = await K.api.get('/k/app-update/status').catch(() => ({}));
-      if (s.state === 'downloading') { if (btn) btn.textContent = 'Downloading ' + Math.round(s.done / Math.max(1, s.total) * 100) + '%'; setTimeout(tick, 700); }
-      else if (s.state === 'installing') { if (btn) btn.textContent = 'Installing…'; K.toast(K.info?.platform === 'android' ? 'Downloaded. Tap Install when Android asks.' : 'Installing. Koru closes and opens again by itself.', 'ok'); }
-      else if (s.state === 'failed') { K.toast(s.error || 'Update failed', 'error'); if (btn) { btn.disabled = false; btn.textContent = 'Try again'; } }
-      else setTimeout(tick, 700);
+      if (s.state === 'downloading') {
+        const pct = Math.round(s.done / Math.max(1, s.total) * 100);
+        if (btn) btn.textContent = 'Downloading ' + pct + '%';
+        if (pc) K.updateScreen.progress(pct, `Downloading · ${mb(s.done)} of ${mb(s.total)}`);
+        setTimeout(tick, 400);
+      }
+      else if (s.state === 'installing') {
+        if (btn) btn.textContent = 'Installing…';
+        if (pc) { K.updateScreen.progress(100); K.updateScreen.busy('Installing. Koru closes and opens again by itself.'); }
+        else K.toast(K.info?.platform === 'android' ? 'Downloaded. Tap Install when Android asks.' : 'Installing. Koru closes and opens again by itself.', 'ok');
+      }
+      else if (s.state === 'failed') { if (pc) K.updateScreen.hide(); K.toast(s.error || 'Update failed', 'error'); if (btn) { btn.disabled = false; btn.textContent = 'Try again'; } }
+      else setTimeout(tick, 400);
     };
     tick();
   };
@@ -204,6 +217,12 @@
     try { const info = await K.api.get('/k/info'); K.info = info; if (info.platform === 'desktop') document.documentElement.classList.add('desktop'); }
     catch { K.info = { platform: 'web' }; }
     await K.loadData();
+    // just updated (PC): the update screen finishes on the new version for a moment; a normal start shows nothing
+    if (K.info?.platform === 'desktop' && K.updateScreen) K.api.get('/k/app-update/finished').then(f => {
+      if (!f?.to) return;
+      K.updateScreen.show('Updated to Koru ' + f.to); K.updateScreen.progress(100, 'All done. Your library and settings are just as you left them.');
+      setTimeout(() => K.updateScreen.hide(), 2600);
+    }).catch(() => {});
     await K.customSources?.start();   // sources you added yourself, before anything asks them for series
     // 0.5.1: ambient light is far lighter now, so turn it back on where the old smooth guard switched it off
     const rs = K.data.settings.reader;
