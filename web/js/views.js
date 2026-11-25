@@ -610,7 +610,7 @@
     if (K.flag(provider, slug).trash) root.append(el('div.glass', { style: { padding: '12px 16px', margin: '0 0 14px', display: 'flex', gap: '10px', alignItems: 'center' } },
       icon('trash'), el('span', { style: { flex: 1 }, text: 'You put this in Absolute trash, so it\'s hidden from your feed.' }),
       el('button.btn.small', { onclick: () => { const f = { ...K.data.flags[key] }; delete f.trash; if (f.hidden || f.completed) K.data.flags[key] = f; else delete K.data.flags[key]; K.save('flags'); K.toast('Restored', 'ok'); K.go('/series/' + provider + '/' + encodeURIComponent(slug), true); location.reload(); } }, icon('undo'), 'Restore')));
-    root.append(hero, K.srcCheck?.seriesNote?.(s) || '', K.rx?.recapCard?.(s, chapters) || '', el('div', { style: { marginTop: '18px' } }, desc), K.libx?.seriesPanel?.(s) || '', K.chars?.section?.(s, chapters) || '', (!offline && K.disc?.similarRow?.(s)) || '');
+    root.append(hero, K.srcCheck?.seriesNote?.(s) || '', K.rx?.recapCard?.(s, chapters) || '', K.music?.seriesRow?.(s) || '', el('div', { style: { marginTop: '18px' } }, desc), K.libx?.seriesPanel?.(s) || '', K.chars?.section?.(s, chapters) || '', (!offline && K.disc?.similarRow?.(s)) || '');
 
     // chapters — Kotatsu style: long-press or right-click a chapter to start selecting, Shift-click for a range
     let asc = false, selecting = false, view = 'all', anchor = null;

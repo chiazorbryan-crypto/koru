@@ -90,6 +90,8 @@ const ICONS = {
   done: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/>',
   undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
   calendar: '<rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+  fox: '<path d="M4 4l4.5 5h7L20 4l-.6 8.4L21 14l-9 7-9-7 1.6-1.6z"/><path d="M9 13.5l1.5 1M15 13.5l-1.5 1M11 17.5h2"/>',
+  music: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
   dot: '<circle cx="12" cy="12" r="3" fill="currentColor"/>'
 };
 K.icon = function icon(name, cls = '') {

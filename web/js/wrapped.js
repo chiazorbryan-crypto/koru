@@ -420,5 +420,5 @@
     });
   }
 
-  K.lively2 = { surpriseButton, dailyPick };
+  K.lively2 = { surpriseButton, dailyPick, crunch };   // crunch: Kitsu reads the Wrapped numbers too
 })();

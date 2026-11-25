@@ -1,7 +1,7 @@
 // Koru for Windows. The app's pages are served from koru://app/ and its background calls (/k/...)
 // are answered by backend.js here in the main process. No local port is opened, and the pages
 // have no Node access (contextIsolation + sandbox).
-import { app, BrowserWindow, protocol, shell, Menu, Tray, nativeTheme, nativeImage, net } from 'electron';
+import { app, BrowserWindow, protocol, shell, Menu, Tray, nativeTheme, nativeImage, net, session } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
@@ -303,6 +303,97 @@ const media = (() => {
   };
 })();
 
+// Music → Glasswave: Koru's Music page shows your Glasswave (playlists, liked songs, your YouTube Music
+// account's playlists Glasswave keeps, history and downloads) and plays your downloaded songs straight from
+// Glasswave's own files. Read only: Koru never writes, renames or locks anything in Glasswave's folder.
+// It reads only when the Music page asks. ?root=<folder> points at another Glasswave folder (the link you
+// paste in Koru); without it, this PC's %APPDATA%\Glasswave.
+//   GET /k/glasswave?check=1            { found, root }
+//   GET /k/glasswave                    { found, root, playlists, more, history, downloads, files: { videoId: file } }
+//   GET /k/glasswave/playlist/<id>      { tracks: [{ t, a, s, u, i, f? }] }; <id> is a playlist, 'history' or 'downloads'
+//   GET /k/glasswave/audio/<file>       a downloaded song (WebM audio), with Range so seeking works
+const glasswave = (() => {
+  const home = () => path.join(process.env.APPDATA || path.join(app.getPath('home'), 'AppData', 'Roaming'), 'Glasswave');
+  const isGw = dir => { try { return fs.statSync(path.join(dir, 'library', 'index.json')).isFile(); } catch { return false; } };
+  // the folder: a pasted one if it really is a Glasswave folder, else this PC's
+  const rootOf = url => {
+    const r = url.searchParams.get('root');
+    if (r && path.isAbsolute(r) && r.length < 400 && isGw(path.normalize(r))) return path.normalize(r);
+    return home();
+  };
+  // Glasswave may be writing the file right now: a half-written file fails to parse, so try once more
+  async function readJson(file) {
+    for (let i = 0; i < 2; i++) {
+      try { return JSON.parse(await fs.promises.readFile(file, 'utf8')); }
+      catch (e) { if (e.code === 'ENOENT' || i) return null; await new Promise(r => setTimeout(r, 200)); }
+    }
+    return null;
+  }
+  const vidOf = u => (String(u || '').match(/[?&]v=([\w-]{11})/) || String(u || '').match(/youtu\.be\/([\w-]{11})/) || [])[1] || '';
+  const okFile = f => /^[\w.-]{1,120}\.audio$/.test(f);
+  const clean = t => t && typeof t === 'object' ? { t: String(t.t || ''), a: String(t.a || ''), s: Number(t.s) || 0, u: String(t.u || ''), i: String(t.i || ''), ...(t.f && okFile(String(t.f)) ? { f: String(t.f) } : {}) } : null;
+  const tracks = list => (Array.isArray(list) ? list : []).map(clean).filter(t => t && (t.u || t.t));
+  const downloads = async root => tracks(await readJson(path.join(root, 'downloads', 'index.json')));
+  async function history(root) {
+    const h = await readJson(path.join(root, 'prefs', 'history.json'));
+    let list = h?.tracks;
+    if (typeof list === 'string') { try { list = JSON.parse(list); } catch { list = []; } }
+    return tracks(list);
+  }
+  // every playlist file Glasswave keeps, not only the ones in its index (your account's playlists, saved albums)
+  async function playlistFiles(root) {
+    try { return (await fs.promises.readdir(path.join(root, 'library'))).map(f => (f.match(/^pl_([\w-]{1,120})\.json$/) || [])[1]).filter(Boolean); } catch { return []; }
+  }
+  // a downloaded song, streamed with Range
+  async function audio(root, file, request) {
+    if (!okFile(file)) return new Response('Not found', { status: 404 });
+    const p = path.join(root, 'downloads', file);
+    let st; try { st = await fs.promises.stat(p); } catch { return new Response('Not found', { status: 404 }); }
+    const size = st.size, m = /bytes=(\d*)-(\d*)/.exec(request.headers.get('range') || '');
+    const headers = { 'Content-Type': 'audio/webm', 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store' };
+    if (m && (m[1] || m[2])) {
+      const start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2]));
+      const end = Math.min(m[1] && m[2] ? Number(m[2]) : size - 1, size - 1);
+      if (start > end || start >= size) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
+      return new Response(Readable.toWeb(fs.createReadStream(p, { start, end })), { status: 206, headers: { ...headers, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': String(end - start + 1) } });
+    }
+    return new Response(Readable.toWeb(fs.createReadStream(p)), { status: 200, headers: { ...headers, 'Content-Length': String(size) } });
+  }
+  return async function route(request, url) {
+    const reply = (status, obj) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+    if (request.method !== 'GET') return reply(405, { error: 'Read only' });
+    const root = rootOf(url), lib = path.join(root, 'library');
+    if (url.searchParams.get('check')) return reply(200, { found: isGw(root), root });
+    const a = url.pathname.match(/^\/k\/glasswave\/audio\/([^/]{1,140})$/);
+    if (a) return audio(root, decodeURIComponent(a[1]), request);
+    const m = url.pathname.match(/^\/k\/glasswave\/playlist\/([\w-]{1,120})$/);
+    if (m) {
+      const id = m[1];
+      if (id === 'history') return reply(200, { tracks: await history(root) });
+      if (id === 'downloads') return reply(200, { tracks: await downloads(root) });
+      const list = await readJson(path.join(lib, 'pl_' + id + '.json'));
+      if (!list) return reply(404, { error: 'No such Glasswave playlist' });
+      return reply(200, { tracks: tracks(list) });
+    }
+    if (url.pathname !== '/k/glasswave') return reply(404, { error: 'Not found' });
+    const index = await readJson(path.join(lib, 'index.json'));
+    if (!index) return reply(200, { found: false, root, playlists: [] });
+    const lists = (Array.isArray(index) ? index : []).filter(p => p && typeof p.id === 'string' && /^[\w-]{1,120}$/.test(p.id))
+      .map(p => ({ id: p.id, name: String(p.name || 'Playlist'), count: Number(p.count) || 0, thumb: String(p.thumb || ''), source: String(p.source || '') }));
+    if (!lists.some(p => p.id === 'local_liked') && fs.existsSync(path.join(lib, 'pl_local_liked.json'))) lists.push({ id: 'local_liked', name: 'Liked songs', count: 0, thumb: '', source: 'LOCAL' });
+    const known = new Set(lists.map(p => p.id)), more = [];
+    for (const id of await playlistFiles(root)) {
+      if (known.has(id)) continue;
+      const list = tracks(await readJson(path.join(lib, 'pl_' + id + '.json')));
+      if (list.length) more.push({ id, count: list.length, thumb: list.find(t => /^https:/.test(t.i))?.i || '', source: id.startsWith('yt_') ? 'YOUTUBE' : id.startsWith('saved_') ? 'SAVED' : 'LOCAL' });
+    }
+    for (const p of lists) if (!p.count) p.count = tracks(await readJson(path.join(lib, 'pl_' + p.id + '.json'))).length;
+    const dl = await downloads(root), files = {};
+    for (const t of dl) { const v = vidOf(t.u); if (v && t.f) files[v] = t.f; }
+    return reply(200, { found: true, root, playlists: lists, more, history: (await history(root)).length, downloads: dl.length, files });
+  };
+})();
+
 // Mini reader: the chapter you're reading in a small window that stays on top of everything.
 // When it closes, the main window reloads your saved progress so the two never overwrite each other.
 let mini = null;
@@ -357,6 +448,13 @@ app.whenReady().then(() => {
     onWindowIcon: png => { const img = nativeImage.createFromDataURL(png); if (img.isEmpty()) return; if (win) win.setIcon(img); themeShortcuts(img); }
   });
 
+  // Music: YouTube's embed player refuses to start without a referrer, and a koru:// page sends none.
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://www.youtube-nocookie.com/*', 'https://www.youtube.com/*'] }, (d, cb) => {
+    const h = d.requestHeaders;
+    if (!h.Referer || !/^https:/.test(h.Referer)) h.Referer = 'https://koru.app/';
+    cb({ requestHeaders: h });
+  });
+
   protocol.handle('koru', async request => {
     const url = new URL(request.url);
     if (url.host !== 'app') return new Response('Not found', { status: 404 });
@@ -398,6 +496,7 @@ app.whenReady().then(() => {
       if (request.method === 'GET') return reply(200, media.state());
       if (request.method === 'POST') { let cmd = ''; try { cmd = String(JSON.parse(await request.text()).cmd || ''); } catch {} return reply(media.send(cmd) ? 200 : 400, { ok: true }); }
     }
+    if (url.pathname === '/k/glasswave' || url.pathname.startsWith('/k/glasswave/')) return glasswave(request, url);
     if (url.pathname === '/k/mini' && request.method === 'POST') {
       let hash = ''; try { hash = String(JSON.parse(await request.text()).hash || ''); } catch {}
       if (!/^\/read\//.test(hash)) return reply(400, { error: 'Open a chapter first' });
@@ -438,6 +537,7 @@ app.whenReady().then(() => {
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, backgroundThrottling: !process.env.KORU_BG_TEST },
     ...(process.env.KORU_BG_TEST ? { skipTaskbar: true, minimizable: false, focusable: false } : {})
   });
+  if (process.env.KORU_BG_TEST) win.webContents.setAudioMuted(true);   // test windows never make a sound
   setPinDetails(lastIcon());
   // KORU_BG_TEST: a test window that draws normally but sits off-screen and never takes focus
   win.once('ready-to-show', () => { if (process.env.KORU_BG_TEST) { win.setPosition(-5000, 0); win.showInactive(); } else win.show(); });
@@ -448,7 +548,6 @@ app.whenReady().then(() => {
     if (input.type === 'keyDown' && input.key === 'F11') { win.setFullScreen(!win.isFullScreen()); e.preventDefault(); }
     if (input.type === 'keyDown' && input.key === 'F12' && !app.isPackaged) win.webContents.toggleDevTools();
   });
-  if (process.env.KORU_BG_TEST) win.webContents.setAudioMuted(true);   // test windows never make a sound
   win.on('close', e => {
     if (quitting || process.env.KORU_BG_TEST || !tray) return;
     e.preventDefault(); win.hide();

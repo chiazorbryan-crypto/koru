@@ -1,6 +1,6 @@
 {
   "name": "koru",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Koru — a personal manga and manhwa reader",
   "type": "module",
   "main": "electron/main.js",
@@ -31,7 +31,13 @@
       "electron/**/*",
       "web/**/*",
       "build/icon.ico",
-      "package.json"
+      "package.json",
+      "!web/js/kitsu.js",
+      "!web/kitsu.css",
+      "!web/js/kitsunet.js",
+      "!web/kitsunet/**",
+      "!electron/kitsu-llm.js",
+      "!electron/kitsu-llm-worker.js"
     ],
     "win": {
       "target": "nsis",

@@ -19,12 +19,17 @@
   const svg = d => { const s = icon('dot'); s.innerHTML = d; return s; };
   const ICONS = { prev: '<path d="M7 6v12M18 6l-8 6 8 6z"/>', next: '<path d="M17 6v12M6 6l8 6-8 6z"/>', play: '<path d="M8 5.5v13l11-6.5z"/>', pause: '<path d="M8.5 5v14M15.5 5v14"/>' };
 
+  // Koru's own music (music.js) comes first; then Windows' sessions, but not Koru's own one again
+  const miniMode = () => !!K.music?.available() && K.music.S().mode === 'mini';
+  const mine = () => !!K.music?.available() && (K.music.active() || (miniMode() && !(enabled() && now.on && (now.title || now.artist))));
+  const isKoru = n => /koru|electron/i.test(String(n?.app || ''));
   async function poll() {
     clearTimeout(timer);
+    if (mine() && K.music.active()) { paint(); return; }   // music.js tells us when its song changes
     if (!enabled()) { paint(); return; }
     if (!document.hidden && !busy) {
       busy = true;
-      try { now = await K.api.get('/k/media'); } catch { now = { on: false }; }
+      try { now = await K.api.get('/k/media'); if (isKoru(now)) now = { on: false }; } catch { now = { on: false }; }
       busy = false;
       paint();
     }
@@ -40,6 +45,7 @@
       btn = el('button.np-btn', { title: 'Now playing', onclick: e => { e.stopPropagation(); pop ? closePop() : openPop(); } });
       (side.querySelector('.side-inc') || side.querySelector('.side-min-btn'))?.before(btn);
     }
+    if (mine()) return paintMine();
     const show = enabled() && now.on && (now.title || now.artist);
     btn.hidden = !show;
     if (!show) { closePop(); return; }
@@ -49,6 +55,20 @@
     if (btn.dataset.key !== (now.thumb || '') + now.title) { btn.dataset.key = (now.thumb || '') + now.title; btn.replaceChildren(art, el('i.np-eq', el('b'), el('b'), el('b'))); }
     if (pop) fillPop();
   }
+  // Koru's own music: full mode opens Music → Now playing; "Mini player only" opens the compact player here
+  function paintMine() {
+    const c = K.music.cur();
+    btn.hidden = false;
+    btn.classList.toggle('playing', K.music.playing());
+    btn.classList.add('koru');
+    btn.title = c ? (c.t || '') + (c.a ? ' · ' + c.a : '') : 'Music';
+    const key = 'k' + (c?.th || '') + (c?.t || '');
+    if (btn.dataset.key !== key) {
+      btn.dataset.key = key;
+      const u = c && K.music.art(c.th, 120);
+      btn.replaceChildren(u ? el('img', { src: u, alt: '', referrerPolicy: 'no-referrer' }) : el('span.np-note', { text: '♪' }), el('i.np-eq', el('b'), el('b'), el('b')));
+    }
+  }
   function fillPop() {
     pop.replaceChildren(
       el('div.np-art', now.thumb ? el('img', { src: now.thumb, alt: '' }) : el('span.np-note', { text: '♪' })),
@@ -56,20 +76,50 @@
       el('div.np-ctl',
         el('button.btn.icon', { title: 'Previous', disabled: now.canPrev === false, onclick: () => cmd('prev') }, svg(ICONS.prev)),
         el('button.btn.icon.np-main', { title: now.playing ? 'Pause' : 'Play', onclick: () => { now.playing = !now.playing; fillPop(); cmd('toggle'); } }, svg(now.playing ? ICONS.pause : ICONS.play)),
-        el('button.btn.icon', { title: 'Next', disabled: now.canNext === false, onclick: () => cmd('next') }, svg(ICONS.next))));
+        el('button.btn.icon', { title: 'Next', disabled: now.canNext === false, onclick: () => cmd('next') }, svg(ICONS.next))),
+      miniMode() ? el('button.btn.small.np-koru', { onclick: () => { closePop(); openPop(true); } }, K.icon('music'), 'Play music in Koru') : null);
   }
-  function openPop() {
+  function openPop(forceMine) {
+    if (forceMine || mine()) {
+      if (K.music.S().mode === 'full') { K.go('/music/now'); return; }
+      pop = K.music.compact({ cls: '.np-music.glass', onEsc: closePop });
+      document.body.append(pop);
+      place();
+      document.addEventListener('pointerdown', outside, true);
+      document.addEventListener('keydown', escPop, true);
+      if (!K.music.active()) setTimeout(() => pop?.focusSearch?.(), 30);
+      return;
+    }
     pop = el('div.np-pop.glass', { onclick: e => e.stopPropagation() });
     document.body.append(pop);
     fillPop();
-    const r = btn.getBoundingClientRect();
-    pop.style.left = Math.min(innerWidth - 300, r.right + 10) + 'px';
-    pop.style.top = Math.max(10, Math.min(innerHeight - pop.offsetHeight - 10, r.top - 60)) + 'px';
+    place();
     setTimeout(() => document.addEventListener('click', closePop, { once: true }), 0);
   }
-  function closePop() { pop?.remove(); pop = null; }
+  const outside = e => { if (pop && !pop.contains(e.target) && !btn.contains(e.target) && !e.target.closest?.('.menu, .mu-ask-wrap')) closePop(); };
+  const escPop = e => { if (e.key === 'Escape' && pop) { e.stopPropagation(); closePop(); } };
+  function place() {
+    const r = btn.getBoundingClientRect(), side = document.querySelector('.sidebar')?.getBoundingClientRect() || r;
+    const edge = document.documentElement.dataset.side || 'left';
+    const x = edge === 'right' ? side.left - pop.offsetWidth - 10 : edge === 'left' ? Math.max(r.right, side.right) + 10 : r.left - 20;
+    pop.style.left = Math.max(10, Math.min(innerWidth - pop.offsetWidth - 10, x)) + 'px';
+    if (pop.classList.contains('np-music')) {   // grows away from the button as results come in
+      if (edge === 'top') { pop.style.top = side.bottom + 10 + 'px'; pop.style.bottom = 'auto'; }
+      else { pop.style.top = 'auto'; pop.style.bottom = Math.max(10, edge === 'bottom' ? innerHeight - side.top + 10 : innerHeight - r.bottom - 10) + 'px'; }
+      return;
+    }
+    pop.style.top = Math.max(10, Math.min(innerHeight - pop.offsetHeight - 10, r.top - 60)) + 'px';
+  }
+  function closePop() {
+    document.removeEventListener('pointerdown', outside, true); document.removeEventListener('keydown', escPop, true);
+    if (pop?.contains(document.activeElement)) document.activeElement.blur();
+    pop?.remove(); pop = null;
+  }
 
-  K.nowPlaying = { poll, setOn(v) { K.data.settings.nowPlaying = !!v; K.save('settings'); poll(); } };
+  // music.js: its song or play state changed (or the mode did)
+  const refresh = () => { if (!btn) { paint(); return; } if (mine()) { paintMine(); return; } btn.classList.remove('koru'); btn.dataset.key = ''; closePop(); poll(); };
+  document.addEventListener('koru-ready', () => K.music?.on(w => { if (w === 'track' || w === 'state' || w === 'queue') refresh(); }));
+  K.nowPlaying = { poll, refresh, setOn(v) { K.data.settings.nowPlaying = !!v; K.save('settings'); poll(); } };
   document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
   // the app's info (platform) arrives a moment after start
   setTimeout(poll, 2500);

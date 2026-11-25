@@ -1,0 +1,352 @@
+/* Koru on Android: a phone-first layout in the spirit of Material 3, in Koru's own colours.
+   Loaded only by the Android app (js/android.js adds it), and every rule sits under html.android,
+   so the desktop app never sees any of it.
+   Weak phones first: no blur behind anything that scrolls, flat tonal surfaces instead of big shadows,
+   and motion made only of transform and opacity (off with Settings → Motion, "none" transitions or the
+   phone's reduce-motion setting; html.an-motion is set by android.js when motion is allowed). */
+
+html.android {
+  --an-top-h: 64px; --an-nav-h: 72px; --an-gut: 16px;
+  /* tonal surfaces mixed from the theme: page → container → raised, plus the nav bar and its pill */
+  /* mixed with plain white (black on light themes), not --text, which can be see-through: the bars stay opaque */
+  --an-ink: #fff;
+  --an-surface: var(--bg);
+  --an-c1: color-mix(in srgb, var(--bg), var(--an-ink) 6%);
+  --an-c2: color-mix(in srgb, var(--bg), var(--an-ink) 9%);
+  --an-c3: color-mix(in srgb, var(--bg), var(--an-ink) 13%);
+  --an-bar: color-mix(in srgb, color-mix(in srgb, var(--bg), var(--accent-solid) 8%), var(--an-ink) 5%);
+  --an-pillc: color-mix(in srgb, var(--accent-solid) 30%, transparent);
+  --an-line: color-mix(in srgb, var(--text) 10%, transparent);
+  --an-scrim: rgba(0, 0, 0, .42);
+  --an-ease: cubic-bezier(.2, 0, 0, 1);              /* emphasized */
+  --an-dec: cubic-bezier(.05, .7, .1, 1);            /* emphasized decelerate */
+  --an-acc: cubic-bezier(.3, 0, .8, .15);            /* emphasized accelerate */
+  --an-spring: cubic-bezier(.2, 1.22, .36, 1);       /* a small overshoot, for sheets */
+  --an-d: calc(1ms / var(--spd, 1));
+  -webkit-tap-highlight-color: transparent;
+}
+html.android.light { --an-ink: #000; }
+html.android body { -webkit-touch-callout: none; overscroll-behavior: none; }
+html.android a, html.android img { -webkit-user-drag: none; }
+html.android input, html.android textarea, html.android [contenteditable] { -webkit-touch-callout: default; }
+
+/* ---------- cheap on a weak graphics chip ---------- */
+html.android .shell *, html.android .an-ui, html.android .an-ui *, html.android .menu, html.android .toast,
+html.android .lx-sheet, html.android .lx-sheetwrap, html.android .pal-wrap, html.android .pal, html.android .np-pop {
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .glass { background: var(--an-c1); box-shadow: none; border-color: var(--an-line); }
+html.android :is(.shell, .lx-sheet, .an-sheet) .glass::before, html.android.grain :is(.shell, .lx-sheet, .an-sheet) .glass::after { display: none; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .btn, html.android :is(.shell, .lx-sheet, .an-sheet) .chip, html.android :is(.shell, .lx-sheet, .an-sheet) .seg, html.android :is(.shell, .lx-sheet, .an-sheet) .searchbox { box-shadow: none !important; }
+html.android .card .cv { box-shadow: none; border-color: var(--an-line); }
+html.android .card .cap { border: 0; }
+html.android .card .newb { box-shadow: none; }
+html.android .bar i, html.android .card .prog i { box-shadow: none; }
+html.android .hero .bd { display: none; }
+html.android .hero .poster { box-shadow: 0 6px 18px -8px rgba(0, 0, 0, .6); }
+html.android .empty .fox { filter: none; }
+html.android .head h1, html.android .hero h1 { text-shadow: none; }
+html.android.title-grad .head h1, html.android.title-grad .hero h1, html.android.title-grad .section h2 { filter: none; }
+html.android .bgfx .dl { display: none; }            /* the moving orb layers; the still base stays */
+html.android .orb { animation: none !important; }
+html.android .grid > .card { contain-intrinsic-size: auto 112px auto 160px; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .list > .item { content-visibility: auto; contain-intrinsic-size: auto 60px; }
+html.android .set-cols > .panel { content-visibility: auto; contain-intrinsic-size: auto 320px; }
+
+/* ---------- no hover-only UI on a touch screen ---------- */
+html.android :is(.shell, .lx-sheet, .an-sheet) .btn:hover, html.android :is(.shell, .lx-sheet, .an-sheet) .chip:hover, html.android :is(.shell, .lx-sheet, .an-sheet) .item:hover, html.android :is(.shell, .lx-sheet, .an-sheet) .cont:hover, html.android :is(.shell, .lx-sheet, .an-sheet) .mi:hover { transform: none; }
+html.android .card:hover .cv, html.android .card:focus-visible .cv { transform: none; box-shadow: none; border-color: var(--an-line); will-change: auto; }
+html.android .card:hover .cv::after, html.android .card .cv::after { display: none; }
+html.android .card .more { display: none; }          /* long-press a cover instead */
+html.android .card .newb { right: 8px; }
+html.android .cont .play { transform: none !important; }
+html.android .preset.mine .del { opacity: 1; }
+html.android .card:hover .dlcount { opacity: 1; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .item.read:hover { opacity: .5; }
+
+/* ---------- the app frame: no sidebar, a top app bar and a bottom navigation bar ---------- */
+html.android .sidebar, html.android .titlebar { display: none !important; }
+html.android .shell { inset: 0 0 var(--an-nav-h) 0 !important; display: block; }
+html.android.an-kb .shell, html.android.an-nonav .shell { bottom: 0 !important; }
+html.android .main { position: absolute; inset: 0; }
+html.android .view { padding: calc(var(--an-top-h) + 4px) var(--an-gut) 28px; scroll-behavior: auto; overscroll-behavior-y: contain; }
+html.android .view > .inner { max-width: 1100px; }
+html.android.reading .an-ui { visibility: hidden; }
+
+.an-top { position: fixed; z-index: 40; top: 0; left: 0; right: 0; height: var(--an-top-h); display: flex; align-items: center; gap: 4px; padding: 0 4px; color: var(--text); pointer-events: none; }
+.an-top::before { content: ''; position: absolute; inset: 0; z-index: -1; background: var(--an-bar); opacity: 0; transition: opacity calc(200 * var(--an-d)) linear; }
+.an-top.an-lifted::before { opacity: 1; }
+.an-top > * { pointer-events: auto; }
+.an-title { flex: 1; min-width: 0; padding: 0 12px; font-family: var(--title-font); font-size: 1.3em; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0; transform: translateY(10px); transition: opacity calc(160 * var(--an-d)) linear, transform calc(260 * var(--an-d)) var(--an-ease); pointer-events: none; }
+.an-top.an-collapsed .an-title { opacity: 1; transform: none; }
+.an-top .an-back + .an-title { padding-left: 4px; }
+.an-ib { position: relative; overflow: hidden; width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; flex: none; color: inherit; }
+.an-ib .ic { width: 24px; height: 24px; }
+.an-ib[hidden] { display: none; }
+.an-acts { display: flex; align-items: center; }
+/* over a series cover the bar's buttons get a soft disc so they stay readable */
+.an-top.an-over:not(.an-lifted) .an-ib::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: color-mix(in srgb, var(--bg) 55%, transparent); z-index: -1; }
+
+.an-nav { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; height: var(--an-nav-h); display: flex; background: var(--an-bar); padding: 0 6px;
+  transition: transform calc(220 * var(--an-d)) var(--an-ease); }
+html.android.an-kb .an-nav, html.android.an-nonav .an-nav { transform: translateY(110%); visibility: hidden; transition: none; }
+.an-nav a { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding-top: 2px;
+  text-decoration: none; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .01em; }
+.an-nav a .an-ico { position: relative; width: 56px; height: 32px; display: grid; place-items: center; border-radius: 16px; overflow: hidden; }
+.an-nav a .ic { width: 24px; height: 24px; transition: transform calc(250 * var(--an-d)) var(--an-ease); }
+.an-nav a span { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color calc(200 * var(--an-d)) linear; }
+.an-nav a.on { color: var(--text); }
+.an-nav a.on .ic { color: var(--text); }
+.an-nav a .an-dot { position: absolute; top: 3px; right: 14px; width: 8px; height: 8px; border-radius: 50%; background: var(--badge); }
+.an-pill { position: absolute; left: 0; top: calc(50% - 16px - 10px); width: 56px; height: 32px; border-radius: 16px; background: var(--an-pillc); pointer-events: none;
+  transform: translateX(var(--an-px, 0px)); transition: transform calc(380 * var(--an-d)) var(--an-ease), opacity calc(150 * var(--an-d)) linear; }
+.an-pill.an-none { opacity: 0; }
+html.an-motion .an-nav a.on .ic { animation: an-icon-pop calc(320 * var(--an-d)) var(--an-ease); }
+@keyframes an-icon-pop { 40% { transform: scale(.86); } }
+
+/* ---------- page heads: a large title that collapses into the bar ---------- */
+html.android .head { align-items: center; flex-wrap: nowrap; gap: 8px; margin: 2px 0 16px; min-height: 56px; }
+html.android .head > div:first-child { min-width: 0; flex: 1; }
+html.android .head h1 { font-size: 2em; font-weight: 600; letter-spacing: -.01em; transform-origin: left bottom; }
+html.android .head .sub { font-size: .9em; }
+html.android .head .sp { display: none; }
+html.android .shell .head > .btn { flex: none; height: 48px; min-width: 48px; padding: 0 14px; border-radius: 24px; background: var(--an-c2); border: 0; font-size: .92em; }
+html.android .shell .head > .btn:has(.ic) { width: 48px; padding: 0; font-size: 0; }    /* icon buttons; the label stays as the tooltip */
+html.android .shell .head > .btn .ic { width: 22px; height: 22px; }
+@supports (animation-timeline: scroll()) {
+  html.an-motion .view > .inner > .head h1 { animation: an-title linear both; animation-timeline: scroll(nearest block); animation-range: 0 64px; }
+  html.an-motion .view > .inner > .head .sub { animation: an-fade linear both; animation-timeline: scroll(nearest block); animation-range: 0 40px; }
+}
+@keyframes an-title { to { transform: translateY(10px) scale(.78); opacity: 0; } }
+@keyframes an-fade { to { opacity: 0; } }
+
+/* ---------- touch targets and press feedback ---------- */
+html.android :is(.shell, .lx-sheet, .an-sheet) .btn { height: 44px; padding: 0 18px; border-radius: 22px; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .btn.icon { width: 48px; height: 48px; padding: 0; border-radius: 50%; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .btn.small { height: 40px; padding: 0 14px; border-radius: 20px; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .btn.small.icon { width: 44px; height: 44px; padding: 0; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .btn:not(.primary):not(.on) { background: var(--an-c2); border-color: transparent; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .btn:active, html.android :is(.shell, .lx-sheet, .an-sheet) .chip:active { transform: none; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .chip { height: 36px; padding: 0 14px; border-radius: 10px; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .chip:not(.on) { background: transparent; border-color: color-mix(in srgb, var(--text) 22%, transparent); }
+html.android :is(.shell, .lx-sheet, .an-sheet) .dlbtn { width: 44px; height: 44px; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .toggle { width: 52px; height: 32px; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .toggle::after { top: 6px; left: 6px; width: 20px; height: 20px; transition: transform calc(250 * var(--an-d)) var(--an-ease), width calc(200 * var(--an-d)) var(--an-ease), height calc(200 * var(--an-d)) var(--an-ease); }
+html.android :is(.shell, .lx-sheet, .an-sheet) .toggle.on { box-shadow: none; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .toggle.on::after { transform: translate(18px, -2px); width: 24px; height: 24px; }
+html.android :is(.shell, .lx-sheet, .an-sheet) select.sel-in { height: 44px; border-radius: 12px; }
+html.android :is(.shell, .lx-sheet, .an-sheet) input[type=range] { height: 8px; }
+html.android :is(.shell, .lx-sheet, .an-sheet) input[type=range]::-webkit-slider-thumb { width: 22px; height: 22px; }
+.an-ripple { position: absolute; border-radius: 50%; background: currentColor; opacity: .16; transform: scale(0); pointer-events: none; animation: an-ripple calc(450 * var(--an-d)) var(--an-dec) forwards; }
+@keyframes an-ripple { 70% { opacity: .14; } to { transform: scale(1); opacity: 0; } }
+html.android :is(.shell, .lx-sheet, .an-sheet) .btn .ripple { opacity: .18; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .item, html.android :is(.shell, .lx-sheet, .an-sheet) .mi, html.android :is(.shell, .lx-sheet, .an-sheet) .set-nav-btn, html.android :is(.shell, .lx-sheet, .an-sheet) .an-row, html.android :is(.shell, .lx-sheet, .an-sheet) .cont, html.android :is(.shell, .lx-sheet, .an-sheet) .dc-ent, html.android :is(.shell, .lx-sheet, .an-sheet) .lx-hit { position: relative; overflow: hidden; }
+html.android .card .cv { transition: transform calc(160 * var(--an-d)) var(--an-ease); }
+html.android .card.an-press .cv { transform: scale(.96); }
+html.android .cont.an-press { transform: scale(.98); }
+
+/* ---------- covers and lists sized for a phone ---------- */
+html.android .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
+@media (max-width: 339px) { html.android .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 560px) { html.android .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px 10px; } }
+html.android .card .cv { border-radius: 12px; }
+/* covers just appear: a fade per cover would make each one its own layer while you scroll */
+html.android .card .cv img, html.android .cont .th img { transition: none; }
+html.android .cont .th img:not(.ready) { opacity: 0; }   /* no broken-picture placeholder while a cover is on its way */
+html.android .card .cap { left: 0; right: 0; bottom: 0; padding: 18px 8px 7px; border-radius: 0 0 12px 12px; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--bg) 88%, transparent) 55%); }
+html.android .card .t { font-size: .8em; }
+html.android .card .s { font-size: .7em; }
+/* the source is a small dot in its colour (the name is on the series page) */
+html.android .card .src { top: 8px; left: 8px; width: 8px; height: 8px; padding: 0; font-size: 0; border: 0; background: currentColor; box-shadow: 0 0 0 2px color-mix(in srgb, var(--bg) 70%, transparent); }
+html.android .card .newb { top: 6px; right: 6px; min-width: 20px; height: 20px; font-size: .7em; }
+html.android .ribbon { top: 30px; left: 6px; font-size: .6em; box-shadow: none; }
+html.android .rail { grid-auto-columns: calc(100% - 48px); gap: 10px; margin: 0 calc(var(--an-gut) * -1); padding: 2px var(--an-gut) 10px; scroll-padding: 0 var(--an-gut); scrollbar-width: none; }
+html.android .rail::-webkit-scrollbar, html.android .dc-rail::-webkit-scrollbar { display: none; }
+html.android .cont { padding: 10px; gap: 12px; border-radius: 16px; }
+html.android .cont .th { width: 56px; height: 78px; border-radius: 10px; }
+html.android .cont .play { width: 44px; height: 44px; box-shadow: none; }
+html.android .dc-rail { grid-auto-columns: 112px; margin: 0 calc(var(--an-gut) * -1); padding: 2px var(--an-gut) 12px; scroll-padding: 0 var(--an-gut); scrollbar-width: none; }
+html.android .section { margin: 22px 0 10px; }
+html.android .section h2 { font-size: 1.1em; }
+/* chip rows scroll sideways on one line instead of stacking up */
+html.android .srcs, html.android .inner > .row:has(> .chip), html.android .inner > div > .row:has(> .chip), html.android .chfilter {
+  flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-left: calc(var(--an-gut) * -1); margin-right: calc(var(--an-gut) * -1); padding: 2px var(--an-gut) 4px; gap: 8px; }
+html.android .srcs::-webkit-scrollbar, html.android .inner .row:has(> .chip)::-webkit-scrollbar, html.android .chfilter::-webkit-scrollbar { display: none; }
+html.android .srcs > *, html.android .inner > .row:has(> .chip) > *, html.android .inner > div > .row:has(> .chip) > *, html.android .chfilter > * { flex: none; }
+html.android .srcs .chip .dot { box-shadow: none; }
+/* Search: which sources answered, on one sideways line */
+html.android .lx-sstat { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-left: calc(var(--an-gut) * -1); margin-right: calc(var(--an-gut) * -1); padding: 2px var(--an-gut) 4px; }
+html.android .lx-sstat > * { flex: none; }
+/* segmented tabs become Material tabs: a sliding underline */
+html.android :is(.shell, .lx-sheet, .an-sheet) .seg { display: flex; width: 100%; max-width: 100%; overflow-x: auto; scrollbar-width: none; padding: 0; gap: 0; border-radius: 0; background: transparent; border: 0; border-bottom: 1px solid var(--an-line); }
+html.android :is(.shell, .lx-sheet, .an-sheet) .seg::-webkit-scrollbar { display: none; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .seg button { flex: 1 0 auto; height: 48px; padding: 0 14px; border-radius: 0; justify-content: center; font-weight: 600; color: var(--muted); }
+html.android :is(.shell, .lx-sheet, .an-sheet) .seg button.on { color: var(--accent-solid); }
+html.android :is(.shell, .lx-sheet, .an-sheet) .seg .knob { top: auto; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--accent-solid); }
+html.android .section > .seg { margin: 0 calc(var(--an-gut) * -1); width: calc(100% + var(--an-gut) * 2); max-width: none; }
+html.android .inner > .row:has(> .seg) { flex-wrap: wrap; }
+html.android .inner > .row:has(> .seg) > .seg { flex: 1 1 100%; margin: 0 calc(var(--an-gut) * -1); width: calc(100% + var(--an-gut) * 2); max-width: none; }
+
+/* lists: 56–72dp rows */
+html.android :is(.shell, .lx-sheet, .an-sheet) .list { gap: 4px; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .item { min-height: 60px; padding: 8px 6px 8px 16px; border-radius: 14px; background: var(--an-c1); border: 0; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .item.current { box-shadow: inset 3px 0 0 var(--accent-solid); }
+html.android :is(.shell, .lx-sheet, .an-sheet) .mthumb { flex: none; }
+
+/* search: a Material search bar */
+html.android :is(.shell, .lx-sheet, .an-sheet) .searchbox { height: 56px; border-radius: 28px; padding: 0 18px; background: var(--an-c2); border-color: transparent; max-width: none; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .searchbox:focus-within { transform: none; border-color: transparent; box-shadow: inset 0 0 0 2px var(--accent-solid) !important; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .searchbox input { font-size: 1.05em; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .searchbox.small { height: 48px; min-width: 0; }
+
+/* ---------- series page: cover, actions, then chapters ---------- */
+html.android .hero { margin: calc(var(--an-top-h) * -1 - 4px) calc(var(--an-gut) * -1) 0; padding: calc(var(--an-top-h) + 4px) var(--an-gut) 8px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-solid) 22%, var(--bg)) 0%, color-mix(in srgb, var(--accent-solid) 22%, transparent) 45%, transparent 100%); }
+/* on a phone the chapters come right after the summary and your rating; characters and similar series follow them */
+html.android .view > .inner:has(> .hero) { display: flex; flex-direction: column; }
+html.android .inner:has(> .hero) > * { order: 0; }
+html.android .inner:has(> .hero) > .section:has(> .btn.small.primary), html.android .inner:has(> .hero) > .chfilter, html.android .inner:has(> .hero) > .list { order: 1; }
+html.android .inner:has(> .hero) > .chr-wrap, html.android .inner:has(> .hero) > .dc-similar { order: 2; margin-top: 18px; }
+html.android .inner:has(> .hero) > .section:has(> .btn.small.primary) { margin-top: 18px; }
+html.android .hero .backb { display: none; }
+html.android .hero .wrap { flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+html.android .hero .poster { width: 148px; border-radius: 14px; }
+html.android .hero .info { width: 100%; display: flex; flex-direction: column; align-items: center; }
+html.android .hero h1 { font-size: 1.55em; margin: 6px 0 4px; }
+html.android .hero .info > .muted { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: .9em; }
+html.android .hero .info > .row:first-child { justify-content: center; }
+html.android .hero .tags { justify-content: safe center; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: calc(100% + var(--an-gut) * 2); margin: 10px calc(var(--an-gut) * -1) 12px; padding: 0 var(--an-gut); }
+html.android .hero .tags::-webkit-scrollbar { display: none; }
+html.android .hero .tags .tag { flex: none; }
+html.android .sprog { width: 100%; text-align: left; }
+html.android .hero .info > .row:last-child { width: 100%; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 6px; }
+html.android .hero .info > .row:last-child > .btn.primary { flex: 1 1 100%; height: 52px; border-radius: 26px; font-size: 1.02em; }
+html.android .hero .info > .row:last-child > .btn.heart { flex: 1 1 auto; height: 48px; border-radius: 24px; }
+html.android .hero .info > .row:last-child > .btn:not(.primary):not(.heart) { flex: none; width: 48px; height: 48px; padding: 0; font-size: 0; border-radius: 50%; }
+html.android .hero .info > .row:last-child > .btn .ic { width: 22px; height: 22px; }
+html.android .desc { -webkit-line-clamp: 3; font-size: .93em; }
+/* the chapter section head: title on one line, its three actions as a row under it */
+html.android .view .section:has(> .btn.small.primary) { flex-wrap: wrap; row-gap: 8px; }
+html.android .view .section:has(> .btn.small.primary) > div[style*="flex"] { display: none; }
+html.android .view .section:has(> .btn.small.primary) > .count { flex: 1 0 60%; }
+html.android .view .section:has(> .btn.small.primary) > .btn.small { flex: 1 1 28%; min-width: 0; }
+html.android .selbar { position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 45; margin: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; border-radius: 20px; background: var(--an-c3); }
+html.android .selbar::-webkit-scrollbar { display: none; }
+html.android .selbar > * { flex: none; }
+html.android :is(.shell, .lx-sheet, .an-sheet) .list.selecting { padding-bottom: 72px; }
+html.android:has(.selbar) .an-nav { transform: translateY(110%); }
+
+/* ---------- Settings: a list of sections, each opening as its own page ---------- */
+html.android .set-layout { display: block; }
+html.android .set-nav { position: static; flex-direction: column; flex-wrap: nowrap; overflow: visible; padding: 0; gap: 0; background: transparent; border: 0; border-radius: 0; }
+html.android .set-search { flex: none; width: 100% !important; min-width: 0; margin: 0 0 12px !important; height: 52px; border-radius: 26px !important; padding: 0 20px !important; background: var(--an-c2) !important; border: 0 !important; font-size: 1em; }
+html.android .set-nav-btn { min-height: 60px; padding: 0 12px 0 16px; gap: 16px; border-radius: 16px; margin-bottom: 2px; font-size: 1.02em; }
+html.android .set-nav-btn .ic { width: 22px; height: 22px; opacity: 1; color: var(--accent-solid); }
+html.android .set-nav-btn small { display: inline; font-size: .78em; }
+html.android .set-nav-btn::after { content: ''; width: 8px; height: 8px; margin: 0 6px 0 2px; border-right: 2px solid var(--muted); border-top: 2px solid var(--muted); transform: rotate(45deg); flex: none; }
+html.android .set-nav-btn.on { background: transparent; }
+html.android .set-nav-btn[data-id=pc], html.android .set-nav-btn[data-id=music] { display: none; }
+html.android .set-main { display: none; }
+html.android .set-layout.an-searching .set-main { display: block; margin-top: 8px; }
+html.android .set-layout.an-searching .set-nav-btn { display: none; }
+html.android .set-layout.an-page .set-nav { display: none; }
+html.android .set-layout.an-page .set-main { display: block; }
+html.android .view.an-setpage .inner > .head { display: none; }
+html.android .set-h { font-size: 1.75em; margin: 2px 0 4px; min-height: 48px; }
+html.android .set-h .ic { display: none; }
+html.android .set-cols { columns: 1; }
+html.android .panel { padding: 16px; border-radius: 20px; }
+html.android .ctl { min-height: 56px; flex-wrap: wrap; row-gap: 6px; }
+html.android .ctl input[type=range] { flex: 1 1 140px; width: auto; }
+html.android .ctl:has(> input[type=range]) > .lab, html.android .ctl:has(> .seg) > .lab { flex: 1 1 100%; }
+html.android .presets { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+
+/* ---------- bottom sheets: menus and dialogs come up from the bottom ---------- */
+.an-scrim { position: fixed; inset: 0; z-index: 390; background: var(--an-scrim); opacity: 1; transition: opacity calc(200 * var(--an-d)) linear; }
+.an-scrim.an-out { opacity: 0; pointer-events: none; }
+html.an-motion .an-scrim:not(.an-out) { animation: an-fade-in calc(220 * var(--an-d)) linear both; }
+@keyframes an-fade-in { from { opacity: 0; } }
+.an-handle { display: block; width: 32px; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--text) 40%, transparent); margin: 10px auto 6px; flex: none; }
+html.android .menu, .an-sheet {
+  position: fixed; left: 0 !important; right: 0; top: auto !important; bottom: 0; z-index: 400; width: auto; min-width: 0; max-width: 640px; margin: 0 auto -32px;
+  max-height: calc(88vh + 32px); overflow-y: auto; overscroll-behavior: contain; padding: 0 8px calc(16px + 32px); border-radius: 28px 28px 0 0;
+  background: var(--an-c1) !important; border: 0 !important; box-shadow: none; transform-origin: 50% 100%; touch-action: pan-y; }
+html.android .menu { animation: none; }
+html.android .menu::before, html.android .menu::after, html.android .toast::before, html.android .toast::after { display: none; }
+html.an-motion .menu:not(.out), html.an-motion .an-sheet:not(.an-out) { animation: an-sheet-in calc(420 * var(--an-d)) var(--an-spring) both; }
+html.android .menu.out, .an-sheet.an-out { animation: an-sheet-out calc(150 * var(--an-d)) var(--an-acc) both; pointer-events: none; }
+html:not(.an-motion) .menu.out, html:not(.an-motion) .an-sheet.an-out { animation-duration: 1ms; }
+@keyframes an-sheet-in { from { transform: translateY(100%); } }
+@keyframes an-sheet-out { to { transform: translateY(100%); } }
+.an-dragging { transition: none !important; animation: none !important; }
+html.android .menu-h { padding: 4px 16px 10px; }
+html.android .menu-h b { max-width: none; font-size: 1.05em; }
+html.android .menu hr { margin: 4px 16px; background: var(--an-line); }
+html.android .mi { min-height: 52px; padding: 0 16px; gap: 16px; border-radius: 14px; font-size: 1em; }
+html.android .mi .ic { width: 22px; height: 22px; }
+html.android .lx-pop { width: auto !important; }
+/* the larger dialogs (find on another source and friends) */
+html.android .lx-sheetwrap { place-items: end center; padding: 0; background: var(--an-scrim); }
+html.android .lx-sheet { width: 100%; max-width: 640px; max-height: 92vh; border-radius: 28px 28px 0 0; box-shadow: none; background: var(--an-c1); }
+html.an-motion .lx-sheetwrap:not(.out) .lx-sheet { animation: an-sheet-in calc(420 * var(--an-d)) var(--an-spring) both; }
+html.android .lx-sheetwrap.out .lx-sheet { animation: an-sheet-out calc(160 * var(--an-d)) var(--an-acc) both; }
+html.android .lx-shead { padding-top: 4px; }
+
+/* the More sheet */
+.an-sheet .an-sh-h { display: flex; align-items: center; gap: 12px; padding: 4px 16px 12px; }
+.an-sheet .an-sh-h .fox { width: 32px; height: 32px; color: var(--accent-solid); }
+.an-sheet .an-sh-h b { display: block; font-size: 1.1em; }
+.an-sheet .an-sh-h small { color: var(--muted); }
+.an-row { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 56px; padding: 0 16px; border-radius: 16px; text-align: left; color: var(--text); text-decoration: none; font-size: 1em; }
+.an-row .ic { width: 24px; height: 24px; color: var(--muted); flex: none; }
+.an-row span { flex: 1; min-width: 0; }
+.an-row.on { background: var(--an-pillc); }
+.an-row.on .ic { color: var(--accent-solid); }
+.an-row .an-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--badge); }
+.an-row .toggle { pointer-events: none; }
+.an-sheet hr { border: 0; height: 1px; background: var(--an-line); margin: 6px 16px; }
+
+/* ---------- snackbars instead of toasts ---------- */
+html.android:not(.reading) #toasts { left: 12px; right: 12px; bottom: calc(var(--an-nav-h) + 10px); transform: none; align-items: stretch; z-index: 420; }
+html.android.an-kb:not(.reading) #toasts, html.android.an-nonav:not(.reading) #toasts { bottom: 12px; }
+html.android .toast { border-radius: 10px; padding: 12px 16px; min-height: 48px; background: color-mix(in srgb, var(--text) 90%, var(--bg)) !important; color: var(--bg); border: 0; box-shadow: 0 3px 8px rgba(0, 0, 0, .3); }
+html.android .toast .ic { color: color-mix(in srgb, var(--accent-solid) 70%, var(--bg)) !important; }
+
+/* ---------- pull to refresh ---------- */
+.an-ptr { position: fixed; z-index: 35; top: calc(var(--an-top-h) - 44px); left: 50%; width: 40px; height: 40px; margin-left: -20px; border-radius: 50%; background: var(--an-c3); color: var(--accent-solid);
+  display: grid; place-items: center; box-shadow: 0 2px 6px rgba(0, 0, 0, .35); transform: translateY(var(--an-py, 0px)); opacity: 0; pointer-events: none; }
+.an-ptr .ic { width: 22px; height: 22px; transform: rotate(var(--an-pr, 0deg)); }
+.an-ptr.an-on { opacity: 1; }
+.an-ptr.an-back { transition: transform calc(220 * var(--an-d)) var(--an-ease), opacity calc(220 * var(--an-d)) linear; }
+.an-ptr.an-spin .ic { animation: spin .8s linear infinite; }
+
+/* ---------- motion: Material fade-through between tabs, shared axis into and out of pages ---------- */
+html.android .view.enter, html.android .view.leave { animation: none; }
+html.an-motion .view.enter { animation: an-through-in calc(260 * var(--an-d)) var(--an-dec) calc(70 * var(--an-d)) both; }
+html.an-motion .view.leave { animation: an-through-out calc(90 * var(--an-d)) linear both; }
+html.an-motion[data-an-nav=fwd] .view.enter { animation: an-axis-in calc(300 * var(--an-d)) var(--an-ease) both; }
+html.an-motion[data-an-nav=fwd] .view.leave { animation: an-axis-out calc(200 * var(--an-d)) var(--an-ease) both; }
+html.an-motion[data-an-nav=back] .view.enter { animation: an-axis-back-in calc(300 * var(--an-d)) var(--an-ease) both; }
+html.an-motion[data-an-nav=back] .view.leave { animation: an-axis-back-out calc(200 * var(--an-d)) var(--an-ease) both; }
+@keyframes an-through-in { from { opacity: 0; transform: scale(.94); } }
+@keyframes an-through-out { to { opacity: 0; } }
+@keyframes an-axis-in { from { opacity: 0; transform: translateX(32px); } 40% { opacity: 1; } }
+@keyframes an-axis-out { to { opacity: 0; transform: translateX(-32px); } }
+@keyframes an-axis-back-in { from { opacity: 0; transform: translateX(-32px); } 40% { opacity: 1; } }
+@keyframes an-axis-back-out { to { opacity: 0; transform: translateX(32px); } }
+/* covers rise in, one after another, when a grid first shows */
+html.an-motion .grid.an-stagger > .card:nth-child(-n+12), html.an-motion .rail.an-stagger > .card:nth-child(-n+3), html.an-motion .dc-rail.an-stagger > .card:nth-child(-n+4) {
+  animation: an-card-in calc(340 * var(--an-d)) var(--an-dec) both !important; animation-delay: calc(min(var(--i, 0), 11) * 28 * var(--an-d)) !important; }
+@keyframes an-card-in { from { opacity: 0; transform: translateY(14px) scale(.97); } }
+html.android .grid:not(.an-stagger) > .card, html.android .grid > .card:nth-child(n+13), html.android .rail:not(.an-stagger) > .card, html.android .dc-rail:not(.an-stagger) > .card, html.android .list > .item { animation: none !important; }
+html.an-motion .an-top .an-back { animation: an-pop-in calc(240 * var(--an-d)) var(--an-ease) both; }
+@keyframes an-pop-in { from { opacity: 0; transform: scale(.6); } }
+@media (prefers-reduced-motion: reduce) {
+  html.android .an-pill, html.android .an-title, html.android .an-nav, html.android .an-top::before { transition: none; }
+}
+
+/* ---------- the reader keeps its own look; only the bars around it step aside ---------- */
+html.android.reading .shell { visibility: hidden; }
+
+/* phones draw their scrollbars over the page (Koru's wide desktop scrollbars would eat a column) */
+html.android ::-webkit-scrollbar { width: 0; height: 0; }

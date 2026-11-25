@@ -45,6 +45,7 @@
     { id: 'library', name: 'Library & sync', ic: 'folder', sub: 'Your data, backups, importing from other apps and keeping your PCs the same.', has: ['Library and data', 'When a source goes down', 'Import from another app', 'Sync between PCs', 'Sync with your PC', 'Privacy'] },
     { id: 'pc', name: 'Windows', ic: 'pages', sub: 'Koru on your desktop: the taskbar, the desktop widget and the Now playing player.', has: ['Taskbar', 'Desktop', 'Now playing'] },
     { id: 'speed', name: 'Performance', ic: 'chart', sub: 'Graphics, smoothness and checking the sources.', has: ['Graphics', 'Sources'] },
+    { id: 'music', name: 'Music', ic: 'music', sub: 'Songs from YouTube Music inside Koru: how the player shows, volume and your Glasswave library.', has: ['Music'] },
     { id: 'about', name: 'About', ic: 'sparkle', sub: 'Your version and updates.', has: ['About'] }
   ];
   let curSection = (() => { try { return localStorage.getItem('koru-set-section') || 'look'; } catch { return 'look'; } })();
