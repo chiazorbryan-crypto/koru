@@ -380,9 +380,10 @@
         });
         body.append(rail);
       }
-      let tab = sessionStorage.getItem('koru-libtab') || 'fav';
+      // History when Koru starts; the tab you pick stays while Koru is open
+      let tab = sessionStorage.getItem('koru-libtab') || 'history';
       const tabs = [['fav', 'Favourites', 'heart'], ['liked', 'Liked', 'like'], ['marks', 'Bookmarks', 'bookmark'], ['history', 'History', 'clock'], ...(K.disc ? [['cal', 'Release days', 'calendar']] : [])];
-      if (tab === 'cal' && !K.disc) tab = 'fav';
+      if (tab === 'cal' && !K.disc) tab = 'history';
       body.append(el('div.section', segmented(tabs, tab, v => { tab = v; sessionStorage.setItem('koru-libtab', v); drawGrid(); })));
       const chips = el('div.row', { style: { marginBottom: '14px' } });
       const sources = [['all', 'All'], ['new', 'New chapters'], ['completed', 'Completed'], ['hidden', 'Hidden'], ['trash', 'Trash'], ...K.providerList.map(p => [p.id, p.short])];
