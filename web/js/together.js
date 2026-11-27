@@ -52,6 +52,8 @@
     return j;
   }
   T.api = api;
+  // the one GitHub sign-in: Settings → Your Koru account uses the same session (account.js)
+  Object.assign(T, { cfg, setCfg, device, signedIn, me, refresh: () => refresh(), signOut: () => signOutLocal() });
   async function refresh() {
     if (!signedIn()) return null;
     const j = await api('/me');
@@ -789,6 +791,7 @@
           if (p.wait) { if (p.interval) every = p.interval * 1000; continue; }
           setCfg({ token: p.token, user: p.user, crew: null });
           K.toast('Signed in as ' + p.user.login, 'ok');
+          K.sync?.start(); K.sync?.now(true).catch(() => {});   // your library is saved to your account from now on
           await refresh().catch(() => {});
           setCfg({ named: false });
           route(); return;

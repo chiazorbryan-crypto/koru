@@ -155,3 +155,12 @@ html.reading .imp-hand { display: none; }
 .us-msg { opacity: .7; }
 .us-pct { font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .us-hatch path { stroke-dashoffset: 0; } .us-nose { opacity: 1; } .us-mark.draw * { animation: none !important; } }
+
+/* Settings → Your Koru account (account.js) */
+.acct { display: grid; gap: 10px; }
+.acct p { margin: 0; }
+.acct-me { display: flex; align-items: center; gap: 12px; }
+.acct-me small { display: block; }
+.acct-ava { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: rgba(127,127,127,.2); flex: none; }
+.acct-tgl { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.acct .btn.sure { color: #ef476f; }

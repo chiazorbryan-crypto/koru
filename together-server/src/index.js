@@ -16,7 +16,7 @@
 // "pong" by Cloudflare without waking the crew.
 import { DurableObject } from 'cloudflare:workers';
 
-const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
 const json = (o, status = 200, extra = {}) => new Response(JSON.stringify(o), { status, headers: { 'Content-Type': 'application/json', ...CORS, ...extra } });
 const err = (status, error) => json({ error }, status);
 const ALPHA = 'abcdefghijkmnpqrstuvwxyz23456789';
@@ -36,6 +36,7 @@ const ghApi = env => (env.GH_API || 'https://api.github.com').replace(/\/+$/, ''
 const hub = env => env.HUB.get(env.HUB.idFromName('hub'));
 const media = env => env.MEDIA.get(env.MEDIA.idFromName('media'));
 const crewStub = (env, id) => env.CREW.get(env.CREW.idFromName(id));
+const vault = (env, uid) => env.VAULT.get(env.VAULT.idFromName('u' + uid));
 const prof = u => { try { return JSON.parse(u.profile || '{}') || {}; } catch { return {}; } };
 // how someone shows up in lists: the name they typed, their picture (uploaded, else GitHub's), their status
 const person = u => {
@@ -153,6 +154,16 @@ export default {
       const tellCrews = async crews => { for (const c of crews) await crewStub(env, c.id).setMembers(c.members); };
 
       if (path === '/me' && req.method === 'GET') return json({ user: person(me), profile: card(me), crews: await H.crewsFor(me.id) });
+      // ---- your account's saved data: one file per device (the app merges them) ----
+      if (path === '/me/sync' && req.method === 'GET') return json({ files: await vault(env, me.id).list() });
+      const vm = path.match(/^\/me\/sync\/([A-Za-z0-9_-]{4,64})$/);
+      if (vm && req.method === 'PUT') {
+        const text = await req.text();
+        if (text.length > 12 * 1024 * 1024) return err(413, 'Too much to save at once.');
+        try { const o = JSON.parse(text); if (!o || o.v !== 1) throw 0; } catch { return err(400, 'Bad data'); }
+        return json({ ok: true, at: await vault(env, me.id).put(vm[1], text) });
+      }
+      if (vm && req.method === 'DELETE') { await vault(env, me.id).drop(vm[1]); return json({ ok: true }); }
       if (path === '/me/name' && req.method === 'POST') {
         const b = await req.json().catch(() => ({}));
         const nick = clean(b.name, 32).trim();
@@ -378,6 +389,35 @@ export class Media extends DurableObject {
     for (const r of rows) { const b = new Uint8Array(r.data); out.set(b, o); o += b.byteLength; }
     return { type: rows[0].type, data: out };
   }
+}
+
+// ---------- Vault (one per person): what Koru saves to your account, one file per device ----------
+const VPART = 900 * 1024;
+export class Vault extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.sql = ctx.storage.sql;
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS files (device TEXT NOT NULL, part INTEGER NOT NULL, at INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY (device, part))`);
+  }
+  async put(device, text) {
+    const at = Date.now();
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec('DELETE FROM files WHERE device = ?', device);
+      for (let i = 0, part = 0; i < text.length || part === 0; i += VPART, part++) this.sql.exec('INSERT INTO files (device, part, at, body) VALUES (?, ?, ?, ?)', device, part, at, text.slice(i, i + VPART));
+      // keep the 10 devices used most recently
+      const old = this.sql.exec('SELECT device FROM files GROUP BY device ORDER BY MAX(at) DESC LIMIT -1 OFFSET 10').toArray();
+      for (const o of old) this.sql.exec('DELETE FROM files WHERE device = ?', o.device);
+    });
+    return at;
+  }
+  async list() {
+    const by = new Map();
+    for (const r of this.sql.exec('SELECT device, part, body FROM files ORDER BY device, part').toArray()) by.set(r.device, (by.get(r.device) || '') + r.body);
+    const out = [];
+    for (const t of by.values()) { try { out.push(JSON.parse(t)); } catch {} }
+    return out;
+  }
+  async drop(device) { this.sql.exec('DELETE FROM files WHERE device = ?', device); }
 }
 
 // ---------- Crew: the chat and the live connections ----------

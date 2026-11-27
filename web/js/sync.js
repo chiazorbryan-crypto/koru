@@ -13,6 +13,10 @@
   const when = (t, it) => (t === 'library' ? it.addedAt || it.at : t === 'liked' || t === 'bookmarks' || t === 'history' || t === 'notes' || t === 'shelves' || t === 'chars' || t === 'mliked' || t === 'mlists' ? it.at : 0) || 0;
   const clone = v => JSON.parse(JSON.stringify(v));
   let info = null, busy = null, merging = false, timer = 0, lastRun = 0;
+  // your Koru account (Sign in with GitHub, Settings → Your Koru account): saved there too, on every device
+  const acct = () => { const c = K.data.settings.together || {}; return !!(c.token && c.user && K.together?.api) && K.data.settings.acctSync !== false; };
+  const myDev = () => info?.device || K.together?.device?.() || 'web';
+  let acctErr = '', acctAt = 0;
 
   // ---------- stats from your other PCs ----------
   let others = {};   // device -> the stats that PC counted itself
@@ -71,19 +75,29 @@
   }
 
   async function run() {
-    if (!info?.mode) return { off: true };
+    const useAcct = acct();
+    if (!info?.mode && !useAcct) return { off: true };
     await othersReady;
     const removed = ls.get(GONE, {});
     noteRemovals(removed);
-    const r = await fetch('/k/sync/read');
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error || 'Sync failed');
+    const j = { files: [] };
+    if (info?.mode) {
+      const r = await fetch('/k/sync/read');
+      const lj = await r.json();
+      if (!r.ok) throw new Error(lj.error || 'Sync failed');
+      j.files.push(...(lj.files || []));
+    }
+    if (useAcct) {
+      try { const a = await K.together.api('/me/sync'); j.files.push(...(a.files || []).filter(o => o?.device !== myDev())); acctErr = ''; }
+      catch (e) { acctErr = e.message; if (!info?.mode) throw e; }
+    }
     const changed = new Set();
     let statsIn = false;
+    const statsToo = info?.mode === 'github' || useAcct;
     for (const o of j.files || []) {
       if (!o || o.v !== 1) continue;
       mergeFrom(o, removed, changed);
-      if (info.mode === 'github' && o.device && o.stats && o.device !== info.device) { others[o.device] = o.stats; statsIn = true; }
+      if (statsToo && o.device && o.stats && o.device !== myDev()) { others[o.device] = o.stats; statsIn = true; }
     }
     if (statsIn) { K.api.save('stats-others', others).catch(() => {}); changed.add('stats'); }
     if (changed.size) {
@@ -92,9 +106,16 @@
       document.dispatchEvent(new CustomEvent('koru-library'));
     }
     const data = {}; for (const t of TYPES) data[t] = K.data[t] || {};
-    const payload = { v: 1, device: info.device, name: info.name, at: Date.now(), data, removed, ...(info.mode === 'github' ? { stats: K.data.stats } : {}) };
-    const w = await fetch('/k/sync/write', { method: 'PUT', body: JSON.stringify(payload) });
-    if (!w.ok) throw new Error((await w.json().catch(() => ({}))).error || 'Couldn\'t write the sync file');
+    const devName = info?.name || (K.info?.platform === 'android' ? 'Phone' : 'PC');
+    const payload = { v: 1, device: myDev(), name: devName, at: Date.now(), data, removed, ...(statsToo ? { stats: K.data.stats } : {}) };
+    if (info?.mode) {
+      const w = await fetch('/k/sync/write', { method: 'PUT', body: JSON.stringify(payload) });
+      if (!w.ok) throw new Error((await w.json().catch(() => ({}))).error || 'Couldn\'t write the sync file');
+    }
+    if (useAcct && !acctErr) {
+      try { await K.together.api('/me/sync/' + encodeURIComponent(myDev()), { method: 'PUT', body: payload }); acctAt = Date.now(); }
+      catch (e) { acctErr = e.message; if (!info?.mode) throw e; }
+    }
     const snap = {}; for (const t of TYPES) snap[t] = Object.keys(K.data[t] || {});
     ls.set(SNAP, snap); ls.set(GONE, removed); ls.set(LAST, Date.now());
     lastRun = Date.now();
@@ -114,12 +135,12 @@
     return busy;
   }
   // GitHub: a little less often, it's a website (still far under its limits)
-  const soon = () => { if (!info?.mode) return; clearTimeout(timer); timer = setTimeout(() => now(), info.mode === 'github' ? 45000 : 20000); };
+  const soon = () => { if (!info?.mode && !acct()) return; clearTimeout(timer); timer = setTimeout(() => now(), info?.mode === 'folder' ? 20000 : 30000); };
   async function refreshInfo(withOthers) { try { info = await K.api.get('/k/sync/info' + (withOthers ? '?others=1' : '')); } catch { info = null; } return info; }
 
   // anything you change in a synced list is sent along a little later
   const save0 = K.save;
-  K.save = function (key) { const r = save0.apply(this, arguments); if (!merging && (TYPES.includes(key) || (key === 'stats' && info?.mode === 'github'))) soon(); return r; };
+  K.save = function (key) { const r = save0.apply(this, arguments); if (!merging && (TYPES.includes(key) || (key === 'stats' && (info?.mode === 'github' || acct())))) soon(); return r; };
 
   let started = false;
   K.sync = {
@@ -127,13 +148,13 @@
     pick: async () => { const r = await K.api.post('/k/sync/pick'); await refreshInfo(); if (r.dir) { ls.set(SNAP, null); await now(true); K.sync.start(); } return r; },
     github: async (repo, key) => { const r = await K.api.post('/k/sync/github', { repo, key }); await refreshInfo(); ls.set(SNAP, null); await now(true); K.sync.start(); return r; },
     off: async () => { await K.api.post('/k/sync/off'); await refreshInfo(); },
+    account: { on: acct, error: () => acctErr, at: () => acctAt || (acct() ? ls.get(LAST, 0) : 0) },
     start: async () => {
-      if (!K.native()) return;
-      await refreshInfo();
-      if (!info?.mode || started) return;
+      if (K.native()) await refreshInfo();
+      if ((!info?.mode && !acct()) || started) return;
       started = true;
       setTimeout(() => now(), 6000);
-      setInterval(() => now(), (info.mode === 'github' ? 5 : 3) * 60e3);
+      setInterval(() => now(), (info?.mode === 'folder' ? 3 : 4) * 60e3);
       window.addEventListener('focus', () => { if (Date.now() - lastRun > 60e3) now(); });
     }
   };

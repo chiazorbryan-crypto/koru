@@ -42,7 +42,7 @@
   const SECTIONS = [
     { id: 'look', name: 'Appearance', ic: 'palette', sub: 'Style, colours, glass, wallpaper, motion and the sidebar.', has: ['Style', 'Looks', 'Colours', 'Gradients', 'Wallpaper', 'Glass', 'Glow', 'Series colours', 'Motion', 'Shape and text', 'Sidebar'] },
     { id: 'read', name: 'Reading', ic: 'book', sub: 'How chapters open, scroll and look, plus sounds, sharpening and translation.', has: ['Pages and layout', 'Moving through chapters', 'Ambient light', 'Night filter', 'While you read', 'Reader'] },
-    { id: 'library', name: 'Library & sync', ic: 'folder', sub: 'Your data, backups, importing from other apps and keeping your PCs the same.', has: ['Library and data', 'When a source goes down', 'Import from another app', 'Sync between PCs', 'Sync with your PC', 'Privacy'] },
+    { id: 'library', name: 'Library & sync', ic: 'folder', sub: 'Your data, backups, importing from other apps and keeping your PCs the same.', has: ['Your Koru account', 'Library and data', 'When a source goes down', 'Import from another app', 'Sync between PCs', 'Sync with your PC', 'Privacy'] },
     { id: 'pc', name: 'Windows', ic: 'pages', sub: 'Koru on your desktop: the taskbar, the desktop widget and the Now playing player.', has: ['Taskbar', 'Desktop', 'Now playing'] },
     { id: 'speed', name: 'Performance', ic: 'chart', sub: 'Graphics, smoothness, adding a source and checking the sources.', has: ['Graphics', 'Add or remove sources', 'Sources'] },
     { id: 'music', name: 'Music', ic: 'music', sub: 'Songs from YouTube Music inside Koru: how the player shows, volume and your Glasswave library.', has: ['Music'] },
@@ -415,6 +415,7 @@
       grid.append(panel('sparkle', 'Sources', 'Tests every source: its list, a series, its chapters and a page picture. Takes under a minute.',
         el('div.row', { style: { marginBottom: '10px', alignItems: 'center' } }, checkBtn, when), rows));
 
+      if (K.account && K.together) grid.append(K.account.panel(panel));
       grid.append(panel('incognito', 'Privacy', '',
         toggle('Incognito', K.incognito(), v => { K.data.settings.incognito = v; K.save('settings'); K.paintInc?.(); }, 'Reading history, progress and read marks aren\'t saved. Also in the sidebar.')));
       if (K.native() && K.sync) {

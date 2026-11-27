@@ -33,6 +33,16 @@ new_sqlite_classes = ["Crew"]
 tag = "v2-hub"
 new_sqlite_classes = ["Hub"]
 
+[[durable_objects.bindings]]
+name = "VAULT"
+class_name = "Vault"
+
 [[migrations]]
 tag = "v3-media"
 new_sqlite_classes = ["Media"]
+
+# Vault (one per person): everything Koru saves to your account (library, history, read marks, ratings, notes,
+# shelves, stats), one file per device, merged by the app.
+[[migrations]]
+tag = "v4-vault"
+new_sqlite_classes = ["Vault"]
