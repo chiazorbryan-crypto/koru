@@ -175,8 +175,40 @@
   if (away) bgfx?.classList.add('still');
 
   // ---------- app updates ----------
+  // Settings → About → Download updates by itself (on unless you turn it off): on a PC the new version downloads
+  // quietly, then Koru asks to restart; "Later" installs it when you close Koru. On a phone it asks to install.
+  const autoUpd = () => K.data.settings.autoUpdate !== false;
+  function readyCard(u, droid) {
+    document.querySelector('.upd-ready')?.remove();
+    const card = el('div.upd-ready.glass', { role: 'status' },
+      el('div.upd-ready-t', el('b', { text: (u.name || 'Koru ' + u.version) + (droid ? ' is out' : ' is ready') }),
+        el('small.muted', { text: droid ? 'Download and install it now?' : 'Restart Koru to finish updating.' })),
+      el('div.row',
+        el('button.btn.small', { type: 'button', onclick: async () => { card.remove(); if (!droid) { try { await K.api.post('/k/app-update/on-quit'); K.toast('It installs when you close Koru.', 'ok'); } catch {} } } }, 'Later'),
+        el('button.btn.small.primary', { type: 'button', onclick: () => { card.remove(); K.installUpdate(); } }, icon(droid ? 'download' : 'refresh'), droid ? 'Update' : 'Restart now')));
+    document.body.append(card);
+    requestAnimationFrame(() => card.classList.add('on'));
+  }
+  K.updReadyCard = readyCard;
+  K.autoUpdate = async function () {
+    if (!K.native() || !autoUpd()) return;
+    try {
+      const u = await K.api.get('/k/app-update/check');
+      if (!u.newer) return;
+      const droid = K.info?.platform === 'android';
+      if (droid || !u.canInstall) { if (sessionStorage.getItem('koru-upd-asked') !== u.latest) { sessionStorage.setItem('koru-upd-asked', u.latest); readyCard({ name: u.name, version: u.latest }, true); } return; }
+      await K.api.post('/k/app-update/download');
+      const tick = async () => {
+        const s = await K.api.get('/k/app-update/status').catch(() => ({}));
+        if (s.state === 'ready') readyCard({ name: s.name, version: s.version }, false);
+        else if (s.state === 'downloading') setTimeout(tick, 3000);
+      };
+      tick();
+    } catch {}
+  };
   K.checkAppUpdate = async function () {
     if (!K.native()) return;
+    if (autoUpd()) return K.autoUpdate();
     try {
       const u = await K.api.get('/k/app-update/check');
       if (u.newer && u.canInstall && sessionStorage.getItem('koru-upd-told') !== u.latest) {
@@ -241,6 +273,7 @@
     K.sync?.start();
     document.dispatchEvent(new CustomEvent('koru-ready'));
     setTimeout(() => K.checkAppUpdate?.(), 20000);
+    setInterval(() => K.checkAppUpdate?.(), 6 * 3600e3);   // and every few hours while Koru stays open
     setTimeout(() => K.cleanAutoDownloads?.(), 30000);
     setTimeout(() => K.checkUpdates?.(), 8000);
     if (K.info.platform === 'desktop') setTimeout(() => K.api.get('/k/gpu').then(g => {

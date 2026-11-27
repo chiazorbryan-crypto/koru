@@ -350,3 +350,8 @@ html.android.reading .shell { visibility: hidden; }
 
 /* phones draw their scrollbars over the page (Koru's wide desktop scrollbars would eat a column) */
 html.android ::-webkit-scrollbar { width: 0; height: 0; }
+
+/* the reader's extra buttons live in the long-press sheet (android.js) */
+html.android .reader .rbar .an-rx-off { display: none !important; }
+html.android .an-nav a span:last-child { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.an-navpick { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; } .an-navpick .chip svg { width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px; }

@@ -87,6 +87,21 @@ async function download(info) {
   return file;
 }
 
+async function runInstaller(file, version) {
+  job = { ...(job || {}), state: 'installing', done: job?.total || 0, total: job?.total || 0 };
+  // the new Koru shows the update screen finishing once when it opens (GET /finished), never on a normal start
+  try { fs.writeFileSync(path.join(app.getPath('userData'), 'just-updated.json'), JSON.stringify({ from: app.getVersion(), to: version, at: Date.now() })); } catch {}
+  await new Promise(r => setTimeout(r, 1200));   // the page shows "Installing" on the update screen first
+  // /S: silent install over the current one (same folder). --force-run: open Koru when it's done.
+  spawn(file, ['/S', '--force-run'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  setTimeout(() => app.quit(), 800);
+}
+// a downloaded update you said "Later" to goes in when you close Koru
+app.on?.('will-quit', () => {
+  if (job?.state === 'ready' && job.onQuit && fs.existsSync(job.file)) {
+    try { spawn(job.file, ['/S'], { detached: true, stdio: 'ignore', windowsHide: true }).unref(); } catch {}
+  }
+});
 export async function updateRoute(request, url) {
   const sub = url.pathname.slice('/k/app-update'.length) || '/';
   try {
@@ -110,21 +125,30 @@ export async function updateRoute(request, url) {
       let j = null; try { j = JSON.parse(fs.readFileSync(f, 'utf8')); fs.rmSync(f, { force: true }); } catch {}
       return json(200, j && j.to === app.getVersion() && Date.now() - (j.at || 0) < 30 * 60e3 ? j : {});
     }
+    // download in the background (Settings → About → Download updates by itself); /install then uses the file
+    if (sub === '/download' && request.method === 'POST') {
+      if (!app.isPackaged || process.platform !== 'win32') return json(400, { error: 'Updates install from the installed Koru only.' });
+      if (job?.state === 'downloading' || job?.state === 'installing' || job?.state === 'ready') return json(200, job);
+      const info = await check(true);
+      if (!newer(info.version, app.getVersion())) return json(200, { state: 'idle' });
+      (async () => {
+        try { const file = await download(info); job = { state: 'ready', file, version: info.version, name: info.name, done: job.total, total: job.total }; }
+        catch (e) { job = { state: 'failed', error: e.message, done: 0, total: 0 }; }
+      })();
+      return json(200, { ok: true, state: 'downloading' });
+    }
+    // "Later": the update goes in when Koru closes (quietly; it doesn't reopen)
+    if (sub === '/on-quit' && request.method === 'POST') { if (job?.state === 'ready') job.onQuit = true; return json(200, { ok: !!job?.onQuit }); }
     if (sub === '/install' && request.method === 'POST') {
       if (!app.isPackaged || process.platform !== 'win32') return json(400, { error: 'Updates install from the installed Koru only.' });
+      if (job?.state === 'ready' && fs.existsSync(job.file)) { const j = job; runInstaller(j.file, j.version); return json(200, { ok: true }); }
       if (job?.state === 'downloading' || job?.state === 'installing') return json(200, { ok: true });
       const info = await check(true);
       if (!newer(info.version, app.getVersion())) return json(400, { error: 'You already have the newest Koru.' });
       (async () => {
         try {
           const file = await download(info);
-          job.state = 'installing';
-          // the new Koru shows the update screen finishing once when it opens (GET /finished), never on a normal start
-          try { fs.writeFileSync(path.join(app.getPath('userData'), 'just-updated.json'), JSON.stringify({ from: app.getVersion(), to: info.version, at: Date.now() })); } catch {}
-          await new Promise(r => setTimeout(r, 1200));   // the page shows "Installing" on the update screen first
-          // /S: silent install over the current one (same folder). --force-run: open Koru when it's done.
-          spawn(file, ['/S', '--force-run'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
-          setTimeout(() => app.quit(), 800);
+          await runInstaller(file, info.version);
         } catch (e) { job = { state: 'failed', error: e.message, done: 0, total: 0 }; }
       })();
       return json(200, { ok: true });

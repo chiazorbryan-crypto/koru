@@ -164,3 +164,11 @@ html.reading .imp-hand { display: none; }
 .acct-ava { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: rgba(127,127,127,.2); flex: none; }
 .acct-tgl { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .acct .btn.sure { color: #ef476f; }
+
+/* "Koru x is ready · Restart now / Later" (app.js, updates downloaded by themselves) */
+.upd-ready { position: fixed; right: 20px; bottom: 20px; z-index: 9000; width: min(340px, calc(100vw - 32px)); display: grid; gap: 10px; padding: 14px 16px; border-radius: 16px;
+  opacity: 0; transform: translateY(14px); transition: opacity .3s ease, transform .35s cubic-bezier(.3, 1.3, .5, 1); }
+.upd-ready.on { opacity: 1; transform: none; }
+.upd-ready-t small { display: block; margin-top: 2px; }
+.upd-ready .row { justify-content: flex-end; gap: 8px; }
+html.android .upd-ready { right: 12px; left: 12px; width: auto; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }

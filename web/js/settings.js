@@ -40,7 +40,7 @@
 
   // ---------- sections: the panels, grouped, with a side menu and a search ----------
   const SECTIONS = [
-    { id: 'look', name: 'Appearance', ic: 'palette', sub: 'Style, colours, glass, wallpaper, motion and the sidebar.', has: ['Style', 'Looks', 'Colours', 'Gradients', 'Wallpaper', 'Glass', 'Glow', 'Series colours', 'Motion', 'Shape and text', 'Sidebar'] },
+    { id: 'look', name: 'Appearance', ic: 'palette', sub: 'Style, colours, glass, wallpaper, motion and the sidebar.', has: ['Style', 'Looks', 'Colours', 'Gradients', 'Wallpaper', 'Glass', 'Glow', 'Series colours', 'Motion', 'Shape and text', 'Sidebar', 'Bottom bar'] },
     { id: 'read', name: 'Reading', ic: 'book', sub: 'How chapters open, scroll and look, plus sounds, sharpening and translation.', has: ['Pages and layout', 'Moving through chapters', 'Ambient light', 'Night filter', 'While you read', 'Reader'] },
     { id: 'library', name: 'Library & sync', ic: 'folder', sub: 'Your data, backups, importing from other apps and keeping your PCs the same.', has: ['Your Koru account', 'Library and data', 'When a source goes down', 'Import from another app', 'Sync between PCs', 'Sync with your PC', 'Privacy'] },
     { id: 'pc', name: 'Windows', ic: 'pages', sub: 'Koru on your desktop: the taskbar, the desktop widget and the Now playing player.', has: ['Taskbar', 'Desktop', 'Now playing'] },
@@ -171,6 +171,7 @@
           } }, icon('upload'), 'Paste theme'))));
 
       // colours
+      if (K.androidUI?.navPanel) grid.append(K.androidUI.navPanel(panel));
       grid.append(panel('palette', 'Colours', 'Each colour has its own transparency slider.',
         ...T().COLORS.map(([k, label, sub]) => colorRow(k, label, sub))));
 
@@ -511,6 +512,8 @@
         el('div.row', { style: { gap: '14px' } }, el('div.side-logo', { style: { margin: 0 } }, K.fox()),
           el('div', el('b', { text: 'Koru ' + (K.info?.version || '') }), el('div.muted', { text: 'A personal manga and manhwa reader: ' + K.providerList.length + ' sources, downloads, sync between your PCs.' }))),
         upd,
+        K.native() ? toggle('Download updates by itself', K.data.settings.autoUpdate !== false, v => { K.data.settings.autoUpdate = v; K.save('settings'); if (v) K.autoUpdate?.(); },
+          K.info?.platform === 'android' ? 'Koru checks for new versions and asks to install them.' : 'New versions download quietly in the background, then Koru asks you to restart. Later installs it when you close Koru.') : null,
         el('p.muted', { style: { fontSize: '.85em', marginTop: '12px' }, text: 'Koru reads each site\'s public pages. Paid or locked chapters stay locked. Please support the scan groups on their sites.' }),
         el('p', { style: { fontSize: '.85em', marginTop: '10px', fontWeight: 600, opacity: .8 }, text: 'Made by B0nX' })));
       return organize(grid);

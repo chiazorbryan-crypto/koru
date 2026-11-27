@@ -127,7 +127,12 @@
   // made that size: a third of the pixels to decode, upload and keep in memory. The series page poster stays sharp.
   const img = K.img;
   K.img = (src, alt, cls, cssW = 220) => img(src, alt, cls, cssW >= 300 ? 170 : Math.min(cssW, 124));
-  const PRIMARY = ['library', 'explore', 'search', 'downloads'];
+  // the bottom bar's buttons: your pick in Settings → Appearance → Bottom bar (up to 5), the rest are in More
+  const DEF_NAV = ['library', 'explore', 'search', 'downloads'];
+  const PRIMARY = [];
+  const loadNav = () => { const pick = K.data?.settings?.androidNav; PRIMARY.splice(0, PRIMARY.length, ...(Array.isArray(pick) && pick.length ? pick.slice(0, 5) : DEF_NAV)); };
+  loadNav();
+  document.addEventListener('koru-ready', () => { loadNav(); built = ''; buildNav?.(); });
   const HIDDEN = ['music'];   // not on Android
   const routeName = (h = location.hash) => (String(h).replace(/^#\/?/, '').split(/[/?]/)[0] || 'library');
   const navIds = () => [...document.querySelectorAll('.sidebar .nav-btn')].map(b => b.dataset.nav);
@@ -385,6 +390,33 @@
     ]);
   }
 
+  // ---------- reader: the bars keep only back, the title, the page slider and auto-scroll ----------
+  // Everything else (bookmark, tag a character, sharpen, translate, sound, panel by panel, zen, chapters, settings…)
+  // is a long-press on the page away, in a sheet. The buttons stay in the page, hidden, so they work as before.
+  const KEEP = b => b.matches('.autob, [title="Back"], [title="Previous chapter"], [title="Next chapter"]');
+  function tidyBars() {
+    for (const b of document.querySelectorAll('.reader .rbar > button:not(.an-rx-off), .reader .rbar > a:not(.an-rx-off)')) if (!KEEP(b)) b.classList.add('an-rx-off');
+  }
+  new MutationObserver(() => { if (html.classList.contains('reading')) tidyBars(); }).observe(document.body, { childList: true, subtree: true });
+  const label = b => String(b.getAttribute('title') || b.getAttribute('aria-label') || b.textContent || '').replace(/\s*\([^)]*\)\s*$/, '').replace(/:.*$/, '').trim();
+  function readerSheet() {
+    const btns = [...document.querySelectorAll('.reader .rbar .an-rx-off')].filter(b => !b.disabled && label(b));
+    if (!btns.length) return;
+    buzz('long');
+    openSheet([
+      el('div.an-sh-h', el('div', el('b', { text: 'Reader' }), el('small', { text: document.querySelector('.reader .rbar .tt small')?.textContent || '' }))),
+      ...btns.map(b => el('button.an-row' + (b.classList.contains('on') ? '.on' : ''), { onclick: () => { closeSheet(true); setTimeout(() => b.click(), 180); } },
+        b.querySelector('svg')?.cloneNode(true) || icon('dot'), el('span', { text: label(b) }), b.classList.contains('on') ? el('i.an-dot') : null))
+    ]);
+  }
+  // long-press on the pages (not on the bars, the chapter list or the settings) opens it: the WebView's own
+  // long-press (contextmenu), so it comes at the phone's usual long-press time and a pinch never sets it off
+  document.addEventListener('contextmenu', e => {
+    if (!html.classList.contains('reading') || !e.target.closest?.('.reader') || e.target.closest?.('.rbar, .drawer, .rset, .an-sheet, input, textarea')) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    readerSheet();
+  }, true);
+
   // ---------- the top bar follows the page ----------
   let barView = null, io = null, ioTarget = null, setPage = false;
   function refreshBar() {
@@ -623,7 +655,27 @@
     } catch {}
   });
 
+  function navPanel(mk) {
+    const box = el('div.an-navpick');
+    const paint = () => {
+      const all = [...document.querySelectorAll('.sidebar .nav-btn')].filter(b => !HIDDEN.includes(b.dataset.nav) && b.dataset.nav !== 'settings');
+      box.replaceChildren(...all.map(b => {
+        const id = b.dataset.nav, on = PRIMARY.includes(id);
+        return el('button.chip' + (on ? '.on' : ''), { type: 'button', onclick: () => {
+          let cur = [...PRIMARY];
+          if (on) { if (cur.length <= 1) { K.toast('Keep at least one.', 'error'); return; } cur = cur.filter(x => x !== id); }
+          else { if (cur.length >= 5) { K.toast('Up to 5 fit. Take one off first.', 'error'); return; } cur.push(id); }
+          const order = all.map(x => x.dataset.nav); cur.sort((a, c) => order.indexOf(a) - order.indexOf(c));
+          K.data.settings.androidNav = cur; K.save('settings'); loadNav(); built = ''; buildNav(); paint(); buzz('tick');
+        } }, b.querySelector('svg')?.cloneNode(true) || null, b.textContent.trim());
+      }));
+    };
+    paint();
+    return mk('pages', 'Bottom bar', 'Pick up to 5 pages for the bar at the bottom. The rest, and Settings, are under More.', box,
+      el('button.btn.small', { type: 'button', onclick: () => { delete K.data.settings.androidNav; K.save('settings'); loadNav(); built = ''; buildNav(); paint(); } }, icon('refresh'), 'Reset'));
+  }
   K.androidUI = {
+    navPanel,
     closeSheet: () => closeSheet(),
     backInPage,
     backToLibrary() {
